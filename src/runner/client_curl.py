@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import platform
 import subprocess
 import sys
@@ -30,6 +29,7 @@ if __package__ in (None, ""):  # run as a script: make src/ importable
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from analysis.validate_record import SCHEMA_VERSION, validate  # noqa: E402
+from runner.child_env import child_env_with_removed, describe  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 HOST = "127.0.0.1"
@@ -91,7 +91,8 @@ def wrapped(status: str, note: str | None = None) -> dict:
 
 def build_record(*, run_id: str, repetition: int, run_start: datetime, argv: list[str],
                  version: str, start_ns: int, end_ns: int, returncode: int, stdout: str,
-                 stderr: str, pcap_path: str | None, log_path: str) -> dict:
+                 stderr: str, pcap_path: str | None, log_path: str,
+                 env_removed: list[str] | None = None) -> dict:
     http_status = parse_http_code(stdout)
     success = returncode == 0 and http_status is not None
     error = stderr.strip() or None
@@ -127,7 +128,7 @@ def build_record(*, run_id: str, repetition: int, run_start: datetime, argv: lis
             "git_commit": git_commit(),
             "network": "host loopback (127.0.0.1); no namespaces, no impairments",
             "resolver": "not used: URL is an IPv4 literal",
-            "child_env": "inherited, with PYTHONPATH removed",
+            "child_env": describe(env_removed or []),
         },
         "timestamps": {
             "run_start_utc": iso_utc(run_start),
@@ -188,7 +189,7 @@ def start_server(port: int) -> ThreadingHTTPServer:
 
 def run(repetition: int, run_id: str | None, pcap: str | None, out_dir: Path,
         port: int = PORT) -> tuple[Path, dict]:
-    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    env, env_removed = child_env_with_removed()
     version = curl_version(env)
     run_start = utc_now()
     run_id = run_id or make_run_id(run_start, repetition)
@@ -225,7 +226,7 @@ def run(repetition: int, run_id: str | None, pcap: str | None, out_dir: Path,
     record = build_record(
         run_id=run_id, repetition=repetition, run_start=run_start, argv=argv, version=version,
         start_ns=start_ns, end_ns=end_ns, returncode=proc.returncode, stdout=proc.stdout,
-        stderr=proc.stderr, pcap_path=pcap, log_path=rel(log_path))
+        stderr=proc.stderr, pcap_path=pcap, log_path=rel(log_path), env_removed=env_removed)
 
     problems = validate(record)
     if problems:

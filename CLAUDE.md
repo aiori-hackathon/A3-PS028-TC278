@@ -57,3 +57,10 @@ Baseline 10 ms each way. Measure the real RTT before every scenario; netem confi
 - All impairments live in namespaces prefixed `hl-`. Never touch the host's default namespace, Wi-Fi interface, routes or firewall.
 - Every setup script has a matching teardown and a verify step. Scripts use `set -euo pipefail`.
 - Claude writes network/sudo scripts; Sam reviews and runs them in a separate terminal and pastes the output back.
+
+## Gotchas
+- The dev shell sources ROS (`/opt/ros/jazzy/setup.bash`), which sets `PYTHONPATH` and `LD_LIBRARY_PATH`. Never let them reach tests, clients or lab services.
+- Run tests with `scripts/test.sh`, never bare `pytest` (ROS pytest plugins fail to import and abort the run).
+- Start every subprocess (curl, Chromium/Playwright, DNS server, nginx, tcpdump) with `env=child_env()` from `src/runner/child_env.py`, and record what was stripped in the run record.
+- Never run the orchestrator with `sudo -E`; it would pass the ROS variables through.
+- Host `/etc/gai.conf` prefers IPv4. The lab uses its own default `gai.conf` via `/etc/netns/hl-client/` only; never edit the host file.
