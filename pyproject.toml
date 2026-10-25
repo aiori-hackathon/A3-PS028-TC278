@@ -1,0 +1,9 @@
+[project]
+name = "happylab"
+version = "0.1.0"
+description = "Happy Eyeballs IPv4/IPv6 fallback measurement lab (AIORI-3 PS-028)"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["src/tests"]
