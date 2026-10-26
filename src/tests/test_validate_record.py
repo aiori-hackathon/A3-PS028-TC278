@@ -143,8 +143,43 @@ def test_missing_and_extra_top_level_keys(record):
 
 
 def test_wrong_schema_version(record):
-    record["schema_version"] = "0.2"
+    record["schema_version"] = "9.9"
     assert any(e.startswith("schema_version") for e in validate(record))
+
+
+def test_v01_record_without_cross_checks_still_valid(record):
+    record["schema_version"] = "0.1"
+    del record["cross_checks"]
+    assert validate(record) == []
+
+
+def test_v01_record_must_not_have_cross_checks(record):
+    record["schema_version"] = "0.1"
+    assert any("unexpected keys ['cross_checks']" in e for e in validate(record))
+
+
+def test_v02_requires_cross_checks(record):
+    del record["cross_checks"]
+    assert any("missing ['cross_checks']" in e for e in validate(record))
+
+
+def test_cross_check_conflict_keeps_both_values(record):
+    record["cross_checks"] = {"status": "conflict", "conflicts": [
+        {"field": "remote_ip", "log_value": "192.0.2.2", "pcap_value": "2001:db8:28:6::2",
+         "note": "differs"}]}
+    assert validate(record) == []
+
+
+@pytest.mark.parametrize("cc,msg", [
+    ({"status": "conflict", "conflicts": []}, "no conflicts listed"),
+    ({"status": "agree", "conflicts": [{"field": "x", "log_value": 1, "pcap_value": 2, "note": "n"}]},
+     "must have no conflicts"),
+    ({"status": "maybe", "conflicts": []}, "cross_checks.status"),
+    ({"status": "conflict", "conflicts": [{"field": "x"}]}, "missing"),
+])
+def test_bad_cross_checks(record, cc, msg):
+    record["cross_checks"] = cc
+    assert any(msg in e for e in validate(record))
 
 
 def test_unknown_scenario_rejected(record):

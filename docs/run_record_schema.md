@@ -1,4 +1,7 @@
-# Run-record schema (version 0.1)
+# Run-record schema (version 0.2)
+
+Version 0.2 adds the required `cross_checks` block. 0.1 records (the Milestone 1 harness
+runs) remain valid and must not contain it.
 
 One JSON file per run, written to `data/generated/runs/<run_id>.json`.
 A worked example is in [`examples/run_record_example.json`](examples/run_record_example.json).
@@ -39,7 +42,7 @@ So a null always says *why* it is null, and "not observed" is never confused wit
 
 | Key | Type | Notes |
 |---|---|---|
-| `schema_version` | string | `"0.1"` |
+| `schema_version` | string | `"0.2"` (`"0.1"` accepted for old records) |
 | `run_id` | string | `<UTC yyyymmddThhmmssZ>_<scenario>_<client>_r<NN>`, e.g. `20261026T101500Z_C0_curl_r01` |
 | `scenario` | object | see below |
 | `client` | object | see below |
@@ -49,6 +52,7 @@ So a null always says *why* it is null, and "not observed" is never confused wit
 | `evidence` | object | see below |
 | `packet_observations` | object | wrapped fields, see below |
 | `metrics` | object | wrapped fields, see below |
+| `cross_checks` | object | 0.2 only: client/runner log versus pcap, see below |
 
 ### `scenario`
 
@@ -87,6 +91,7 @@ So a null always says *why* it is null, and "not observed" is never confused wit
 | `http_status` | integer or null | |
 | `error` | string or null | Client error text if any. |
 | `source` | string | Where the outcome came from, e.g. `"client/runner log"`. |
+| `client_report` | object, optional | What the client printed about itself (curl `-w`: `http_code`, `remote_ip`, `time_namelookup_s`, `time_connect_s`, `time_total_s`, `num_connects`). Client-reported, not packet-level. |
 
 ### `evidence`
 
@@ -118,3 +123,32 @@ Fixed definitions (from CLAUDE.md; do not redefine):
 | `tcp_setup_time_ms` | First SYN to the ACK completing the winning handshake. | ms, ≥ 0 |
 | `inter_family_attempt_delay_ms` | Second family's first SYN minus first family's first SYN. `not_observed` if only one family is tried. | ms, ≥ 0 |
 | `scenario_penalty_ms` | Client's median setup time in a scenario minus its own C0 median. A per-scenario aggregate, so always `not_applicable` in a per-run record; it lives in the scenario summary. | ms |
+
+### How attempts are classified (`src/analysis/metrics.py`)
+
+These are project rules applied to packet-level facts from `src/analysis/parse_pcap.py`:
+
+- An **attempt** is one client SYN (plus its retransmissions on the same 4-tuple).
+- The **winning attempt** is the completed handshake on which the client sent data.
+  If more than one connection carried data, the run is **ambiguous**: nothing is picked,
+  winner-dependent fields stay `not_yet_computed` with a note, and `cross_checks` reports a conflict.
+- Every other attempt is `failed` if the server answered with RST, otherwise `abandoned` when a
+  winner exists, and `no_reply` when no attempt succeeded.
+- **DNS time** (project definition, not one of the three fixed metrics): first DNS query to the
+  last DNS answer, among queries sent before the first SYN.
+- Each run is parsed within its own time window (client start to capture end), so stray packets
+  from before or after the run are ignored.
+
+### `cross_checks` (0.2, required)
+
+Compares the client/runner log (outcome) with the capture (packet-level evidence).
+Neither side is overwritten and nothing is chosen silently.
+
+| Key | Type | Notes |
+|---|---|---|
+| `status` | string | `agree`, `conflict`, `not_yet_computed` or `not_applicable` |
+| `conflicts` | list | Empty unless `status` is `conflict`. Each item: `field`, `log_value`, `pcap_value`, `note`. |
+
+Checked so far: success versus a completed connection with an HTTP response; HTTP status;
+the client's reported remote address versus the winning handshake's destination; ambiguous captures.
+A run with `status: conflict` needs a person to look at it before it is used in any summary.
