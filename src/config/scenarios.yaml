@@ -1,0 +1,31 @@
+# HappyLab scenario definitions.
+# Values are PROVISIONAL until pilots confirm them (CLAUDE.md). The configured values
+# below are not ground truth: the real RTT is measured before every scenario and recorded.
+#
+# Per family:
+#   delay_ms_each_way  added one-way delay, applied equally in both directions on that family's link
+#   loss_pct           packet loss in each direction (100 = blackhole: nothing gets through)
+# dns.delay_ms: extra delay before the test-zone DNS server answers, per record type.
+# verify_target: what src/lab/verify.sh must measure before runs start
+#   (an RTT in ms, or "blackhole" for 100% loss with no ICMP errors).
+
+schema_version: 1
+
+baseline:
+  delay_ms_each_way: 10
+  rtt_ms: 20
+
+scenarios:
+  C0:
+    label: Healthy baseline (control)
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 10, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 20}
+
+  S1:
+    label: IPv6 blackhole
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 10, loss_pct: 100}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: blackhole}

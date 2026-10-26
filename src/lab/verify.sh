@@ -169,16 +169,25 @@ verify_up() {
         fail "$NS_SERVER: unprivileged ports start at 0 (got $port_start)"
     fi
 
-    check_netem "$NS_CLIENT" "$V4_IF_C"
-    check_netem "$NS_SERVER" "$V4_IF_S"
-    check_netem "$NS_CLIENT" "$V6_IF_C"
-    check_netem "$NS_SERVER" "$V6_IF_S"
-    local q
-    for q in "$NS_CLIENT:$CTL_IF_C" "$NS_SERVER:$CTL_IF_S"; do
-        if tc -n "${q%%:*}" qdisc show dev "${q#*:}" 2>/dev/null | grep -q netem; then
-            fail "${q%%:*}/${q#*:}: ctl link must not be impaired"
+    # Impairment is server-side only: server end egress + ifb fed by the server end's ingress.
+    local pair dev ifb
+    for pair in "$V4_IF_S:$V4_IFB" "$V6_IF_S:$V6_IFB"; do
+        dev=${pair%%:*} ifb=${pair#*:}
+        expect "$NS_SERVER/$ifb: ifb up" "$(ip -n "$NS_SERVER" -o link show dev "$ifb" 2>&1 || true)" "UP,LOWER_UP"
+        expect "$NS_SERVER/$dev: ingress redirected to $ifb" \
+            "$(tc -n "$NS_SERVER" filter show dev "$dev" ingress 2>&1 || true)" "matchall" "Redirect to device $ifb"
+        check_netem "$NS_SERVER" "$dev"
+        check_netem "$NS_SERVER" "$ifb"
+    done
+
+    # Client interfaces are the capture point: no qdisc may delay or drop there. The ctl link is never impaired.
+    local q out
+    for q in "$NS_CLIENT:$V4_IF_C" "$NS_CLIENT:$V6_IF_C" "$NS_CLIENT:$CTL_IF_C" "$NS_SERVER:$CTL_IF_S"; do
+        out=$(tc -n "${q%%:*}" qdisc show dev "${q#*:}" 2>&1 || true)
+        if [[ $out == *netem* ]]; then
+            fail "${q%%:*}/${q#*:}: must carry no netem"
         else
-            pass "${q%%:*}/${q#*:}: no netem on ctl link"
+            pass "${q%%:*}/${q#*:}: no netem"
         fi
     done
 

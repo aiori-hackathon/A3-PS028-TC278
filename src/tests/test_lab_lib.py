@@ -14,7 +14,7 @@ import pytest
 from runner.child_env import child_env
 
 LAB = Path(__file__).resolve().parents[2] / "src" / "lab"
-SCRIPTS = ["setup.sh", "teardown.sh", "verify.sh"]
+SCRIPTS = ["setup.sh", "teardown.sh", "verify.sh", "netem.sh"]
 
 
 def bash(snippet: str, stdin: str = "") -> subprocess.CompletedProcess:
@@ -132,23 +132,23 @@ From 192.0.2.1 icmp_seq=1 Destination Host Unreachable
 def test_stats_even_count_median_is_mean_of_middle_pair():
     out = stats(PING_V4_OK)
     assert out.returncode == 0
-    assert out.stdout.strip() == "median_ms=20.25 min_ms=20.10 max_ms=20.60 loss_pct=0 sent=4 received=4"
+    assert out.stdout.strip() == "median_ms=20.25 min_ms=20.10 max_ms=20.60 loss_pct=0 sent=4 received=4 errors=0"
 
 
 def test_stats_ipv6_odd_count():
     assert stats(PING_V6_ODD).stdout.strip() == (
-        "median_ms=20.50 min_ms=20.40 max_ms=21.00 loss_pct=0 sent=3 received=3")
+        "median_ms=20.50 min_ms=20.40 max_ms=21.00 loss_pct=0 sent=3 received=3 errors=0")
 
 
 def test_stats_partial_loss():
     assert stats(PING_PARTIAL).stdout.strip() == (
-        "median_ms=20.30 min_ms=20.20 max_ms=20.40 loss_pct=50 sent=4 received=2")
+        "median_ms=20.30 min_ms=20.20 max_ms=20.40 loss_pct=50 sent=4 received=2 errors=0")
 
 
-@pytest.mark.parametrize("text,sent", [(PING_BLACKHOLE, 10), (PING_ERRORS, 5)])
-def test_stats_total_loss(text, sent):
+@pytest.mark.parametrize("text,sent,errors", [(PING_BLACKHOLE, 10, 0), (PING_ERRORS, 5, 5)])
+def test_stats_total_loss(text, sent, errors):
     assert stats(text).stdout.strip() == (
-        f"median_ms=NA min_ms=NA max_ms=NA loss_pct=100 sent={sent} received=0")
+        f"median_ms=NA min_ms=NA max_ms=NA loss_pct=100 sent={sent} received=0 errors={errors}")
 
 
 @pytest.mark.parametrize("text", ["", "ping: connect: Network is unreachable\n",
@@ -195,9 +195,20 @@ def test_check_no_replies_fails_numeric_target():
 
 
 def test_check_blackhole():
-    assert check("blackhole", "median_ms=NA loss_pct=100").returncode == 0
+    assert check("blackhole", "median_ms=NA loss_pct=100 errors=0").returncode == 0
     out = check("blackhole", line("20.1"))
     assert out.returncode == 1 and "expected 100% loss" in out.stdout
+
+
+def test_check_blackhole_must_be_silent():
+    """100% loss with ICMP errors means neighbour discovery failed, not a blackhole."""
+    out = check("blackhole", "median_ms=NA loss_pct=100 errors=5")
+    assert out.returncode == 1 and "not silent" in out.stdout
+
+
+def test_blackhole_end_to_end_from_ping_text():
+    assert check("blackhole", stats(PING_BLACKHOLE).stdout.strip()).returncode == 0
+    assert check("blackhole", stats(PING_ERRORS).stdout.strip()).returncode == 1
 
 
 @pytest.mark.parametrize("median,loss,ok", [("0.08", 0, True), ("1.99", 0, True),
@@ -210,3 +221,25 @@ def test_check_max_target_for_ctl_link(median, loss, ok):
 def test_check_bad_target(target):
     out = check(target, line("20"))
     assert out.returncode == 2 and "bad target" in out.stdout
+
+
+# --- hl_set_link: input checks happen before any tc command runs ----------------
+
+@pytest.mark.parametrize("args", ["v5 10 0", "v6 x 0", "v6 10 101", "v6 10 -1", "v6 1.5 0", "ctl 10 0"])
+def test_set_link_rejects_bad_input_without_running_tc(args):
+    out = bash(f"hl_set_link {args}")
+    assert out.returncode == 2
+    assert "error:" in out.stderr
+    assert "+ tc" not in out.stdout
+
+
+def test_set_link_commands():
+    """With tc stubbed out, check the exact commands for S1 and for a restore."""
+    out = bash('tc() { :; }; hl_set_link v6 10 100; hl_set_link v6 10 0')
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.splitlines() == [
+        "+ tc -n hl-server qdisc replace dev hl-v6s root netem delay 10ms loss 100%",
+        "+ tc -n hl-server qdisc replace dev hl-ifb6 root netem delay 10ms loss 100%",
+        "+ tc -n hl-server qdisc replace dev hl-v6s root netem delay 10ms",
+        "+ tc -n hl-server qdisc replace dev hl-ifb6 root netem delay 10ms",
+    ]

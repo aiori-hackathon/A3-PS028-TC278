@@ -16,8 +16,10 @@ need_root
 
 echo "== HappyLab setup: $(date -u +%Y-%m-%dT%H:%M:%SZ) =="
 
-# Load netem now so a missing module fails here, with a clear message, not halfway through.
+# Load modules now so a missing one fails here, with a clear message, not halfway through.
+# numifbs=0 stops the ifb module creating default ifb0/ifb1 devices in the host namespace.
 run modprobe sch_netem
+run modprobe ifb numifbs=0
 
 # --- namespaces --------------------------------------------------------------
 for ns in "$NS_CLIENT" "$NS_SERVER"; do
@@ -90,10 +92,40 @@ run ip -n "$NS_CLIENT" -6 route replace default via "$V6_ADDR_S" dev "$V6_IF_C"
 # nginx and the DNS server run as the normal user inside hl-server on ports 80 and 53.
 run ip netns exec "$NS_SERVER" sysctl -qw net.ipv4.ip_unprivileged_port_start=0
 
-# --- baseline impairment (v4 and v6 links only; ctl is never impaired) -------
-for pair in "$NS_CLIENT:$V4_IF_C" "$NS_SERVER:$V4_IF_S" "$NS_CLIENT:$V6_IF_C" "$NS_SERVER:$V6_IF_S"; do
-    run tc -n "${pair%%:*}" qdisc replace dev "${pair#*:}" root netem delay "${BASELINE_DELAY_MS}ms"
+# --- impairment plumbing (server side only; ctl is never impaired) -----------
+# The client interfaces are the capture point and must carry no qdisc: an egress
+# qdisc acts before tcpdump sees a packet, so it would hide dropped SYNs and
+# timestamp delayed ones late. Remove any left over from an older setup.
+for dev in "$V4_IF_C" "$V6_IF_C" "$CTL_IF_C"; do
+    if [[ $(tc -n "$NS_CLIENT" qdisc show dev "$dev") == *netem* ]]; then
+        run tc -n "$NS_CLIENT" qdisc del dev "$dev" root
+    fi
 done
+
+# One ifb device per impaired link, inside hl-server, for the client->server direction.
+for ifb in "$V4_IFB" "$V6_IFB"; do
+    if ip -n "$NS_SERVER" link show dev "$ifb" >/dev/null 2>&1; then
+        echo "exists: ifb $ifb"
+    else
+        run ip -n "$NS_SERVER" link add "$ifb" type ifb
+    fi
+    run ip -n "$NS_SERVER" link set dev "$ifb" up
+done
+
+# Redirect everything arriving on the server end to its ifb (rebuilt each time, so it converges).
+for pair in "$V4_IF_S:$V4_IFB" "$V6_IF_S:$V6_IFB"; do
+    dev=${pair%%:*} ifb=${pair#*:}
+    if [[ $(tc -n "$NS_SERVER" qdisc show dev "$dev" ingress) == *ingress* ]]; then
+        run tc -n "$NS_SERVER" qdisc del dev "$dev" ingress
+    fi
+    run tc -n "$NS_SERVER" qdisc add dev "$dev" handle ffff: ingress
+    run tc -n "$NS_SERVER" filter add dev "$dev" parent ffff: protocol all prio 1 \
+        matchall action mirred egress redirect dev "$ifb"
+done
+
+# Baseline: same delay in both directions on v4 and v6, no loss.
+hl_set_link v4 "$BASELINE_DELAY_MS" 0
+hl_set_link v6 "$BASELINE_DELAY_MS" 0
 
 # --- lab-only resolver and address-selection policy for hl-client -------------
 write_file() {  # write_file PATH (contents on stdin), mode 0644, atomic
