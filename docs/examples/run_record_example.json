@@ -1,0 +1,63 @@
+{
+  "schema_version": "0.1",
+  "run_id": "20261026T101500Z_S1_curl_r03",
+  "scenario": {
+    "id": "S1",
+    "label": "IPv6 blackhole",
+    "repetition": 3,
+    "netem": {
+      "v4": { "delay_ms_each_way": 10, "loss_pct": 0 },
+      "v6": { "delay_ms_each_way": 10, "loss_pct": 100 }
+    },
+    "dns": { "aaaa_delay_ms": 0 },
+    "measured_rtt_ms": {
+      "v4": { "value": null, "status": "not_yet_computed" },
+      "v6": { "value": null, "status": "not_yet_computed", "note": "expected no reply: IPv6 blackholed in S1" }
+    }
+  },
+  "client": {
+    "name": "curl",
+    "version": "curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13",
+    "argv": ["curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "http://www.hl.test/"],
+    "config": { "happy_eyeballs_timeout_ms": "default (not set)" }
+  },
+  "environment": {
+    "note": "ILLUSTRATIVE EXAMPLE ONLY: not a real run; no values here are results",
+    "kernel": "7.0.0-38-generic",
+    "gai_conf": "lab default (/etc/netns/hl-client/gai.conf)",
+    "resolver": "198.51.100.53 (test zone hl.test)",
+    "git_commit": "0000000"
+  },
+  "timestamps": {
+    "run_start_utc": "2026-10-26T10:15:00.000000Z",
+    "client_start_epoch_ns": 1792923300000000000,
+    "client_end_epoch_ns": 1792923300500000000,
+    "capture_start_epoch_ns": 1792923299000000000,
+    "capture_end_epoch_ns": 1792923301000000000
+  },
+  "outcome": {
+    "success": true,
+    "exit_code": 0,
+    "http_status": 200,
+    "error": null,
+    "source": "client/runner log"
+  },
+  "evidence": {
+    "pcap_path": "captures/20261026T101500Z_S1_curl_r03.pcap",
+    "pcap_sha256": null,
+    "client_log_path": "data/generated/logs/20261026T101500Z_S1_curl_r03.log",
+    "pre_verify_ok": true,
+    "post_restore_verify_ok": true
+  },
+  "packet_observations": {
+    "winning_family": { "value": null, "status": "not_yet_computed" },
+    "attempts": { "value": null, "status": "not_yet_computed" },
+    "failed_or_abandoned_attempts": { "value": null, "status": "not_yet_computed" }
+  },
+  "metrics": {
+    "dns_time_ms": { "value": null, "status": "not_yet_computed" },
+    "tcp_setup_time_ms": { "value": null, "status": "not_yet_computed" },
+    "inter_family_attempt_delay_ms": { "value": null, "status": "not_yet_computed" },
+    "scenario_penalty_ms": { "value": null, "status": "not_applicable", "note": "per-scenario aggregate; see scenario summary" }
+  }
+}
