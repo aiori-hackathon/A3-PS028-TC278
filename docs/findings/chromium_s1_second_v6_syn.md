@@ -59,6 +59,18 @@ In C0 there is only one entry (job A, `first`, IPv6), because the handshake fini
   one original IPv6 attempt and one backup IPv6 attempt. For curl in S1 the count is 1, because
   curl made no backup attempt.
 
+## Same pattern in S2 (IPv6 +600 ms RTT)
+
+Chromium pilot session `20261026T182411Z`, runs `20261026T182413Z_S2_chromium_r01`, `…182427Z…r02`, `…182442Z…r03`.
+- **pcap:**
+  - first v6 SYN at +0 ms
+  - second v6 SYN, from a new source port, at +248.9 to +250.3 ms
+  - v4 SYN at +300.4 to +301.1 ms, which wins at about 321 ms
+- **v6 SYN-ACKs arrive late.** They come at about 620 ms and 870 ms, one 620 ms RTT after each v6 SYN, after IPv4 has already won. The client answers each with a RST, which is consistent with Chromium having closed those sockets.
+- **NetLog:** the same three connect-job entries as S1: `first` v6, backup-job v6, then the first job's `second` connector to v4.
+- **No v4 SYN before about 300 ms.** The v4 SYN goes out while the v6 handshake is still unanswered. It is a delayed fallback, not a simultaneous v4/v6 start.
+- **S3 (IPv6 +150 ms RTT, same session):** the v6 handshake completes at about 170 ms. That is before the ~250 ms backup and ~300 ms fallback points seen above, so no second SYN of either family is sent.
+
 ## How it is recorded from now on
 
 `client_chromium.py` now writes these NetLog entries into every Chromium record as

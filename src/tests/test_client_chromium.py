@@ -102,7 +102,8 @@ def test_main_requires_url_or_version():
 
 def test_chromium_client_spec(tmp_path):
     spec = CLIENTS["chromium"]
-    assert spec.url == "http://www.hl.test/chromium.html" and spec.scenarios == ("C0", "S1")
+    assert spec.url == "http://www.hl.test/chromium.html"
+    assert spec.scenarios == ("C0", "S1", "S2", "S3", "S4", "S5", "S6")
     assert spec.netlog_path(tmp_path, "R") == tmp_path / "R_netlog.json"
     argv = spec.argv(tmp_path / "R_netlog.json")
     assert argv[0].endswith(".venv/bin/python") and argv[1].endswith("src/runner/client_chromium.py")
@@ -158,3 +159,18 @@ def test_load_netlog(tmp_path):
     f.write_text('{"constants": {}, "events": [{"a": 1},\n')
     assert cc.load_netlog(str(f)) == {"constants": {}, "events": [{"a": 1}]}
     assert cc.load_netlog(str(tmp_path / "none.json")) is None
+
+
+def test_resolved_order_from_dns_task():
+    """Shape from the C0 NetLog of 2026-10-26: the built-in DNS task lists v6 before v4."""
+    log = {"constants": {"logEventTypes": {"HOST_RESOLVER_DNS_TASK": 7}}, "events": [
+        {"type": 7, "params": {"transactions_needed": [{"dns_query_type": "A"}]}},
+        {"type": 7, "params": {"results": [
+            {"domain_name": "www.hl.test", "query_type": "UNSPECIFIED",
+             "endpoints": [{"address": "2001:db8:28:6::2", "port": 0}, {"address": "192.0.2.2", "port": 0}]},
+            {"domain_name": "www.hl.test", "query_type": "HTTPS", "error": -105}]}},
+    ]}
+    assert cc.resolved(log, "www.hl.test") == {"addresses": ["2001:db8:28:6::2", "192.0.2.2"],
+                                               "families": ["v6", "v4"], "resolver": "built-in DNS task"}
+    assert cc.resolved(log, "other.test")["addresses"] is None
+    assert cc.resolved({}, "www.hl.test") is None

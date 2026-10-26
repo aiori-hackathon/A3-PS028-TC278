@@ -1,6 +1,6 @@
 """HappyLab orchestrator: the per-run measurement loop.
 
-Scope for now: curl on C0 and S1-S6; Chromium (Playwright) on C0 and S1 only; no X1.
+Scope: curl and Chromium (Playwright) on C0 and S1-S6; no X1.
 
 Usage (lab already up via `sudo src/lab/setup.sh`; run with plain sudo, never sudo -E):
     .venv/bin/python src/runner/orchestrate.py --scenario S1 --reps 1 --dry-run   # review, no sudo

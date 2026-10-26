@@ -94,6 +94,30 @@ def netlog_command_line(path: str) -> str | None:
         return None
 
 
+def resolved(netlog: dict, host: str) -> dict | None:
+    """Address order Chromium's resolver produced for `host` (client log, not packets).
+
+    From the first HOST_RESOLVER_DNS_TASK result (Chromium's built-in DNS client) for the host:
+    {"addresses": [...in Chromium's order...], "families": ["v6", "v4"], "resolver": "built-in DNS task"}.
+    If the host was resolved some other way (e.g. the system resolver), returns
+    {"addresses": None, ..., "resolver": "not the built-in DNS task (see NetLog)"}; None if unreadable.
+    """
+    try:
+        types = {v: k for k, v in netlog["constants"]["logEventTypes"].items()}
+        events = netlog["events"]
+    except (KeyError, TypeError, AttributeError):
+        return None
+    for e in events:
+        if types.get(e.get("type")) != "HOST_RESOLVER_DNS_TASK":
+            continue
+        for r in (e.get("params") or {}).get("results") or []:
+            if r.get("domain_name") == host and r.get("query_type") == "UNSPECIFIED" and r.get("endpoints"):
+                addrs = [x.get("address") for x in r["endpoints"]]
+                return {"addresses": addrs, "families": [ip_family(a) for a in addrs],
+                        "resolver": "built-in DNS task"}
+    return {"addresses": None, "families": None, "resolver": "not the built-in DNS task (see NetLog)"}
+
+
 def connect_jobs(netlog: dict, host: str) -> list[dict]:
     """Every TCP connection start Chromium logged for `host`, in order (client log, not packets).
 
@@ -151,7 +175,7 @@ def ip_family(addr: str | None) -> str | None:
 
 REPORT_KEYS = ("ok", "error", "http_status", "remote_ip", "remote_port", "timing_ms",
                "browser_version", "playwright_version", "launch_args", "headless_mode",
-               "sandbox", "netlog_path", "url", "launch_check", "connect_jobs")
+               "sandbox", "netlog_path", "url", "launch_check", "connect_jobs", "resolved")
 
 
 def parse_report(stdout: str) -> dict:
@@ -229,6 +253,7 @@ def run(url: str | None, netlog: str | None) -> dict:
         if url and log is not None:
             from urllib.parse import urlsplit
             report["connect_jobs"] = connect_jobs(log, urlsplit(url).hostname or "")
+            report["resolved"] = resolved(log, urlsplit(url).hostname or "")
         problems = ["NetLog unreadable: launch settings not confirmed"] if cmdline is None else check_command_line(cmdline)
         report["launch_check"] = "ok" if not problems else "; ".join(problems)
         if problems:

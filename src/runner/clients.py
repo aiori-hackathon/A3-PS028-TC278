@@ -87,7 +87,10 @@ class ChromiumClient:
     name = "chromium"
     url = CHROMIUM_URL
     timeout_s = 60
-    scenarios = ("C0", "S1")  # S2-S6 not yet: Chromium's resolver may not follow gai.conf like curl
+    # Widened from C0/S1 to all seven scenarios by deliberate decision (2026-10-26), after the clean
+    # C0/S1 pilot. Caveat kept: Chromium resolves with its own DNS client (NetLog), so it may not
+    # follow the netns gai.conf like curl; S4/S5 get their own pilot before any full runs.
+    scenarios = ALL_SCENARIOS
 
     def argv(self, netlog: Path | None = None) -> list[str]:
         argv = [str(VENV_PYTHON), str(CHROMIUM_RUNNER), "--url", self.url]

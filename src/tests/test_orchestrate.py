@@ -23,17 +23,17 @@ VERIFY up: PASS (50 checks)
 
 def test_scope_per_client():
     assert o.SUPPORTED["curl"] == ("C0", "S1", "S2", "S3", "S4", "S5", "S6")
-    assert o.SUPPORTED["chromium"] == ("C0", "S1")
-    with pytest.raises(o.OrchestratorError, match="out of scope for curl"):
-        o.load_scenarios(["X1"])
-    with pytest.raises(o.OrchestratorError, match="out of scope for chromium"):
-        o.load_scenarios(["S2"], client="chromium")
-    assert set(o.load_scenarios(["C0", "S1"], client="chromium")) == {"C0", "S1", "_baseline"}
+    assert o.SUPPORTED["chromium"] == o.SUPPORTED["curl"]  # widened deliberately, 2026-10-26
+    for client in ("curl", "chromium"):
+        with pytest.raises(o.OrchestratorError, match=f"out of scope for {client}"):
+            o.load_scenarios(["X1"], client=client)
+    assert set(o.load_scenarios(["S4", "S5"], client="chromium")) == {"S4", "S5", "_baseline"}
 
 
-def test_cli_refuses_chromium_beyond_s1(capsys):
-    assert o.main(["--client", "chromium", "--scenario", "S4", "--dry-run"]) == 1
-    assert "out of scope for chromium" in capsys.readouterr().err
+def test_cli_accepts_chromium_s4_s5(capsys):
+    assert o.main(["--client", "chromium", "--scenario", "S4", "S5", "--reps", "3", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "_S4_chromium_r01" in out and "verify.sh up blackhole 20" in out and "netem.sh v4 310 0" in out
 
 
 def test_capture_filter_includes_quic_and_https_ports():
