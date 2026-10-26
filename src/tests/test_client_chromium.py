@@ -117,3 +117,44 @@ def test_chromium_client_spec(tmp_path):
 def test_curl_spec_unchanged():
     spec = CLIENTS["curl"]
     assert spec.netlog_path(None, "R") is None and spec.argv()[-1] == "http://www.hl.test/"
+
+
+def _netlog(events):
+    return {"constants": {"logEventTypes": {"SOCKET_POOL_CONNECT_JOB_CREATED": 1,
+                                            "TCP_CONNECT_JOB_CONNECTOR_CONNECT_START": 2, "OTHER": 3},
+                          "timeTickOffset": "1793019210000"},
+            "events": events}
+
+
+def test_connect_jobs_reproduce_s1_pattern():
+    """Shape taken from the S1 NetLogs of 2026-10-26: first v6, backup v6 at +250 ms, v4 fallback at +301 ms."""
+    grp = "http://www.hl.test <http://hl.test same_site>"
+    log = _netlog([
+        {"type": 1, "time": "800", "source": {"id": 116}, "params": {"backup_job": False, "group_id": grp}},
+        {"type": 1, "time": "790", "source": {"id": 20}, "params": {"backup_job": False,
+                                                                    "group_id": "pm/https://www.google.com <null>"}},
+        {"type": 2, "time": "790", "source": {"id": 20}, "params": {"connector": "first", "address": "x"}},
+        {"type": 2, "time": "800", "source": {"id": 116}, "params": {"connector": "first", "address": "[2001:db8:28:6::2]:80"}},
+        {"type": 3, "time": "900", "source": {"id": 116}, "params": {}},
+        {"type": 1, "time": "1050", "source": {"id": 149}, "params": {"backup_job": True, "group_id": grp}},
+        {"type": 2, "time": "1050", "source": {"id": 149}, "params": {"connector": "first", "address": "[2001:db8:28:6::2]:80"}},
+        {"type": 2, "time": "1101", "source": {"id": 116}, "params": {"connector": "second", "address": "192.0.2.2:80"}},
+    ])
+    jobs = cc.connect_jobs(log, "www.hl.test")
+    assert [(j["t_ms"], j["job"], j["backup_job"], j["connector"], j["address"]) for j in jobs] == [
+        (0, 116, False, "first", "[2001:db8:28:6::2]:80"),
+        (250, 149, True, "first", "[2001:db8:28:6::2]:80"),
+        (301, 116, False, "second", "192.0.2.2:80"),
+    ]
+    assert jobs[0]["epoch_ms"] == 1793019210800
+
+
+def test_connect_jobs_tolerates_bad_input():
+    assert cc.connect_jobs({}, "www.hl.test") == [] and cc.connect_jobs(None, "x") == []
+
+
+def test_load_netlog(tmp_path):
+    f = tmp_path / "n.json"
+    f.write_text('{"constants": {}, "events": [{"a": 1},\n')
+    assert cc.load_netlog(str(f)) == {"constants": {}, "events": [{"a": 1}]}
+    assert cc.load_netlog(str(tmp_path / "none.json")) is None

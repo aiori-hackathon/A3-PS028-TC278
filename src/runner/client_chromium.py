@@ -71,18 +71,59 @@ def check_command_line(command_line: str) -> list[str]:
     return problems
 
 
-def netlog_command_line(path: str) -> str | None:
-    """The command line Chromium recorded in a NetLog's constants (None if unreadable)."""
+def load_netlog(path: str) -> dict | None:
+    """A NetLog file as a dict (None if missing or unreadable)."""
     try:
         text = open(path, encoding="utf-8").read()
     except OSError:
         return None
     for candidate in (text, text.rstrip().rstrip(",") + "]}"):  # a NetLog may lack its closing brackets
         try:
-            return json.loads(candidate)["constants"]["clientInfo"]["command_line"]
-        except (json.JSONDecodeError, KeyError, TypeError):
+            data = json.loads(candidate)
+            return data if isinstance(data, dict) else None
+        except json.JSONDecodeError:
             continue
     return None
+
+
+def netlog_command_line(path: str) -> str | None:
+    """The command line Chromium recorded in a NetLog's constants (None if unreadable)."""
+    try:
+        return load_netlog(path)["constants"]["clientInfo"]["command_line"]
+    except (TypeError, KeyError):
+        return None
+
+
+def connect_jobs(netlog: dict, host: str) -> list[dict]:
+    """Every TCP connection start Chromium logged for `host`, in order (client log, not packets).
+
+    One entry per TCP_CONNECT_JOB_CONNECTOR_CONNECT_START in a socket-pool connect job for the host:
+      t_ms        ms after the first entry (NetLog clock)
+      epoch_ms    wall-clock ms (NetLog time + timeTickOffset), to line up with the pcap
+      job         NetLog source id of the connect job
+      backup_job  true if the socket pool created this job as a backup for a slow one
+      connector   "first" or "second" connector of that job (Chromium's own labels)
+      address     address the connector started connecting to
+    """
+    try:
+        c = netlog["constants"]
+        types = {v: k for k, v in c["logEventTypes"].items()}
+        offset = int(c.get("timeTickOffset", 0))
+        events = netlog["events"]
+    except (KeyError, TypeError, AttributeError):
+        return []
+    jobs: dict[int, bool] = {}
+    out = []
+    for e in events:
+        t, params, src = types.get(e.get("type")), e.get("params") or {}, (e.get("source") or {}).get("id")
+        if t == "SOCKET_POOL_CONNECT_JOB_CREATED" and host in str(params.get("group_id", "")):
+            jobs[src] = bool(params.get("backup_job"))
+        elif t == "TCP_CONNECT_JOB_CONNECTOR_CONNECT_START" and src in jobs:
+            out.append({"epoch_ms": int(e["time"]) + offset, "job": src, "backup_job": jobs[src],
+                        "connector": params.get("connector"), "address": params.get("address")})
+    for j in out:
+        j["t_ms"] = j["epoch_ms"] - out[0]["epoch_ms"]
+    return out
 
 
 def normalise_ip(addr: str | None) -> str | None:
@@ -110,7 +151,7 @@ def ip_family(addr: str | None) -> str | None:
 
 REPORT_KEYS = ("ok", "error", "http_status", "remote_ip", "remote_port", "timing_ms",
                "browser_version", "playwright_version", "launch_args", "headless_mode",
-               "sandbox", "netlog_path", "url", "launch_check")
+               "sandbox", "netlog_path", "url", "launch_check", "connect_jobs")
 
 
 def parse_report(stdout: str) -> dict:
@@ -184,6 +225,10 @@ def run(url: str | None, netlog: str | None) -> dict:
             browser.close()
     if netlog:  # the NetLog is complete once the browser has closed
         cmdline = netlog_command_line(netlog)
+        log = load_netlog(netlog)
+        if url and log is not None:
+            from urllib.parse import urlsplit
+            report["connect_jobs"] = connect_jobs(log, urlsplit(url).hostname or "")
         problems = ["NetLog unreadable: launch settings not confirmed"] if cmdline is None else check_command_line(cmdline)
         report["launch_check"] = "ok" if not problems else "; ".join(problems)
         if problems:
