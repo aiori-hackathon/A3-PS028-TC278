@@ -45,3 +45,28 @@ def test_s1_blackholes_only_ipv6(cfg):
     s1, base = cfg["scenarios"]["S1"], cfg["scenarios"]["C0"]
     assert s1["v6"]["loss_pct"] == 100
     assert s1["v4"] == base["v4"] and s1["dns"] == base["dns"]
+
+
+@pytest.mark.parametrize("sid,fam,extra_rtt", [("S2", "v6", 600), ("S3", "v6", 150), ("S5", "v4", 600)])
+def test_added_rtt_is_split_equally_on_one_family(cfg, sid, fam, extra_rtt):
+    base, sc = cfg["baseline"], cfg["scenarios"][sid]
+    other = "v4" if fam == "v6" else "v6"
+    assert sc[fam] == {"delay_ms_each_way": base["delay_ms_each_way"] + extra_rtt // 2, "loss_pct": 0}
+    assert sc["verify_target"][fam] == base["rtt_ms"] + extra_rtt
+    assert sc[other] == cfg["scenarios"]["C0"][other] and sc["dns"] == cfg["scenarios"]["C0"]["dns"]
+
+
+def test_s4_blackholes_only_ipv4(cfg):
+    s4, c0 = cfg["scenarios"]["S4"], cfg["scenarios"]["C0"]
+    assert s4["v4"]["loss_pct"] == 100 and s4["verify_target"]["v4"] == "blackhole"
+    assert s4["v6"] == c0["v6"] and s4["dns"] == c0["dns"]
+
+
+def test_s6_delays_only_aaaa(cfg):
+    s6, c0 = cfg["scenarios"]["S6"], cfg["scenarios"]["C0"]
+    assert s6["dns"]["delay_ms"] == {"A": 0, "AAAA": 300}
+    assert s6["v4"] == c0["v4"] and s6["v6"] == c0["v6"]
+
+
+def test_x1_not_defined_yet(cfg):
+    assert "X1" not in cfg["scenarios"]

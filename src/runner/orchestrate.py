@@ -1,11 +1,12 @@
 """HappyLab orchestrator: the per-run measurement loop.
 
-Scope for now: client curl, scenarios C0 and S1 only (no Chromium, no full matrix).
+Scope for now: client curl, scenarios C0 and S1-S6 (no Chromium, no X1).
 
 Usage (lab already up via `sudo src/lab/setup.sh`; run with plain sudo, never sudo -E):
     .venv/bin/python src/runner/orchestrate.py --scenario S1 --reps 1 --dry-run   # review, no sudo
     sudo .venv/bin/python src/runner/orchestrate.py --scenario C0 --reps 1
     sudo .venv/bin/python src/runner/orchestrate.py --scenario C0 S1 --reps 3
+    sudo .venv/bin/python src/runner/orchestrate.py --scenario S2 S3 S4 S5 S6 --reps 3   # pilot
 
 Session: start the DNS server and nginx inside hl-server (as the invoking user), then for
 each scenario and repetition run one measurement:
@@ -52,7 +53,7 @@ NGINX_CONF = REPO / "src" / "config" / "nginx.conf"
 DNS_SERVER = REPO / "src" / "dns" / "hl_dns.py"
 VENV_PYTHON = REPO / ".venv" / "bin" / "python"
 
-SUPPORTED_SCENARIOS = ("C0", "S1")
+SUPPORTED_SCENARIOS = ("C0", "S1", "S2", "S3", "S4", "S5", "S6")
 CLIENT = "curl"
 URL = "http://www.hl.test/"
 CAPTURE_FILTER = "tcp port 80 or udp port 53 or icmp or icmp6 or arp"
@@ -561,14 +562,15 @@ def run_one(ctx: Ctx, sid: str, sc: dict, rep: int, base: dict, curl_version: st
     return record
 
 
-def summary_line(r: dict) -> str:
+def summary_line(r: dict, wall_s: float | None = None) -> str:
     met, obs = r["metrics"], r["packet_observations"]
 
     def v(f):
         return f["value"] if f["status"] == "computed" else f["status"]
     return (f"{r['run_id']}  http={r['outcome']['http_status']}  win={v(obs['winning_family'])}  "
             f"setup_ms={v(met['tcp_setup_time_ms'])}  inter_family_ms={v(met['inter_family_attempt_delay_ms'])}  "
-            f"failed/abandoned={v(obs['failed_or_abandoned_attempts'])}  cross_checks={r['cross_checks']['status']}")
+            f"failed/abandoned={v(obs['failed_or_abandoned_attempts'])}  cross_checks={r['cross_checks']['status']}"
+            + (f"  wall_s={wall_s:.2f}" if wall_s is not None else ""))
 
 
 def dry_run(scenarios: dict, reps: int, user: str, lab: dict) -> None:
@@ -583,6 +585,7 @@ def dry_run(scenarios: dict, reps: int, user: str, lab: dict) -> None:
         pcap = REPO / "captures" / f"{rid}.pcap"
         print(f"\n# {sid} ({sc['label']}), repetition 1 of {reps}, run_id like {rid}")
         steps = [
+            ("dns", cmd_dns(lab, user, sc["dns"]["delay_ms"])),
             ("apply", cmd_netem("v4", sc["v4"]["delay_ms_each_way"], sc["v4"]["loss_pct"])),
             ("apply", cmd_netem("v6", sc["v6"]["delay_ms_each_way"], sc["v6"]["loss_pct"])),
             ("verify", cmd_verify(*verify_targets(sc))),
@@ -640,6 +643,7 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid) -> int:
     ctx.created.append(session_log.path)
     services = Services(ctx, dirs["nginx"], dirs["lab"])
     records = []
+    walls: list[float] = []  # whole-run wall time incl. DNS restart, verifies and restore
     status = 0
     try:
         curl_version = sh(ctx, in_ns_as_user(lab["NS_CLIENT"], user, ["curl", "--version"]), session_log
@@ -658,11 +662,13 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid) -> int:
         for sid in ids:
             sc = scenarios[sid]
             for rep in range(1, reps + 1):
+                t0 = time.monotonic()
                 services.ensure_dns(sc["dns"]["delay_ms"], session_log)
                 services.ensure_nginx(session_log)
                 record = run_one(ctx, sid, sc, rep, base, curl_version, environment, dirs)
+                walls.append(time.monotonic() - t0)
                 records.append(record)
-                line = summary_line(record)
+                line = summary_line(record, walls[-1])
                 session_log.write(line)
                 print(line, flush=True)
                 if record["cross_checks"]["status"] == "conflict":
@@ -687,6 +693,9 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid) -> int:
             for f in [d, *d.rglob("*")]:
                 ctx.chown(f)
     print(f"\n{len(records)} record(s) written; session log {session_log.path.relative_to(REPO)}")
+    if walls:
+        print(f"wall time per run: mean {sum(walls) / len(walls):.2f} s, min {min(walls):.2f} s, "
+              f"max {max(walls):.2f} s over {len(walls)} run(s)")
     if status == 3:
         print("Some runs have log/pcap conflicts: review them before using the data.")
     return status

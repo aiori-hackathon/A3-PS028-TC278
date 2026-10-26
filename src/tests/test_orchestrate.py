@@ -21,10 +21,30 @@ VERIFY up: PASS (50 checks)
 """
 
 
-def test_scope_is_curl_c0_s1_only():
-    assert o.SUPPORTED_SCENARIOS == ("C0", "S1") and o.CLIENT == "curl"
+def test_scope_is_curl_c0_to_s6_without_x1():
+    assert o.SUPPORTED_SCENARIOS == ("C0", "S1", "S2", "S3", "S4", "S5", "S6") and o.CLIENT == "curl"
     with pytest.raises(o.OrchestratorError, match="out of scope"):
-        o.load_scenarios(["S2"])
+        o.load_scenarios(["X1"])
+
+
+def test_pilot_scenarios_targets():
+    sc = o.load_scenarios(["S2", "S3", "S4", "S5", "S6"])
+    assert [o.verify_targets(sc[s]) for s in ("S2", "S3", "S4", "S5", "S6")] == [
+        (20, 620), (20, 170), ("blackhole", 20), (620, 20), (20, 20)]
+
+
+def test_dry_run_shows_s6_dns_delay_and_s4_blackhole(capsys):
+    assert o.main(["--scenario", "S4", "S6", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    s4, s6 = out[out.index("# S4"):out.index("# S6")], out[out.index("# S6"):]
+    assert "netem.sh v4 10 100" in s4 and "verify.sh up blackhole 20" in s4
+    assert "--delay AAAA=300" in s6 and "--delay" not in s4
+
+
+def test_summary_line_wall_time():
+    r = _s1_record()
+    assert o.summary_line(r).endswith("cross_checks=agree")
+    assert o.summary_line(r, 13.456).endswith("cross_checks=agree  wall_s=13.46")
 
 
 def test_load_scenarios_and_targets():
