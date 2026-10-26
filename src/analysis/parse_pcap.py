@@ -225,6 +225,7 @@ class Timeline:
     icmp_errors: list[Packet]              # destination unreachable and similar
     neighbour_packets: int                 # ARP plus IPv6 neighbour solicitation/advertisement
     anomalies: list[str]
+    other_udp: list[Packet] = field(default_factory=list)  # UDP not on port 53 (e.g. QUIC on 443)
 
 
 _ICMP4_ERRORS = {3, 11, 12}      # unreachable, time exceeded, parameter problem
@@ -244,6 +245,7 @@ def analyse(linktype: int, packets: list[Packet], window: tuple[int, int] | None
     neighbour = 0
     unmatched_tcp = 0
     anomalies: list[str] = []
+    other_udp: list[Packet] = []
 
     for p in packets:
         if p.proto == "arp" or (p.proto == "icmp6" and p.icmp_type in _ICMP6_ND):
@@ -256,6 +258,8 @@ def analyse(linktype: int, packets: list[Packet], window: tuple[int, int] | None
                 unmatched_tcp += 1
         elif p.proto == "udp" and 53 in (p.sport, p.dport):
             _track_dns(p, dns, anomalies)
+        elif p.proto == "udp":
+            other_udp.append(p)
 
     if unmatched_tcp:
         anomalies.append(f"{unmatched_tcp} TCP packets not belonging to any SYN seen in the window")
@@ -265,7 +269,7 @@ def analyse(linktype: int, packets: list[Packet], window: tuple[int, int] | None
     return Timeline(linktype=linktype, window=window, packet_count=len(packets),
                     attempts=sorted(attempts.values(), key=lambda a: a.first_syn_ns),
                     dns=dns, icmp_errors=icmp_errors, neighbour_packets=neighbour,
-                    anomalies=anomalies)
+                    anomalies=anomalies, other_udp=other_udp)
 
 
 def _track_tcp(p: Packet, attempts: dict[tuple, Attempt]) -> bool:

@@ -12,7 +12,10 @@ Project rules used here (documented in docs/run_record_schema.md):
   connections carried data the run is ambiguous and nothing is picked.
 - Attempt results: won; failed (server answered with RST); abandoned (any other
   attempt when a winner exists); no_reply (no SYN-ACK and no winner at all).
-- DNS time: first DNS query to the last DNS answer, among queries sent before the first SYN.
+- Only TCP attempts to the target port (80) count as attempts. Any TCP attempt to another
+  port, and any UDP/TCP traffic on 443 (QUIC, HTTPS upgrade), is "unexpected traffic".
+- DNS time: first DNS query to the last DNS answer, among queries for the target name
+  (www.hl.test) sent before the first SYN. Queries for other names are listed in notes.
 
 Values are milliseconds rounded to the microsecond (pcap resolution).
 Runner/client logs are never overwritten by packet data: disagreements are reported
@@ -21,10 +24,35 @@ by cross_check() and left for a person to resolve.
 
 from __future__ import annotations
 
+import ipaddress
 import statistics
 from dataclasses import dataclass, field
 
 from analysis.parse_pcap import Attempt, Timeline
+
+TARGET_PORT = 80
+TARGET_NAME = "www.hl.test"
+WATCHED_PORTS = (443,)  # QUIC (UDP) and HTTPS upgrade (TCP): must never appear in a run
+
+
+def _name(qname: str) -> str:
+    return qname.rstrip(".").lower()
+
+
+def same_address(a: str | None, b: str | None) -> bool:
+    """Compare addresses canonically ('[2001:DB8::2]' == '2001:db8::2')."""
+    if a is None or b is None:
+        return False
+
+    def canon(x: str) -> str:
+        x = x.strip()
+        if x.startswith("[") and x.endswith("]"):
+            x = x[1:-1]
+        try:
+            return str(ipaddress.ip_address(x))
+        except ValueError:
+            return x
+    return canon(a) == canon(b)
 
 
 def _ms(ns: int) -> float:
@@ -49,6 +77,8 @@ class RunMetrics:
     families_tried: list[str]
     notes: list[str] = field(default_factory=list)
     ambiguous: bool = False
+    unexpected_traffic: list[str] = field(default_factory=list)
+    dns_note: str | None = None
 
     @property
     def winning_family(self) -> str | None:
@@ -91,16 +121,29 @@ def classify(attempts: list[Attempt]) -> tuple[Attempt | None, list[tuple[Attemp
     return winner, results, notes, ambiguous
 
 
-def compute(tl: Timeline) -> RunMetrics:
-    winner, results, notes, ambiguous = classify(tl.attempts)
-    first_syn = min((a.first_syn_ns for a in tl.attempts), default=None)
+def unexpected_traffic(tl: Timeline, target_port: int = TARGET_PORT) -> list[str]:
+    out = []
+    for a in tl.attempts:
+        if a.dport != target_port:
+            out.append(f"TCP attempt to {a.dst} port {a.dport} (not the target port {target_port})")
+    for p in tl.other_udp:
+        if p.sport in WATCHED_PORTS or p.dport in WATCHED_PORTS:
+            out.append(f"UDP {p.src}:{p.sport} -> {p.dst}:{p.dport} (QUIC port)")
+    return out
+
+
+def compute(tl: Timeline, target_port: int = TARGET_PORT, target_name: str | None = TARGET_NAME) -> RunMetrics:
+    attempts = [a for a in tl.attempts if a.dport == target_port]
+    winner, results, notes, ambiguous = classify(attempts)
+    first_syn = min((a.first_syn_ns for a in attempts), default=None)
+    unexpected = unexpected_traffic(tl, target_port)
 
     setup = None
     if winner is not None and first_syn is not None:
         setup = _ms(winner.handshake_ack_ns - first_syn)
 
     first_by_family: dict[str, int] = {}
-    for a in tl.attempts:
+    for a in attempts:
         first_by_family.setdefault(a.family, a.first_syn_ns)  # attempts are sorted by first SYN
     families = sorted(first_by_family, key=first_by_family.get)
     inter = None
@@ -108,7 +151,14 @@ def compute(tl: Timeline) -> RunMetrics:
         inter = _ms(first_by_family[families[1]] - first_by_family[families[0]])
 
     dns_time = None
-    queries = [d for d in tl.dns if first_syn is None or d.query_ns <= first_syn]
+    before = [d for d in tl.dns if first_syn is None or d.query_ns <= first_syn]
+    queries = [d for d in before if target_name is None or _name(d.qname) == _name(target_name)]
+    others = sorted({_name(d.qname) for d in before if d not in queries})
+    dns_note = None
+    if others:
+        n_other = sum(1 for d in before if d not in queries)
+        dns_note = (f"only {target_name} queries counted; {n_other} queries for other names "
+                    f"before the first SYN not counted: {', '.join(others)}")
     if queries:
         answered = [d.response_ns for d in queries if d.response_ns is not None]
         if len(answered) == len(queries):
@@ -119,7 +169,7 @@ def compute(tl: Timeline) -> RunMetrics:
     return RunMetrics(winner=winner, results=results, first_syn_ns=first_syn,
                       tcp_setup_time_ms=setup, inter_family_attempt_delay_ms=inter,
                       dns_time_ms=dns_time, families_tried=families, notes=notes,
-                      ambiguous=ambiguous)
+                      ambiguous=ambiguous, unexpected_traffic=unexpected, dns_note=dns_note)
 
 
 def record_fields(m: RunMetrics, tl: Timeline) -> tuple[dict, dict]:
@@ -149,8 +199,9 @@ def record_fields(m: RunMetrics, tl: Timeline) -> tuple[dict, dict]:
         tried = ", ".join(m.families_tried) or "none"
         inter = _wrapped(None, "not_observed", f"only one family tried ({tried})")
     metrics = {
-        "dns_time_ms": (_wrapped(m.dns_time_ms) if m.dns_time_ms is not None
-                        else _wrapped(None, "not_observed", "no complete DNS exchange before the first SYN")),
+        "dns_time_ms": (_wrapped(m.dns_time_ms, note=m.dns_note) if m.dns_time_ms is not None
+                        else _wrapped(None, "not_observed", "; ".join(
+                            x for x in ("no complete DNS exchange before the first SYN", m.dns_note) if x))),
         "tcp_setup_time_ms": setup,
         "inter_family_attempt_delay_ms": inter,
         "scenario_penalty_ms": _wrapped(None, "not_applicable",
@@ -193,8 +244,16 @@ def cross_check(outcome: dict, client_report: dict | None, m: RunMetrics) -> dic
         conflict("http_status", log_status, pcap_status, "HTTP status differs")
 
     remote_ip = (client_report or {}).get("remote_ip")
-    if remote_ip and m.winner is not None and remote_ip != m.winner.dst:
+    if remote_ip and m.winner is not None and not same_address(remote_ip, m.winner.dst):
         conflict("remote_ip", remote_ip, m.winner.dst,
                  "client's connected address differs from the winning handshake's destination")
+    elif not remote_ip and outcome.get("success") and client_report is not None:
+        conflict("remote_ip", None, m.winner.dst if m.winner else None,
+                 "client reported success without a connected address; winning family unchecked")
+
+    if m.unexpected_traffic:
+        conflict("unexpected_traffic", None, m.unexpected_traffic,
+                 "traffic other than DNS and TCP to the target port (QUIC/HTTPS upgrade not off, "
+                 "or another connection)")
 
     return {"status": "conflict" if conflicts else "agree", "conflicts": conflicts}

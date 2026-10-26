@@ -16,6 +16,28 @@ def ip_tcp(src: str, dst: str, sport: int, dport: int, flags: int, seq: int = 0,
     return _ip(src, dst, 6, tcp)
 
 
+def ip_udp(src: str, dst: str, sport: int, dport: int, payload: bytes = b"") -> bytes:
+    udp = struct.pack(">HHHH", sport, dport, 8 + len(payload), 0) + payload
+    return _ip(src, dst, 17, udp)
+
+
+def dns_query(qid: int, name: str, qtype: str) -> bytes:
+    from dnslib import DNSRecord
+    rec = DNSRecord.question(name, qtype)
+    rec.header.id = qid
+    return rec.pack()
+
+
+def dns_reply(query: bytes, answer: str | None = None) -> bytes:
+    from dnslib import QTYPE, RR, A, AAAA, DNSRecord
+    q = DNSRecord.parse(query)
+    r = q.reply()
+    if answer:
+        rtype = QTYPE[q.q.qtype]
+        r.add_answer(RR(q.q.qname, q.q.qtype, rdata=(AAAA if rtype == "AAAA" else A)(answer), ttl=0))
+    return r.pack()
+
+
 def ip_icmp(src: str, dst: str, icmp_type: int, code: int = 0) -> bytes:
     v6 = ":" in src
     return _ip(src, dst, 58 if v6 else 1, bytes([icmp_type, code, 0, 0, 0, 0, 0, 0]))

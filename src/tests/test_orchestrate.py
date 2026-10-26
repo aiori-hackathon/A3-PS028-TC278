@@ -21,10 +21,23 @@ VERIFY up: PASS (50 checks)
 """
 
 
-def test_scope_is_curl_c0_to_s6_without_x1():
-    assert o.SUPPORTED_SCENARIOS == ("C0", "S1", "S2", "S3", "S4", "S5", "S6") and o.CLIENT == "curl"
-    with pytest.raises(o.OrchestratorError, match="out of scope"):
+def test_scope_per_client():
+    assert o.SUPPORTED["curl"] == ("C0", "S1", "S2", "S3", "S4", "S5", "S6")
+    assert o.SUPPORTED["chromium"] == ("C0", "S1")
+    with pytest.raises(o.OrchestratorError, match="out of scope for curl"):
         o.load_scenarios(["X1"])
+    with pytest.raises(o.OrchestratorError, match="out of scope for chromium"):
+        o.load_scenarios(["S2"], client="chromium")
+    assert set(o.load_scenarios(["C0", "S1"], client="chromium")) == {"C0", "S1", "_baseline"}
+
+
+def test_cli_refuses_chromium_beyond_s1(capsys):
+    assert o.main(["--client", "chromium", "--scenario", "S4", "--dry-run"]) == 1
+    assert "out of scope for chromium" in capsys.readouterr().err
+
+
+def test_capture_filter_includes_quic_and_https_ports():
+    assert "tcp port 443" in o.CAPTURE_FILTER and "udp port 443" in o.CAPTURE_FILTER
 
 
 def test_pilot_scenarios_targets():
@@ -67,6 +80,7 @@ def test_command_builders():
     assert tcpdump[:4] == ["ip", "netns", "exec", "hl-client"]
     assert ["-i", "any"] == tcpdump[5:7] and "-U" in tcpdump
     assert "--immediate-mode" in tcpdump  # without it a short capture can write nothing
+    assert tcpdump[tcpdump.index("-s") + 1] == "65535" and tcpdump[tcpdump.index("-B") + 1] == "65536"
     assert tcpdump[tcpdump.index("-Z") + 1] == "sr" and tcpdump[-1] == o.CAPTURE_FILTER
 
 
@@ -91,6 +105,7 @@ def test_dns_delay_flags_only_when_nonzero():
 def test_run_id_format():
     t = datetime(2026, 10, 26, 5, 6, 7, tzinfo=timezone.utc)
     assert o.make_run_id(t, "S1", 3) == "20261026T050607Z_S1_curl_r03"
+    assert o.make_run_id(t, "C0", 1, "chromium") == "20261026T050607Z_C0_chromium_r01"
 
 
 def test_parse_verify_rtt():
@@ -151,7 +166,7 @@ def _s1_record(stdout="200|192.0.2.2|0.001807|0.222482|0.242880|2", summary=GOOD
     start = datetime(2026, 10, 26, 4, 21, 56, tzinfo=timezone.utc)
     return o.build_record(
         run_id=o.make_run_id(start, "S1", 1), scenario_id="S1", sc=sc["S1"], repetition=1,
-        run_start=start, curl_version="curl 8.5.0", argv=o.curl_argv(), user="sr",
+        run_start=start, client_version="curl 8.5.0", argv=o.curl_argv(), user="sr",
         environment={"kernel": "test"}, client_start_ns=1792989112200000000,
         client_end_ns=1792989112480000000, capture_start_ns=1792989112100000000,
         capture_end_ns=1792989113000000000, returncode=returncode, stdout=stdout, stderr="",
@@ -197,7 +212,7 @@ def test_build_record_flags_empty_capture_like_first_live_run(tmp_path):
     start = datetime(2026, 10, 26, 6, 29, 19, tzinfo=timezone.utc)
     r = o.build_record(
         run_id=o.make_run_id(start, "S1", 1), scenario_id="S1", sc=sc["S1"], repetition=1,
-        run_start=start, curl_version="curl 8.5.0", argv=o.curl_argv(), user="sr", environment={},
+        run_start=start, client_version="curl 8.5.0", argv=o.curl_argv(), user="sr", environment={},
         client_start_ns=1, client_end_ns=2, capture_start_ns=1, capture_end_ns=3, returncode=0,
         stdout="200|192.0.2.2|0.001587|0.222508|0.243730|1", stderr="",
         pre_rtt=o.parse_verify_rtt(VERIFY_S1_OUTPUT), pre_ok=True, post_ok=True,
@@ -233,3 +248,76 @@ def test_refuses_sudo_e(monkeypatch):
     monkeypatch.setenv("PYTHONPATH", "/opt/ros/jazzy/lib/python3.12/site-packages")
     with pytest.raises(o.OrchestratorError, match="sudo -E"):
         o.check_environment(dry_run=False)
+
+
+# --- Chromium ---------------------------------------------------------------------------------
+
+def test_chromium_dry_run(capsys):
+    assert o.main(["--client", "chromium", "--scenario", "C0", "S1", "--reps", "3", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "Client chromium" in out and "client_chromium.py --version" in out
+    s1 = out[out.index("# S1"):]
+    client = next(line for line in s1.splitlines() if line.strip().startswith("client"))
+    assert "ip netns exec hl-client runuser -u" in client
+    assert "client_chromium.py --url http://www.hl.test/chromium.html --netlog" in client
+    assert "_S1_chromium_r01_netlog.json" in client
+    assert "udp port 443" in s1 and "verify.sh up 20 blackhole" in s1
+
+
+def _chromium_stdout(remote_ip="192.0.2.2", status=200, ok=True, error=None):
+    import json
+    return json.dumps({"ok": ok, "error": error, "http_status": status, "remote_ip": remote_ip,
+                       "remote_port": 80, "browser_version": "156.0.8078.4",
+                       "playwright_version": "1.64.1", "launch_args": ["--disable-quic"],
+                       "headless_mode": "new headless (channel=chromium)", "sandbox": False,
+                       "netlog_path": "/x/n.json", "url": "http://www.hl.test/chromium.html",
+                       "timing_ms": {"connectStart": 1.0}})
+
+
+def _chromium_s1_record(stdout, returncode=0):
+    sc = o.load_scenarios(["S1"], client="chromium")
+    tl = parse(FIX / "s1_manual_curl.pcap")
+    start = datetime(2026, 10, 26, 4, 21, 56, tzinfo=timezone.utc)
+    return o.build_record(
+        run_id=o.make_run_id(start, "S1", 1, "chromium"), scenario_id="S1", sc=sc["S1"], repetition=1,
+        run_start=start, client_version="Chromium 156.0.8078.4",
+        argv=o.CLIENTS["chromium"].argv(Path("/x/n.json")), user="sr", environment={},
+        client_start_ns=1792989112200000000, client_end_ns=1792989112480000000,
+        capture_start_ns=1792989112100000000, capture_end_ns=1792989113000000000,
+        returncode=returncode, stdout=stdout, stderr="", pre_rtt=o.parse_verify_rtt(VERIFY_S1_OUTPUT),
+        pre_ok=True, post_ok=True, pcap_rel="captures/x.pcap", pcap_sha256="c" * 64,
+        log_rel="data/generated/logs/x.log", timeline=tl, capture_stats=o.parse_tcpdump_stats(GOOD_SUMMARY),
+        client="chromium", client_info={"playwright_version": "1.64.1"})
+
+
+def test_chromium_record_from_s1_capture_agrees():
+    """The S1 capture is curl's, but the packet side is client-independent; this checks the log side."""
+    r = _chromium_s1_record(_chromium_stdout())
+    assert validate(r) == []
+    assert r["client"]["name"] == "chromium" and r["client"]["version"] == "Chromium 156.0.8078.4"
+    cfg = r["client"]["config"]
+    assert "--disable-quic" in cfg["launch_args_extra"] and "fresh browser" in cfg["browser_per_run"]
+    assert "HttpsUpgrades" in cfg["https_upgrades"] and "DnsOverHttps" in cfg["secure_dns"]
+    assert r["outcome"]["success"] and r["outcome"]["source"].startswith("client/runner log")
+    assert r["cross_checks"] == {"status": "agree", "conflicts": []}
+
+
+def test_chromium_bracketed_ipv6_mismatch_is_flagged():
+    r = _chromium_s1_record(_chromium_stdout(remote_ip="[2001:db8:28:6::2]"))
+    assert r["outcome"]["client_report"]["remote_ip"] == "2001:db8:28:6::2"
+    assert [c["field"] for c in r["cross_checks"]["conflicts"]] == ["remote_ip"]
+
+
+def test_chromium_success_without_server_addr_is_a_conflict():
+    r = _chromium_s1_record(_chromium_stdout(remote_ip=None))
+    assert validate(r) == []
+    c = r["cross_checks"]["conflicts"]
+    assert [x["field"] for x in c] == ["remote_ip"] and "unchecked" in c[0]["note"]
+
+
+def test_chromium_navigation_error_is_failure():
+    r = _chromium_s1_record(_chromium_stdout(remote_ip=None, status=None, ok=False,
+                                             error="net::ERR_CONNECTION_TIMED_OUT"), returncode=1)
+    assert r["outcome"]["success"] is False and r["outcome"]["error"] == "net::ERR_CONNECTION_TIMED_OUT"
+    # the capture does show an HTTP response, so the disagreement is flagged, not resolved
+    assert [x["field"] for x in r["cross_checks"]["conflicts"]] == ["success"]

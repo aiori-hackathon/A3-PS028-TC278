@@ -93,10 +93,11 @@ def test_s1_record_fields_validate(s1):
 
 
 # --- loopback capture with two harness runs ------------------------------------------
+HARNESS_PORT = 8080  # the Milestone 1 loopback harness served on 127.0.0.1:8080, not the lab's port 80
 
 def test_loopback_without_window_is_ambiguous_and_picks_nothing():
     tl = parse(LOOP)
-    m = metrics.compute(tl)
+    m = metrics.compute(tl, target_port=HARNESS_PORT)
     assert tl.linktype == LINKTYPE_ETHERNET and tl.packet_count == 26
     assert m.ambiguous and m.winner is None and m.tcp_setup_time_ms is None
     obs, met = metrics.record_fields(m, tl)
@@ -108,7 +109,7 @@ def test_loopback_without_window_is_ambiguous_and_picks_nothing():
 @pytest.mark.parametrize("window,setup_ms", [(HARNESS_RUN_1, 0.029), (HARNESS_RUN_2, 0.022)])
 def test_loopback_window_isolates_one_run(window, setup_ms):
     tl = parse(LOOP, window)
-    m = metrics.compute(tl)
+    m = metrics.compute(tl, target_port=HARNESS_PORT)
     assert tl.packet_count == 13 and len(tl.attempts) == 1
     assert m.winning_family == "v4" and m.failed_or_abandoned == 0
     assert m.tcp_setup_time_ms == pytest.approx(setup_ms, abs=0.0005)
@@ -263,6 +264,66 @@ def test_cross_check_success_without_handshake(tmp_path):
 
 
 def test_cross_check_ambiguous_capture_is_a_conflict():
-    m = metrics.compute(parse(LOOP))
+    m = metrics.compute(parse(LOOP), target_port=HARNESS_PORT)
     cc = metrics.cross_check({"success": True, "http_status": 200}, None, m)
     assert cc["status"] == "conflict" and cc["conflicts"][0]["field"] == "winner"
+
+
+# --- Chromium-related rules: target port, QUIC/HTTPS traffic, DNS target name -------------
+
+CTL_C, CTL_S = "198.51.100.1", "198.51.100.53"
+
+
+def _dns(t, qid, name, qtype, rtt_ms, answer=None, sport=50000):
+    q = g.dns_query(qid, name, qtype)
+    return [(t, g.ip_udp(CTL_C, CTL_S, sport, 53, q)),
+            (t + rtt_ms * g.MS, g.ip_udp(CTL_S, CTL_C, 53, sport, g.dns_reply(q, answer)))]
+
+
+def test_https_upgrade_attempt_is_not_an_attempt_but_is_flagged(tmp_path):
+    frames = [(T0, g.ip_tcp(g.C6, g.S6, 41000, 443, g.SYN, seq=1)),
+              (T0 + 20 * g.MS, g.ip_tcp(g.S6, g.C6, 443, 41000, g.RST | g.ACK, ack=2))]
+    frames += g.handshake(T0 + 30 * g.MS, g.C6, g.S6, 41001)
+    tl, m = run(frames, tmp_path)
+    assert len(tl.attempts) == 2                      # the parser still records both (packet facts)
+    assert [r for _, r in m.results] == ["won"]       # only port 80 counts as an attempt
+    assert m.failed_or_abandoned == 0
+    assert m.tcp_setup_time_ms == pytest.approx(20.03, abs=0.0005)  # clock starts at the port-80 SYN
+    assert m.unexpected_traffic == ["TCP attempt to 2001:db8:28:6::2 port 443 (not the target port 80)"]
+    cc = metrics.cross_check({"success": True, "http_status": 200}, {"remote_ip": g.S6}, m)
+    assert [c["field"] for c in cc["conflicts"]] == ["unexpected_traffic"]
+
+
+def test_quic_packet_is_flagged(tmp_path):
+    frames = [(T0, g.ip_udp(g.C6, g.S6, 42000, 443, b"\xc0quic"))] + g.handshake(T0 + g.MS, g.C6, g.S6, 41002)
+    tl, m = run(frames, tmp_path)
+    assert len(tl.other_udp) == 1 and m.winning_family == "v6"
+    assert m.unexpected_traffic == [f"UDP {g.C6}:42000 -> {g.S6}:443 (QUIC port)"]
+
+
+def test_dns_time_counts_only_the_target_name(tmp_path):
+    frames = (_dns(T0, 1, "www.hl.test", "AAAA", 2, g.S6)
+              + _dns(T0 + 1 * g.MS, 2, "www.hl.test", "A", 1, g.S4, sport=50001)
+              + _dns(T0 + 3 * g.MS, 3, "update.example", "A", 40, sport=50002)  # answered after 43 ms
+              + g.handshake(T0 + 50 * g.MS, g.C6, g.S6, 41003))
+    tl, m = run(frames, tmp_path)
+    assert len(tl.dns) == 3
+    assert m.dns_time_ms == pytest.approx(2.0, abs=0.0005)  # first target query to last target answer
+    assert m.dns_note == "only www.hl.test queries counted; 1 queries for other names before the first SYN not counted: update.example"
+    _, met = metrics.record_fields(m, tl)
+    assert met["dns_time_ms"] == {"value": 2.0, "status": "computed", "note": m.dns_note}
+    assert m.unexpected_traffic == []                       # DNS for other names is noted, not a conflict
+
+
+def test_success_without_remote_ip_is_a_conflict(s1):
+    _, m = s1
+    cc = metrics.cross_check({"success": True, "http_status": 200}, {"remote_ip": None}, m)
+    assert [c["field"] for c in cc["conflicts"]] == ["remote_ip"]
+    # no client report at all (e.g. a harness that prints nothing extra): nothing to compare
+    assert metrics.cross_check({"success": True, "http_status": 200}, None, m)["status"] == "agree"
+
+
+def test_bracketed_ipv6_matches_winner(tmp_path):
+    _, m = run(g.handshake(T0, g.C6, g.S6, 41004), tmp_path)
+    for ip in ("[2001:db8:28:6::2]", "2001:DB8:28:6:0:0:0:2"):
+        assert metrics.cross_check({"success": True, "http_status": 200}, {"remote_ip": ip}, m)["status"] == "agree"

@@ -1,12 +1,13 @@
 """HappyLab orchestrator: the per-run measurement loop.
 
-Scope for now: client curl, scenarios C0 and S1-S6 (no Chromium, no X1).
+Scope for now: curl on C0 and S1-S6; Chromium (Playwright) on C0 and S1 only; no X1.
 
 Usage (lab already up via `sudo src/lab/setup.sh`; run with plain sudo, never sudo -E):
     .venv/bin/python src/runner/orchestrate.py --scenario S1 --reps 1 --dry-run   # review, no sudo
     sudo .venv/bin/python src/runner/orchestrate.py --scenario C0 --reps 1
     sudo .venv/bin/python src/runner/orchestrate.py --scenario C0 S1 --reps 3
     sudo .venv/bin/python src/runner/orchestrate.py --scenario S2 S3 S4 S5 S6 --reps 3   # pilot
+    sudo .venv/bin/python src/runner/orchestrate.py --client chromium --scenario C0 S1 --reps 3
 
 Session: start the DNS server and nginx inside hl-server (as the invoking user), then for
 each scenario and repetition run one measurement:
@@ -45,6 +46,8 @@ from analysis import metrics  # noqa: E402
 from analysis.parse_pcap import parse  # noqa: E402
 from analysis.validate_record import SCHEMA_VERSION, validate  # noqa: E402
 from runner.child_env import STRIPPED_VARS, child_env_with_removed, describe  # noqa: E402
+from runner.clients import (CLIENTS, CURL_FORMAT, CURL_URL, curl_argv,  # noqa: E402,F401
+                            parse_curl_report)
 
 REPO = Path(__file__).resolve().parents[2]
 LAB = REPO / "src" / "lab"
@@ -53,12 +56,12 @@ NGINX_CONF = REPO / "src" / "config" / "nginx.conf"
 DNS_SERVER = REPO / "src" / "dns" / "hl_dns.py"
 VENV_PYTHON = REPO / ".venv" / "bin" / "python"
 
-SUPPORTED_SCENARIOS = ("C0", "S1", "S2", "S3", "S4", "S5", "S6")
-CLIENT = "curl"
-URL = "http://www.hl.test/"
-CAPTURE_FILTER = "tcp port 80 or udp port 53 or icmp or icmp6 or arp"
-TAIL_WAIT_S = 0.5  # keep capturing briefly after curl exits, for the closing FIN/ACKs
-CURL_FORMAT = "%{http_code}|%{remote_ip}|%{time_namelookup}|%{time_connect}|%{time_total}|%{num_connects}"
+SUPPORTED = {name: c.scenarios for name, c in CLIENTS.items()}
+ALL_SUPPORTED = tuple(dict.fromkeys(s for scns in SUPPORTED.values() for s in scns))
+URL = CURL_URL
+# Port 443 (TCP and UDP) is captured so an HTTPS upgrade or QUIC attempt is seen, not missed.
+CAPTURE_FILTER = "tcp port 80 or tcp port 443 or udp port 443 or udp port 53 or icmp or icmp6 or arp"
+TAIL_WAIT_S = 0.5  # keep capturing briefly after the client exits, for the closing FIN/ACKs
 
 
 class OrchestratorError(Exception):
@@ -77,12 +80,14 @@ def load_lab_env(path: Path = LAB / "lab.env") -> dict[str, str]:
     return env
 
 
-def load_scenarios(ids: list[str], path: Path = SCENARIOS_FILE) -> dict[str, dict]:
+def load_scenarios(ids: list[str], path: Path = SCENARIOS_FILE, client: str = "curl") -> dict[str, dict]:
     cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
     out = {}
+    supported = SUPPORTED[client]
     for sid in ids:
-        if sid not in SUPPORTED_SCENARIOS:
-            raise OrchestratorError(f"scenario {sid} is out of scope for now (supported: {', '.join(SUPPORTED_SCENARIOS)})")
+        if sid not in supported:
+            raise OrchestratorError(f"scenario {sid} is out of scope for {client} for now "
+                                    f"(supported: {', '.join(supported)})")
         if sid not in cfg["scenarios"]:
             raise OrchestratorError(f"scenario {sid} missing from {path}")
         out[sid] = cfg["scenarios"][sid]
@@ -109,13 +114,11 @@ def cmd_tcpdump(ns: str, pcap: Path, user: str) -> list[str]:
     # --immediate-mode: hand each packet to tcpdump as it arrives. Without it, Linux delivers
     # packets in blocks (up to ~1 s), and a capture stopped sooner than that writes nothing:
     # the first orchestrated runs logged "0 packets captured, 15 packets received by filter".
-    return ["ip", "netns", "exec", ns, "tcpdump", "-i", "any", "--immediate-mode", "-n", "-s", "0", "-U",
-            "-Z", user, "-w", str(pcap), CAPTURE_FILTER]
-
-
-def curl_argv() -> list[str]:
-    return ["curl", "-q", "-sS", "--noproxy", "*", "--max-time", "10",
-            "-o", "/dev/null", "-w", CURL_FORMAT, URL]
+    # -s 65535 -B 65536: in immediate mode each ring slot is sized for the snapshot length, so with
+    # -s 0 (262144) and the default 2 MiB buffer only a handful of packets fit; Chromium's startup
+    # DNS burst overflowed it ("4 packets dropped by kernel"). 64 MiB / 64 KiB slots = 1024 packets.
+    return ["ip", "netns", "exec", ns, "tcpdump", "-i", "any", "--immediate-mode", "-n", "-s", "65535",
+            "-B", "65536", "-U", "-Z", user, "-w", str(pcap), CAPTURE_FILTER]
 
 
 def cmd_dns(lab: dict, user: str, delays: dict[str, int]) -> list[str]:
@@ -131,8 +134,8 @@ def cmd_nginx(lab: dict, user: str, prefix: Path) -> list[str]:
         "nginx", "-p", str(prefix), "-c", str(NGINX_CONF), "-e", str(prefix / "logs" / "error.log")])
 
 
-def make_run_id(start: datetime, scenario: str, repetition: int) -> str:
-    return f"{start:%Y%m%dT%H%M%SZ}_{scenario}_{CLIENT}_r{repetition:02d}"
+def make_run_id(start: datetime, scenario: str, repetition: int, client: str = "curl") -> str:
+    return f"{start:%Y%m%dT%H%M%SZ}_{scenario}_{client}_r{repetition:02d}"
 
 
 def verify_targets(sc: dict) -> tuple:
@@ -168,26 +171,6 @@ def measured_rtt_field(rtt: dict | None, target) -> dict:
                 "note": f"median of {rtt.get('sent')} pings, loss {rtt.get('loss_pct')}% (verify.sh {rtt['verdict']})"}
     except (KeyError, ValueError):
         return {"value": None, "status": "not_observed", "note": f"no replies: {rtt}"}
-
-
-def parse_curl_report(stdout: str) -> dict:
-    """curl -w output (client-reported, not packet-level)."""
-    parts = stdout.strip().split("|")
-    keys = ["http_code", "remote_ip", "time_namelookup_s", "time_connect_s", "time_total_s", "num_connects"]
-    report = dict(zip(keys, parts))
-    code = report.get("http_code", "")
-    report["http_code"] = int(code) if code.isdigit() and int(code) > 0 else None
-    for k in ("time_namelookup_s", "time_connect_s", "time_total_s"):
-        try:
-            report[k] = float(report[k])
-        except (KeyError, ValueError):
-            report[k] = None
-    try:
-        report["num_connects"] = int(report["num_connects"])
-    except (KeyError, ValueError):
-        report["num_connects"] = None
-    report["remote_ip"] = report.get("remote_ip") or None
-    return report
 
 
 def parse_ifindex_map(ip_link_output: str) -> dict[str, str]:
@@ -227,16 +210,14 @@ def capture_problem(stats: dict[str, int]) -> str | None:
 # --- record ------------------------------------------------------------------------------
 
 def build_record(*, run_id: str, scenario_id: str, sc: dict, repetition: int, run_start: datetime,
-                 curl_version: str, argv: list[str], user: str, environment: dict,
+                 client_version: str, argv: list[str], user: str, environment: dict,
                  client_start_ns: int, client_end_ns: int, capture_start_ns: int, capture_end_ns: int,
                  returncode: int, stdout: str, stderr: str, pre_rtt: dict, pre_ok: bool, post_ok: bool,
-                 pcap_rel: str, pcap_sha256: str, log_rel: str, timeline, capture_stats: dict) -> dict:
-    report = parse_curl_report(stdout)
-    http_status = report["http_code"]
-    success = returncode == 0 and http_status is not None
-    error = stderr.strip() or (None if success else f"curl exit code {returncode}")
-    outcome = {"success": success, "exit_code": returncode, "http_status": http_status,
-               "error": error, "source": "client/runner log", "client_report": report}
+                 pcap_rel: str, pcap_sha256: str, log_rel: str, timeline, capture_stats: dict,
+                 client: str = "curl", client_info: dict | None = None) -> dict:
+    spec = CLIENTS[client]
+    outcome = spec.outcome(returncode, stdout, stderr)
+    report = outcome["client_report"]
 
     m = metrics.compute(timeline)
     obs, met = metrics.record_fields(m, timeline)
@@ -260,10 +241,8 @@ def build_record(*, run_id: str, scenario_id: str, sc: dict, repetition: int, ru
                                 "v6": measured_rtt_field(pre_rtt.get("v6"), v6_t)},
         },
         "client": {
-            "name": CLIENT, "version": curl_version, "argv": argv,
-            "config": {"happy_eyeballs_timeout_ms": "default (not set)", "curlrc": "ignored (-q)",
-                       "proxy": "disabled (--noproxy '*')", "url": URL,
-                       "launcher": shlex.join(in_ns_as_user("hl-client", user, []))},
+            "name": spec.name, "version": client_version, "argv": argv,
+            "config": spec.config(in_ns_as_user("hl-client", user, []), client_info or {}),
         },
         "environment": environment,
         "timestamps": {
@@ -461,20 +440,22 @@ def restore_baseline(ctx: Ctx, base_delay: int, log: RunLog | None) -> None:
         sh(ctx, cmd_netem(fam, base_delay, 0), log)
 
 
-def run_one(ctx: Ctx, sid: str, sc: dict, rep: int, base: dict, curl_version: str,
-            environment: dict, dirs: dict[str, Path]) -> dict:
+def run_one(ctx: Ctx, client: str, sid: str, sc: dict, rep: int, base: dict, client_version: str,
+            client_info: dict, environment: dict, dirs: dict[str, Path]) -> dict:
+    spec = CLIENTS[client]
     run_start = datetime.now(timezone.utc)
-    run_id = make_run_id(run_start, sid, rep)
+    run_id = make_run_id(run_start, sid, rep, client)
     record_path = dirs["runs"] / f"{run_id}.json"
     while record_path.exists():  # two runs in the same second: wait for a fresh ID
         time.sleep(1)
         run_start = datetime.now(timezone.utc)
-        run_id = make_run_id(run_start, sid, rep)
+        run_id = make_run_id(run_start, sid, rep, client)
         record_path = dirs["runs"] / f"{run_id}.json"
     pcap = dirs["captures"] / f"{run_id}.pcap"
     log_path = dirs["logs"] / f"{run_id}.log"
+    netlog = spec.netlog_path(dirs["logs"], run_id)
     log = RunLog(log_path)
-    ctx.created += [log_path, pcap]
+    ctx.created += [log_path, pcap] + ([netlog] if netlog else [])
     log.write(f"run_id: {run_id}\nscenario: {sid} {json.dumps(sc)}\nsession: {ctx.session_id}")
     v4_t, v6_t = verify_targets(sc)
     capture = None
@@ -495,11 +476,11 @@ def run_one(ctx: Ctx, sid: str, sc: dict, rep: int, base: dict, curl_version: st
         capture_start_ns = time.time_ns()
 
         # 4. client
-        argv = curl_argv()
+        argv = spec.argv(netlog)
         full = in_ns_as_user(ctx.lab["NS_CLIENT"], ctx.user, argv)
         log.write(f"+ {shlex.join(full)}")
         client_start_ns = time.time_ns()
-        proc = subprocess.run(full, capture_output=True, text=True, env=ctx.env, timeout=30)
+        proc = subprocess.run(full, capture_output=True, text=True, env=ctx.env, timeout=spec.timeout_s)
         client_end_ns = time.time_ns()
         log.write(f"    exit {proc.returncode} stdout {proc.stdout!r} stderr {proc.stderr!r}")
         log.write(f"    client_start_epoch_ns {client_start_ns} client_end_epoch_ns {client_end_ns}")
@@ -525,8 +506,9 @@ def run_one(ctx: Ctx, sid: str, sc: dict, rep: int, base: dict, curl_version: st
             except Exception as exc:  # noqa: BLE001
                 log.write(f"RESTORE FAILED: {exc}")
         log.close()
-        for p in (log_path, pcap):
-            ctx.chown(p)
+        for p in (log_path, pcap, netlog):
+            if p:
+                ctx.chown(p)
         raise
 
     # 8. parse the capture for this run's window only, write the record
@@ -535,13 +517,17 @@ def run_one(ctx: Ctx, sid: str, sc: dict, rep: int, base: dict, curl_version: st
     env = dict(environment, capture_interfaces=ifmap)
     record = build_record(
         run_id=run_id, scenario_id=sid, sc=sc, repetition=rep, run_start=run_start,
-        curl_version=curl_version, argv=argv, user=ctx.user, environment=env,
+        client_version=client_version, argv=argv, user=ctx.user, environment=env,
+        client=client, client_info=client_info,
         client_start_ns=client_start_ns, client_end_ns=client_end_ns,
         capture_start_ns=capture_start_ns, capture_end_ns=capture_end_ns,
         returncode=proc.returncode, stdout=proc.stdout, stderr=proc.stderr,
         pre_rtt=pre_rtt, pre_ok=pre_ok, post_ok=post_ok,
         pcap_rel=str(pcap.relative_to(REPO)), pcap_sha256=sha, log_rel=str(log_path.relative_to(REPO)),
         timeline=timeline, capture_stats=parse_tcpdump_stats(tcpdump_err))
+    if netlog is not None:
+        record["outcome"]["client_report"]["netlog_path"] = (
+            str(netlog.relative_to(REPO)) if netlog.exists() else None)
     problems = validate(record)
     if problems:
         log.write("RECORD INVALID:\n  " + "\n  ".join(problems))
@@ -552,8 +538,9 @@ def run_one(ctx: Ctx, sid: str, sc: dict, rep: int, base: dict, curl_version: st
         f.write("\n")
     log.write(f"record: {record_path.relative_to(REPO)}  cross_checks: {record['cross_checks']['status']}")
     log.close()
-    for p in (record_path, log_path, pcap):
-        ctx.chown(p)
+    for p in (record_path, log_path, pcap, netlog):
+        if p:
+            ctx.chown(p)
     if not post_ok:
         raise OrchestratorError(f"post-restore verify failed after {run_id}; lab may not be at baseline")
     if any(c["field"] == "capture" for c in record["cross_checks"]["conflicts"]):
@@ -573,15 +560,18 @@ def summary_line(r: dict, wall_s: float | None = None) -> str:
             + (f"  wall_s={wall_s:.2f}" if wall_s is not None else ""))
 
 
-def dry_run(scenarios: dict, reps: int, user: str, lab: dict) -> None:
+def dry_run(scenarios: dict, reps: int, user: str, lab: dict, client: str = "curl") -> None:
+    spec = CLIENTS[client]
     base = scenarios["_baseline"]
-    print(f"DRY RUN (nothing is executed). Session would run as root and drop to '{user}' for clients and services.")
+    print(f"DRY RUN (nothing is executed). Client {client}. "
+          f"Session would run as root and drop to '{user}' for clients and services.")
+    print(f"session start: {shlex.join(in_ns_as_user(lab['NS_CLIENT'], user, spec.version_argv()))}")
     print(f"session start: {shlex.join(cmd_dns(lab, user, {}))}")
     print(f"session start: {shlex.join(cmd_nginx(lab, user, REPO / 'data/generated/nginx'))}")
     for sid, sc in scenarios.items():
         if sid.startswith("_"):
             continue
-        rid = make_run_id(datetime.now(timezone.utc), sid, 1)
+        rid = make_run_id(datetime.now(timezone.utc), sid, 1, client)
         pcap = REPO / "captures" / f"{rid}.pcap"
         print(f"\n# {sid} ({sc['label']}), repetition 1 of {reps}, run_id like {rid}")
         steps = [
@@ -591,7 +581,8 @@ def dry_run(scenarios: dict, reps: int, user: str, lab: dict) -> None:
             ("verify", cmd_verify(*verify_targets(sc))),
             ("ifmap", ["ip", "-n", lab["NS_CLIENT"], "-o", "link", "show"]),
             ("capture", cmd_tcpdump(lab["NS_CLIENT"], pcap, user)),
-            ("client", in_ns_as_user(lab["NS_CLIENT"], user, curl_argv())),
+            ("client", in_ns_as_user(lab["NS_CLIENT"], user,
+                                     spec.argv(spec.netlog_path(REPO / "data/generated/logs", rid)))),
             ("stop", ["kill", "-INT", "<tcpdump pid>"]),
             ("restore", cmd_netem("v4", base["delay_ms_each_way"], 0)),
             ("restore", cmd_netem("v6", base["delay_ms_each_way"], 0)),
@@ -605,7 +596,8 @@ def dry_run(scenarios: dict, reps: int, user: str, lab: dict) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--scenario", nargs="+", required=True, choices=SUPPORTED_SCENARIOS)
+    p.add_argument("--client", choices=sorted(CLIENTS), default="curl")
+    p.add_argument("--scenario", nargs="+", required=True, choices=ALL_SUPPORTED)
     p.add_argument("--reps", type=int, default=1)
     p.add_argument("--dry-run", action="store_true", help="print the commands, execute nothing (no sudo needed)")
     args = p.parse_args(argv)
@@ -615,17 +607,17 @@ def main(argv: list[str] | None = None) -> int:
     try:
         user, uid, gid = check_environment(args.dry_run)
         lab = load_lab_env()
-        scenarios = load_scenarios(args.scenario)
+        scenarios = load_scenarios(args.scenario, client=args.client)
         if args.dry_run:
-            dry_run(scenarios, args.reps, user, lab)
+            dry_run(scenarios, args.reps, user, lab, args.client)
             return 0
-        return run_session(args.scenario, args.reps, scenarios, lab, user, uid, gid)
+        return run_session(args.scenario, args.reps, scenarios, lab, user, uid, gid, args.client)
     except OrchestratorError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
 
-def run_session(ids, reps, scenarios, lab, user, uid, gid) -> int:
+def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl") -> int:
     if not Path(f"/run/netns/{lab['NS_CLIENT']}").exists():
         raise OrchestratorError("lab is not up: run sudo src/lab/setup.sh first")
     env, removed = child_env_with_removed()
@@ -646,8 +638,13 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid) -> int:
     walls: list[float] = []  # whole-run wall time incl. DNS restart, verifies and restore
     status = 0
     try:
-        curl_version = sh(ctx, in_ns_as_user(lab["NS_CLIENT"], user, ["curl", "--version"]), session_log
-                          ).stdout.splitlines()[0].strip()
+        spec = CLIENTS[client]
+        out = sh(ctx, in_ns_as_user(lab["NS_CLIENT"], user, spec.version_argv()), session_log,
+                 timeout=spec.timeout_s).stdout
+        try:
+            client_version, client_info = spec.parse_version(out)
+        except (ValueError, IndexError) as exc:
+            raise OrchestratorError(f"could not read {client} version: {exc}") from exc
         nginx_version = sh(ctx, ["nginx", "-v"], session_log).stderr.strip()
         environment = {
             "kernel": platform.release(), "python": platform.python_version(), "git_commit": git_commit(),
@@ -665,7 +662,8 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid) -> int:
                 t0 = time.monotonic()
                 services.ensure_dns(sc["dns"]["delay_ms"], session_log)
                 services.ensure_nginx(session_log)
-                record = run_one(ctx, sid, sc, rep, base, curl_version, environment, dirs)
+                record = run_one(ctx, client, sid, sc, rep, base, client_version, client_info,
+                                 environment, dirs)
                 walls.append(time.monotonic() - t0)
                 records.append(record)
                 line = summary_line(record, walls[-1])

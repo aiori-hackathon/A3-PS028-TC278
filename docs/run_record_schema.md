@@ -91,7 +91,7 @@ So a null always says *why* it is null, and "not observed" is never confused wit
 | `http_status` | integer or null | |
 | `error` | string or null | Client error text if any. |
 | `source` | string | Where the outcome came from, e.g. `"client/runner log"`. |
-| `client_report` | object, optional | What the client printed about itself (curl `-w`: `http_code`, `remote_ip`, `time_namelookup_s`, `time_connect_s`, `time_total_s`, `num_connects`). Client-reported, not packet-level. |
+| `client_report` | object, optional | What the client printed about itself. Client-reported, not packet-level. curl (`-w`): `http_code`, `remote_ip`, `time_namelookup_s`, `time_connect_s`, `time_total_s`, `num_connects`. Chromium (`src/runner/client_chromium.py`, Playwright): `ok`, `error`, `http_status`, `remote_ip`, `remote_port`, `timing_ms` (Navigation Timing), `browser_version`, `playwright_version`, `launch_args`, `headless_mode`, `sandbox`, `url`, `netlog_path` (the run's NetLog, relative to the repo root). |
 
 ### `evidence`
 
@@ -128,14 +128,16 @@ Fixed definitions (from CLAUDE.md; do not redefine):
 
 These are project rules applied to packet-level facts from `src/analysis/parse_pcap.py`:
 
-- An **attempt** is one client SYN (plus its retransmissions on the same 4-tuple).
+- An **attempt** is one client SYN (plus its retransmissions on the same 4-tuple) **to the target
+  port (80)**. SYNs to any other port are not attempts; they are reported as unexpected traffic.
 - The **winning attempt** is the completed handshake on which the client sent data.
   If more than one connection carried data, the run is **ambiguous**: nothing is picked,
   winner-dependent fields stay `not_yet_computed` with a note, and `cross_checks` reports a conflict.
 - Every other attempt is `failed` if the server answered with RST, otherwise `abandoned` when a
   winner exists, and `no_reply` when no attempt succeeded.
 - **DNS time** (project definition, not one of the three fixed metrics): first DNS query to the
-  last DNS answer, among queries sent before the first SYN.
+  last DNS answer, among queries **for the target name (`www.hl.test`)** sent before the first SYN.
+  Queries for other names are listed in the notes and not counted.
 - Each run is parsed within its own time window (client start to capture end), so stray packets
   from before or after the run are ignored.
 
@@ -149,6 +151,32 @@ Neither side is overwritten and nothing is chosen silently.
 | `status` | string | `agree`, `conflict`, `not_yet_computed` or `not_applicable` |
 | `conflicts` | list | Empty unless `status` is `conflict`. Each item: `field`, `log_value`, `pcap_value`, `note`. |
 
-Checked so far: success versus a completed connection with an HTTP response; HTTP status;
-the client's reported remote address versus the winning handshake's destination; ambiguous captures.
+Checks, for every client:
+
+| `field` | Conflict when |
+|---|---|
+| `winner` | more than one port-80 connection carried client data (ambiguous; nothing is picked) |
+| `success` | the client's success/failure disagrees with whether the capture has a completed port-80 connection with an HTTP response |
+| `http_status` | the client's HTTP status differs from the one in the captured response |
+| `remote_ip` | the client's reported address differs from the winning handshake's destination (compared as canonical addresses), **or** the client reported success without any address, so the winning family could not be checked |
+| `unexpected_traffic` | the capture has any TCP or UDP packet on port 443 (QUIC, HTTPS upgrade) or a TCP attempt to a port other than 80 |
+| `capture` | tcpdump reports dropped packets or did not write every packet it matched |
+
 A run with `status: conflict` needs a person to look at it before it is used in any summary.
+
+#### Winning family for Chromium runs
+
+curl prints the address it connected to (`%{remote_ip}`). Chromium does not print anything, so
+the log side is defined explicitly for Chromium:
+
+- **Log side (client-reported):** `client_report.remote_ip` is Playwright's
+  `Response.server_addr()["ipAddress"]` for the **main document response**, which is the
+  DevTools `Network.responseReceived` `remoteIPAddress`. It is normalised to the canonical form
+  (DevTools may wrap IPv6 in `[...]`). Its family is `v6` if it parses as IPv6, otherwise `v4`.
+  This is what the browser reports, not what was seen on the wire.
+- **Packet side:** the same rule as curl: the completed handshake to port 80 that carried client data.
+- They are compared by the `remote_ip` check above. If the browser reports success but no address,
+  that is a conflict, not a silent pass.
+- The Chromium page (`/chromium.html`) carries a `data:` icon so the browser does not open a second
+  connection for `/favicon.ico`; with keep-alive off, that would make every run ambiguous.
+- The run's NetLog is kept as raw client evidence but is **not** used in cross_checks yet.
