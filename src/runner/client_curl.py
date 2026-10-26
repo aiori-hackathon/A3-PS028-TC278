@@ -164,6 +164,7 @@ def build_record(*, run_id: str, repetition: int, run_start: datetime, argv: lis
             "scenario_penalty_ms": wrapped("not_applicable",
                                            "per-scenario aggregate; see scenario summary"),
         },
+        "cross_checks": {"status": "not_yet_computed", "conflicts": []},
     }
 
 

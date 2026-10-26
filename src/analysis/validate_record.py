@@ -15,7 +15,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "0.1"
+SCHEMA_VERSION = "0.2"
+# 0.1 records (Milestone 1 harness runs) stay valid; 0.2 adds the required cross_checks block.
+SUPPORTED_VERSIONS = {"0.1", "0.2"}
+CROSS_CHECK_STATUSES = {"agree", "conflict", "not_yet_computed", "not_applicable"}
 
 STATUSES = {"computed", "not_yet_computed", "not_observed", "not_applicable"}
 SCENARIO_IDS = {"C0", "S1", "S2", "S3", "S4", "S5", "S6", "X1", "harness-test"}
@@ -99,21 +102,46 @@ def _check_attempt(errors: list[str], path: str, a: Any) -> None:
         errors.append(f"{path}.result: must be one of {sorted(ATTEMPT_RESULTS)}")
 
 
+def _check_cross_checks(errors: list[str], cc: Any) -> None:
+    """Log-versus-pcap comparison. Conflicts keep both values; nothing is chosen silently."""
+    if not _require_keys(errors, "cross_checks", cc, {"status", "conflicts"}):
+        return
+    status, conflicts = cc.get("status"), cc.get("conflicts")
+    if status not in CROSS_CHECK_STATUSES:
+        errors.append(f"cross_checks.status: must be one of {sorted(CROSS_CHECK_STATUSES)}")
+    if not isinstance(conflicts, list):
+        errors.append("cross_checks.conflicts: must be a list")
+        return
+    if status == "conflict" and not conflicts:
+        errors.append("cross_checks: status 'conflict' but no conflicts listed")
+    if status != "conflict" and conflicts:
+        errors.append(f"cross_checks: status {status!r} must have no conflicts")
+    for i, c in enumerate(conflicts):
+        p = f"cross_checks.conflicts[{i}]"
+        if _require_keys(errors, p, c, {"field", "log_value", "pcap_value", "note"}):
+            for k in ("field", "note"):
+                if not isinstance(c.get(k), str):
+                    errors.append(f"{p}.{k}: must be a string")
+
+
 def validate(record: Any) -> list[str]:
     """Return a list of human-readable problems; an empty list means the record is valid."""
     errors: list[str] = []
     if not isinstance(record, dict):
         return ["record: must be a JSON object"]
 
-    missing = TOP_LEVEL_KEYS - record.keys()
+    version = record.get("schema_version")
+    if version not in SUPPORTED_VERSIONS:
+        errors.append(f"schema_version: must be one of {sorted(SUPPORTED_VERSIONS)}")
+    top_keys = TOP_LEVEL_KEYS | ({"cross_checks"} if version != "0.1" else set())
+    missing = top_keys - record.keys()
     if missing:
         errors.append(f"record: missing {sorted(missing)}")
-    extra = record.keys() - TOP_LEVEL_KEYS
+    extra = record.keys() - top_keys
     if extra:
         errors.append(f"record: unexpected keys {sorted(extra)}")
-
-    if record.get("schema_version") != SCHEMA_VERSION:
-        errors.append(f"schema_version: must be {SCHEMA_VERSION!r}")
+    if "cross_checks" in top_keys and "cross_checks" in record:
+        _check_cross_checks(errors, record["cross_checks"])
 
     # scenario
     sc = record.get("scenario")
