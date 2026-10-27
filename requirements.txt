@@ -1,6 +1,8 @@
 # HappyLab Python dependencies (installed in .venv). Pinned to the versions the pilots ran with.
 # Chromium itself: .venv/bin/python -m playwright install chromium   (build 1248, Chromium 156.0.8078.4)
 dnslib==0.9.26
+narwhals==2.28.0
 playwright==1.64.1
+plotly==7.1.0
 pytest==9.1.1
 PyYAML==6.0.3
