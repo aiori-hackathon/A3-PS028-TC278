@@ -599,10 +599,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--client", choices=sorted(CLIENTS), default="curl")
     p.add_argument("--scenario", nargs="+", required=True, choices=ALL_SUPPORTED)
     p.add_argument("--reps", type=int, default=1)
+    p.add_argument("--first-rep", type=int, default=1,
+                   help="number of the first repetition (to complete a batch that stopped early)")
     p.add_argument("--dry-run", action="store_true", help="print the commands, execute nothing (no sudo needed)")
     args = p.parse_args(argv)
     if args.reps < 1:
         p.error("--reps must be >= 1")
+    if args.first_rep < 1:
+        p.error("--first-rep must be >= 1")
 
     try:
         user, uid, gid = check_environment(args.dry_run)
@@ -611,13 +615,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.dry_run:
             dry_run(scenarios, args.reps, user, lab, args.client)
             return 0
-        return run_session(args.scenario, args.reps, scenarios, lab, user, uid, gid, args.client)
+        return run_session(args.scenario, args.reps, scenarios, lab, user, uid, gid, args.client,
+                           first_rep=args.first_rep)
     except OrchestratorError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
 
-def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl") -> int:
+def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl", first_rep: int = 1) -> int:
     if not Path(f"/run/netns/{lab['NS_CLIENT']}").exists():
         raise OrchestratorError("lab is not up: run sudo src/lab/setup.sh first")
     env, removed = child_env_with_removed()
@@ -658,7 +663,7 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl")
         services.ensure_nginx(session_log)
         for sid in ids:
             sc = scenarios[sid]
-            for rep in range(1, reps + 1):
+            for rep in range(first_rep, first_rep + reps):
                 t0 = time.monotonic()
                 services.ensure_dns(sc["dns"]["delay_ms"], session_log)
                 services.ensure_nginx(session_log)

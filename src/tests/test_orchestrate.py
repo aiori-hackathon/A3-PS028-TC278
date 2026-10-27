@@ -321,3 +321,8 @@ def test_chromium_navigation_error_is_failure():
     assert r["outcome"]["success"] is False and r["outcome"]["error"] == "net::ERR_CONNECTION_TIMED_OUT"
     # the capture does show an HTTP response, so the disagreement is flagged, not resolved
     assert [x["field"] for x in r["cross_checks"]["conflicts"]] == ["success"]
+
+
+def test_first_rep_must_be_positive():
+    with pytest.raises(SystemExit):
+        o.main(["--scenario", "C0", "--first-rep", "0", "--dry-run"])
