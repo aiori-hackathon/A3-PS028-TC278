@@ -6,6 +6,8 @@
 Only the text between the HAPPYLAB DATA START/END markers is replaced. Inside it this writes:
   D[client][scenario]   = {med, win, ifd, runs:[used, target], src}
   WIN[client][scenario] = [IPv6 wins, IPv4 wins, no winner]
+  IFDV[client][scenario]= [[run_id, inter-family delay ms], ...] for every used run that observed one;
+                          [] when none did or the cell has no runs. Drawn as-is by the inter-family chart.
   RUNS                  = five representative runs for the Evidence page, each with the stored
                           record excerpt (rec, verbatim JSON text) and its check block (chk)
   CAPS                  = capture inventory: those five pcaps plus the two committed fixtures
@@ -266,7 +268,14 @@ def js(x) -> str:
     return json.dumps(x, ensure_ascii=False)
 
 
-def render_block(d: dict, win: dict, runs: list[dict], caps: list[list[str]], header: str) -> str:
+def ifd_values(runs: list[Run]) -> list[list]:
+    """[[run_id, value], ...] for runs where the inter-family delay was observed, in run order."""
+    return [[r.run_id, r3(r.inter_family_ms)] for r in sorted(runs, key=lambda r: r.repetition)
+            if r.inter_family_ms is not None]
+
+
+def render_block(d: dict, win: dict, runs: list[dict], caps: list[list[str]], header: str,
+                 ifdv: dict | None = None) -> str:
     scen = list(next(iter(d.values())).keys())
     out = [f"/* {header} */",
            "/* med = median setup ms · win = winning family · ifd = inter-family delay median (null = not observed)",
@@ -284,6 +293,15 @@ def render_block(d: dict, win: dict, runs: list[dict], caps: list[list[str]], he
     for i, c in enumerate(CLIENT_ORDER):
         cells = ",".join(f"{s}:[{w[0]},{w[1]},{w[2]}]" for s in scen for w in [win[c][s]])
         out.append(f"  {c}:{{{cells}}}" + ("," if i < len(CLIENT_ORDER) - 1 else ""))
+    out.append("};")
+    out.append("var IFDV={ /* observed inter-family delays per run: [run_id, ms]; [] = none observed or no runs */")
+    for i, c in enumerate(CLIENT_ORDER):
+        out.append(f"  {c}:{{")
+        for j, s in enumerate(scen):
+            vals = (ifdv or {}).get(c, {}).get(s, [])
+            out.append(f"    {s}:[" + ",".join(f"[{js(rid)},{v}]" for rid, v in vals) + "]"
+                       + ("," if j < len(scen) - 1 else ""))
+        out.append("  }" + ("," if i < len(CLIENT_ORDER) - 1 else ""))
     out.append("};")
     out.append("var RUNS=[")
     keys = ("id", "sc", "cl", "src", "setup", "ifd", "win", "ab", "dns", "out", "rec", "chk")
@@ -313,6 +331,7 @@ def export(page_text: str, sessions: list[tuple[str, str, str]], runs_dir: Path 
     ok = True
     d: dict = {c: {} for c in CLIENT_ORDER}
     win: dict = {c: {} for c in CLIENT_ORDER}
+    ifdv: dict = {c: {} for c in CLIENT_ORDER}
     for c in CLIENT_ORDER:
         for s in old_d[c]:
             cell = cells.get((c, s), Cell())
@@ -322,6 +341,7 @@ def export(page_text: str, sessions: list[tuple[str, str, str]], runs_dir: Path 
             d[c][s], win[c][s], cell_ok = build_cell([run for run, _ in cell.used], target, old_d[c][s],
                                                      old_w[c][s], f"{c}/{s}", warnings.append)
             ok &= cell_ok
+            ifdv[c][s] = ifd_values([run for run, _ in cell.used])
     for (c, s) in cells:
         if s not in old_d[c]:
             raise ExportError(f"dataset has {c}/{s} but the page has no such scenario")
@@ -342,7 +362,7 @@ def export(page_text: str, sessions: list[tuple[str, str, str]], runs_dir: Path 
     used = sum(len(cell.used) for cell in cells.values())
     header = (f"{used} runs from the {len(sessions)} sessions in docs/dataset.md; "
               f"runs dated {', '.join(dates) or '-'}; code {', '.join(codes) or '-'}")
-    return Export(render_block(d, win, runs, caps, header), warnings, ok)
+    return Export(render_block(d, win, runs, caps, header, ifdv), warnings, ok)
 
 
 def main(argv: list[str] | None = None) -> int:

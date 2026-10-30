@@ -190,3 +190,37 @@ def test_runs_entries_carry_the_stored_record_verbatim(tmp_path, monkeypatch):
     assert rec["metrics"]["inter_family_attempt_delay_ms"] == {"value": 200.0, "status": "computed"}
     assert rec["cross_checks"]["status"] == "agree"
     assert '"first_syn_ns": 1000000000' in rec_text    # integers kept as text, no float rounding in JS
+
+
+# --- per-run inter-family values (IFDV) ---------------------------------------------------------
+
+def _ifdv(block: str) -> dict:
+    """Parse IFDV back out of the generated block (it is valid JSON once keys are quoted)."""
+    import re
+    body = block[block.index("var IFDV="):]
+    body = body[body.index("{"):body.index("\n};") + 2]
+    body = re.sub(r"/\*.*?\*/", "", body)
+    return json.loads(re.sub(r"(\w+):(?=[\[{])", r'"\1":', body))
+
+
+def test_ifdv_lists_every_observed_run_with_its_id_and_value(tmp_path, monkeypatch):
+    res = run_export(tmp_path, records(tmp_path), monkeypatch)
+    v = _ifdv(res.block)
+    assert len(v["curl"]["S1"]) == 20
+    ids = [rid for rid, _ in v["curl"]["S1"]]
+    assert all("_S1_curl_r" in rid for rid in ids) and len(set(ids)) == 20
+    assert {val for _, val in v["curl"]["S1"]} == {200.0}
+    assert {val for _, val in v["chromium"]["S1"]} == {301.0}      # second family, not the backup v6
+    assert v["curl"]["C0"] == []                                    # not observed: empty, never zeros
+
+
+def test_ifdv_leaves_out_excluded_runs(tmp_path, monkeypatch):
+    res = run_export(tmp_path, records(tmp_path, conflict_reps=(7,)), monkeypatch)
+    ids = [rid for rid, _ in _ifdv(res.block)["curl"]["S1"]]
+    assert len(ids) == 19 and not any(rid.endswith("_r07") for rid in ids)
+
+
+def test_ifdv_is_empty_for_a_cell_with_no_runs(tmp_path, monkeypatch):
+    res = run_export(tmp_path, records(tmp_path), monkeypatch)
+    v = _ifdv(res.block)
+    assert v["curl"]["X1"] == [] and v["chromium"]["X1"] == []

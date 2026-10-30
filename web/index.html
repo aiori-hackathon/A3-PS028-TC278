@@ -129,6 +129,7 @@ tr:last-child td{border-bottom:0}
 .seg{min-width:2px}
 
 .strip{position:relative;height:38px;background:#171922;border-radius:5px;min-width:0}
+.lane.nm,.strip.nm,.stack100.nm{background:transparent;border:1px dashed var(--line2)}
 .pt{position:absolute;width:9px;height:9px;border-radius:50%;transform:translate(-50%,-50%);
   box-shadow:0 0 0 2px #11131c}
 .med{position:absolute;top:5px;bottom:5px;width:2px;background:var(--ink2)}
@@ -713,6 +714,28 @@ var WIN={ /* repetitions won by each family: [IPv6, IPv4, no winner] */
   curl:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[13,7,0]},
   chromium:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[11,9,0]}
 };
+var IFDV={ /* observed inter-family delays per run: [run_id, ms]; [] = none observed or no runs */
+  curl:{
+    C0:[],
+    S1:[["20261026T192924Z_S1_curl_r01",200.405],["20261026T192939Z_S1_curl_r02",200.722],["20261026T192953Z_S1_curl_r03",200.933],["20261026T193008Z_S1_curl_r04",200.433],["20261026T193022Z_S1_curl_r05",200.956],["20261026T193037Z_S1_curl_r06",200.772],["20261026T193051Z_S1_curl_r07",200.956],["20261026T193106Z_S1_curl_r08",200.976],["20261026T193120Z_S1_curl_r09",201.336],["20261026T193135Z_S1_curl_r10",201.542],["20261026T193149Z_S1_curl_r11",200.942],["20261026T193204Z_S1_curl_r12",201.07],["20261026T193219Z_S1_curl_r13",201.954],["20261026T193233Z_S1_curl_r14",201.399],["20261026T193248Z_S1_curl_r15",201.92],["20261026T193302Z_S1_curl_r16",200.924],["20261026T193317Z_S1_curl_r17",201.972],["20261026T193331Z_S1_curl_r18",200.956],["20261026T193346Z_S1_curl_r19",201.081],["20261026T193400Z_S1_curl_r20",200.942]],
+    S2:[["20261026T193931Z_S2_curl_r01",201.98],["20261026T193944Z_S2_curl_r02",200.469],["20261026T193957Z_S2_curl_r03",200.956],["20261026T194010Z_S2_curl_r04",200.953],["20261026T194024Z_S2_curl_r05",200.984],["20261026T194037Z_S2_curl_r06",200.948],["20261026T194050Z_S2_curl_r07",200.974],["20261026T194103Z_S2_curl_r08",202.046],["20261026T194116Z_S2_curl_r09",201.975],["20261026T194129Z_S2_curl_r10",200.412],["20261026T194142Z_S2_curl_r11",200.968],["20261026T194155Z_S2_curl_r12",200.948],["20261026T194208Z_S2_curl_r13",200.925],["20261026T194222Z_S2_curl_r14",200.956],["20261026T194235Z_S2_curl_r15",200.81],["20261026T194248Z_S2_curl_r16",200.925],["20261026T194301Z_S2_curl_r17",201.975],["20261026T194314Z_S2_curl_r18",201.939],["20261026T194327Z_S2_curl_r19",201.069],["20261026T194340Z_S2_curl_r20",200.926]],
+    S3:[],
+    S4:[],
+    S5:[],
+    S6:[],
+    X1:[]
+  },
+  chromium:{
+    C0:[],
+    S1:[["20261026T193420Z_S1_chromium_r01",301.266],["20261026T193435Z_S1_chromium_r02",301.421],["20261026T193450Z_S1_chromium_r03",300.23],["20261026T193506Z_S1_chromium_r04",301.059],["20261026T193521Z_S1_chromium_r05",301.081],["20261026T193537Z_S1_chromium_r06",301.042],["20261026T193552Z_S1_chromium_r07",300.287],["20261026T193607Z_S1_chromium_r08",301.199],["20261026T193622Z_S1_chromium_r09",300.841],["20261026T193638Z_S1_chromium_r10",302.905],["20261026T193653Z_S1_chromium_r11",301.101],["20261026T193709Z_S1_chromium_r12",300.775],["20261026T193724Z_S1_chromium_r13",301.076],["20261026T193739Z_S1_chromium_r14",300.421],["20261026T193754Z_S1_chromium_r15",300.968],["20261026T193810Z_S1_chromium_r16",300.353],["20261026T193825Z_S1_chromium_r17",301.705],["20261026T193841Z_S1_chromium_r18",301.587],["20261026T193856Z_S1_chromium_r19",300.436],["20261026T193911Z_S1_chromium_r20",301.69]],
+    S2:[["20261026T194358Z_S2_chromium_r01",301.076],["20261026T194412Z_S2_chromium_r02",300.362],["20261026T194426Z_S2_chromium_r03",300.396],["20261026T194440Z_S2_chromium_r04",301.542],["20261026T194454Z_S2_chromium_r05",301.746],["20261026T194508Z_S2_chromium_r06",301.54],["20261026T194522Z_S2_chromium_r07",300.505],["20261026T194536Z_S2_chromium_r08",301.251],["20261026T194550Z_S2_chromium_r09",301.103],["20261026T194603Z_S2_chromium_r10",301.509],["20261026T194617Z_S2_chromium_r11",301.351],["20261026T194631Z_S2_chromium_r12",301.227],["20261026T194645Z_S2_chromium_r13",300.975],["20261026T194659Z_S2_chromium_r14",301.136],["20261026T194713Z_S2_chromium_r15",300.43],["20261026T194726Z_S2_chromium_r16",300.333],["20261026T194740Z_S2_chromium_r17",300.6],["20261026T194754Z_S2_chromium_r18",302.543],["20261026T194808Z_S2_chromium_r19",301.685],["20261026T194822Z_S2_chromium_r20",300.906]],
+    S3:[],
+    S4:[],
+    S5:[],
+    S6:[],
+    X1:[]
+  }
+};
 var RUNS=[
   {id:"20261026T192159Z_C0_curl_r07",sc:"C0",cl:"curl",src:"val",setup:20.695,ifd:null,win:"ipv6",ab:0,dns:1.092,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T192159Z_C0_curl_r07\",\n  \"scenario\": {\n    \"id\": \"C0\",\n    \"repetition\": 7\n  },\n  \"client\": {\n    \"name\": \"curl\",\n    \"version\": \"curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v6\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 38392,\n          \"first_syn_ns\": 1793042525932326000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 0,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 1.092,\n      \"status\": \"computed\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 20.695,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": null,\n      \"status\": \"not_observed\",\n      \"note\": \"only one family tried (v6)\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T192159Z_C0_curl_r07.pcap\",\n    \"pcap_sha256\": \"1f18fce7f0f9e333128b3d7bc6d1addc6dd80d7d9485abc189f59b6d81e68eb8\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "1f18fce7f0f9e333128b3d7bc6d1addc6dd80d7d9485abc189f59b6d81e68eb8", "path": "data/generated/runs/20261026T192159Z_C0_curl_r07.json"}},
   {id:"20261026T193106Z_S1_curl_r08",sc:"S1",cl:"curl",src:"val",setup:222.254,ifd:200.976,win:"ipv4",ab:1,dns:1.069,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T193106Z_S1_curl_r08\",\n  \"scenario\": {\n    \"id\": \"S1\",\n    \"repetition\": 8\n  },\n  \"client\": {\n    \"name\": \"curl\",\n    \"version\": \"curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v4\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 44938,\n          \"first_syn_ns\": 1793043074281925000,\n          \"syn_retransmits\": 0,\n          \"result\": \"abandoned\"\n        },\n        {\n          \"family\": \"v4\",\n          \"dst\": \"192.0.2.2\",\n          \"src_port\": 54608,\n          \"first_syn_ns\": 1793043074482901000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 1,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 1.069,\n      \"status\": \"computed\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 222.254,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": 200.976,\n      \"status\": \"computed\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T193106Z_S1_curl_r08.pcap\",\n    \"pcap_sha256\": \"9baf0f1220ac8521e62a4a0139507d018e8e2a9b93a007c2aed1eb51c0aa13b1\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "9baf0f1220ac8521e62a4a0139507d018e8e2a9b93a007c2aed1eb51c0aa13b1", "path": "data/generated/runs/20261026T193106Z_S1_curl_r08.json"}},
@@ -736,8 +759,6 @@ function chip(key){var s=SRC[key];return '<span class="chip '+s[1]+'"><span clas
 function famC(w){return w==="v6"||w==="ipv6"?C.v6:C.v4}
 function famN(w){return w==="v6"||w==="ipv6"?"IPv6":"IPv4"}
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;")}
-/* deterministic jitter so the dot strips never change between loads */
-function rnd(seed){var x=Math.sin(seed*12.9898)*43758.5453;return x-Math.floor(x)}
 
 var tip=$("tip");
 function bindTips(root){
@@ -825,21 +846,22 @@ function drawResults(){
         '</span><div class="stack100">'+segs+'</div></div>'}).join("");
     return rows}).join("");
 
-  /* chart 4 — inter-family delay distribution */
-  var max4=0;cls.forEach(function(c){SCEN.forEach(function(s){var v=D[c][s.id].ifd;if(v)max4=Math.max(max4,v)})});
+  /* chart 4 — inter-family delay: one dot per run that observed it (IFDV, from the records).
+     Horizontal position is the measured value; dots are stacked in five rows by list order only so
+     that near-identical values stay visible. Cells with no runs are not measured and draw nothing. */
+  var max4=0;cls.forEach(function(c){SCEN.forEach(function(s){
+    IFDV[c][s.id].forEach(function(x){max4=Math.max(max4,x[1])})})});
   max4=nice((max4||100)*1.15);
   $("chart4").innerHTML=SCEN.map(function(s){
     var rows=cls.map(function(c){
-      var d=D[c][s.id];
-      if(d.ifd===null) return '<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+
-        '</i></span><div class="strip"><span class="nolane">not_observed · only one family attempted</span></div></div>';
-      var pts="";for(var i=0;i<20;i++){
-        var j=(rnd(i+1+s.id.charCodeAt(1)*7+(c==="curl"?0:31))-0.5)*3.4;
-        var v=d.ifd+j,L=v/max4*100,T=18+(rnd(i*3.1+2)-0.5)*22;
-        pts+='<div class="pt" data-tip="<b>'+s.id+' · '+c+'</b><br>rep '+(i+1)+' · '+v.toFixed(3)+
-          ' ms" style="left:'+L+'%;top:'+T+'px;background:'+(c==="curl"?C.curl:C.chromium)+'"></div>'}
-      pts+='<div class="med" data-tip="<b>median</b><br>'+d.ifd.toFixed(3)+' ms" style="left:'+(d.ifd/max4*100)+'%"></div>';
-      return '<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+'</i></span><div class="strip">'+pts+'</div></div>'}).join("");
+      var d=D[c][s.id],vals=IFDV[c][s.id],head='<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+'</i></span>';
+      if(d.src==="ph") return head+'<div class="strip nm"><span class="nolane">not measured</span></div></div>';
+      if(!vals.length) return head+'<div class="strip"><span class="nolane">not_observed · only one family attempted</span></div></div>';
+      var pts=vals.map(function(x,k){
+        return '<div class="pt" data-tip="<b>'+s.id+' · '+c+'</b><br>'+x[0]+'<br>'+x[1].toFixed(3)+' ms" style="left:'+
+          (x[1]/max4*100)+'%;top:'+(7+(k%5)*6)+'px;background:'+(c==="curl"?C.curl:C.chromium)+'"></div>'}).join("");
+      pts+='<div class="med" data-tip="<b>median</b><br>'+d.ifd.toFixed(3)+' ms over '+vals.length+' runs" style="left:'+(d.ifd/max4*100)+'%"></div>';
+      return head+'<div class="strip">'+pts+'</div></div>'}).join("");
     return rows}).join("");
   axis($("axis4"),max4,"ms");
 
