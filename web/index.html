@@ -2,33 +2,39 @@
 <title>HappyLab</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;600;700&family=Chivo+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: instrument-panel site — sticky nav, one column of panels per page, charts drawn as positioned HTML so they stay honest at any width. Single dark look, chosen to match the lab's own displays. */
 :root{
-  --bg:#0a0d11; --surface:#12161c; --surface2:#1a1f27; --line:#242c36; --line2:#313b48;
-  --ink:#e4e9f0; --ink2:#97a2b2; --ink3:#66727f;
+  /* Theme from the team's Vercel reference (web/dual-stack-lab-ui): navy ground #070913, glass
+     surfaces as white overlays (4% / 7%), hairlines at white 10% / 16%, cyan-300 accent,
+     radius .65rem. Series and status colours are unchanged and re-validated on this ground. */
+  --bg:#070913; --surface:#11131c; --surface2:#181a24; --line:#20222b; --line2:#2f3039;
+  --ink:#e5edf7; --ink2:#90a1b9; --ink3:#7183a0;
+  --accent:#67e8f9; --accent-ink:#a5f3fc; --accent-bg:#152a36; --accent-hover:#a5f3fc;
   --s1:#3987e5;  /* IPv6 */
   --s2:#d95926;  /* IPv4 */
   --s3:#199e70;  /* curl */
   --s4:#9085e9;  /* Chromium */
   --ok:#3fb950; --warn:#d29922; --bad:#f0564a;
-  --font-ui:"Chivo","Helvetica Neue",Arial,sans-serif;
-  --font-mono:"Chivo Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --radius:10px; --radius-card:12px; --radius-ctl:8px; --ctl-h:44px;
+  --shadow-card:0 14px 45px rgba(0,0,0,.2);
+  --font-ui:"IBM Plex Sans",Arial,Helvetica,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,monospace;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:15.5px;line-height:1.6}
-body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:60;background:#0a0d11}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:60;background:#070913}
 h1,h2,h3,h4{margin:0;text-wrap:balance;letter-spacing:-.015em}
 p{margin:0}
-a{color:var(--s1)}
+a{color:var(--accent)}
 .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 button{font-family:inherit}
-:focus-visible{outline:2px solid var(--s1);outline-offset:2px;border-radius:3px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
 
 /* ---- chrome ---- */
-.nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:50;background:#0a0d11ee;
+.nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:50;background:#070913ee;
   backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .navin{max-width:1180px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;
   padding-block:11px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
@@ -36,17 +42,17 @@ button{font-family:inherit}
 .brand b{font-size:17px;font-weight:700}
 .brand span{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
 .navlinks{display:flex;flex-wrap:wrap;gap:4px}
-.navlinks a{min-height:38px;display:inline-flex;align-items:center;padding:0 11px;border-radius:7px;
+.navlinks a{min-height:var(--ctl-h);display:inline-flex;align-items:center;padding:0 11px;border-radius:var(--radius-ctl);
   color:var(--ink2);text-decoration:none;font-size:14px}
 .navlinks a:hover{background:var(--surface2);color:var(--ink)}
-.navlinks a[aria-current="page"]{background:#1c2b3f;color:#fff}
+.navlinks a[aria-current="page"]{background:var(--accent-bg);color:var(--accent-ink)}
 
 .wrap{max-width:1180px;margin:0 auto;padding-block:36px 72px;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 section[hidden]{display:none!important}
 
 /* ---- primitives ---- */
-.card{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:22px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-card);padding:22px;box-shadow:var(--shadow-card)}
 .card>h3{font-size:17px;font-weight:600;margin-bottom:6px}
 .eyebrow{font-family:var(--font-mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3)}
 .lead{color:var(--ink2);font-size:16.5px;max-width:64ch}
@@ -69,26 +75,26 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
 .chip.info{border-color:#234365;background:#0e1a27;color:#7fb6f0}
 .chip .dt{width:7px;height:7px;border-radius:50%;background:currentColor}
 
-.kv{display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px solid #1d232c;font-size:14px}
+.kv{display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px solid #1e2029;font-size:14px}
 .kv:last-child{border-bottom:0}
 .kv b{font-family:var(--font-mono);font-weight:500;color:var(--ink)}
 
-.stat{background:var(--surface2);border:1px solid var(--line);border-radius:11px;padding:16px;min-width:0}
+.stat{background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius);padding:16px;min-width:0}
 .stat .k{font-size:12.5px;color:var(--ink2)}
 .stat .v{font-family:var(--font-mono);font-size:27px;line-height:1.15;margin-top:5px;overflow-wrap:anywhere}
 .stat .n{font-size:12px;color:var(--ink3);margin-top:5px}
 
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:0 20px;
-  border-radius:9px;border:1px solid var(--line2);background:var(--surface2);color:var(--ink);
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:var(--ctl-h);padding:0 20px;
+  border-radius:var(--radius-ctl);border:1px solid var(--line2);background:var(--surface2);color:var(--ink);
   font-size:15px;font-weight:600;cursor:pointer;text-decoration:none}
-.btn:hover{background:#232c38}
-.btn.pri{background:var(--s1);border-color:var(--s1);color:#04121f}
-.btn.pri:hover{background:#5aa0f2}
+.btn:hover{background:#282932}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#04121f}
+.btn.pri:hover{background:var(--accent-hover)}
 
 table{width:100%;border-collapse:collapse;font-size:14px}
 th{text-align:left;font-weight:500;font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;
   color:var(--ink3);padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
-td{padding:11px 12px;border-bottom:1px solid #1b212a;vertical-align:top}
+td{padding:11px 12px;border-bottom:1px solid #1c1e27;vertical-align:top}
 tr:last-child td{border-bottom:0}
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;min-width:0;max-width:100%}
 .scroll table{min-width:600px}
@@ -108,12 +114,12 @@ tr:last-child td{border-bottom:0}
 .bar .lbl{font-family:var(--font-mono);font-size:12.5px;color:var(--ink2);min-width:0}
 .bar .lbl i{display:block;font-style:normal;font-size:10.5px;color:var(--ink3)}
 .lanes{display:flex;flex-direction:column;gap:4px;min-width:0}
-.lane{position:relative;height:19px;background:#161c24;border-radius:4px}
+.lane{position:relative;height:19px;background:#171922;border-radius:4px}
 .fill{position:absolute;left:0;top:0;height:100%;border-radius:0 4px 4px 0;min-width:3px}
 .fill[data-zero="1"]{border-radius:4px;width:3px!important;opacity:.55}
 .blab{position:absolute;top:50%;transform:translateY(-50%);font-family:var(--font-mono);font-size:11.5px;
   color:var(--ink2);white-space:nowrap;padding-left:7px}
-.blab[data-in="1"]{padding-left:0;padding-right:7px;color:#0a0d11;font-weight:500}
+.blab[data-in="1"]{padding-left:0;padding-right:7px;color:#070913;font-weight:500}
 .ctag{position:absolute;left:7px;top:50%;transform:translateY(-50%);font-family:var(--font-mono);
   font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);pointer-events:none}
 .axis{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--ink3);
@@ -122,9 +128,9 @@ tr:last-child td{border-bottom:0}
 .stack100{display:flex;gap:2px;height:22px;border-radius:4px;overflow:hidden;min-width:0}
 .seg{min-width:2px}
 
-.strip{position:relative;height:38px;background:#161c24;border-radius:5px;min-width:0}
+.strip{position:relative;height:38px;background:#171922;border-radius:5px;min-width:0}
 .pt{position:absolute;width:9px;height:9px;border-radius:50%;transform:translate(-50%,-50%);
-  box-shadow:0 0 0 2px #12161c}
+  box-shadow:0 0 0 2px #11131c}
 .med{position:absolute;top:5px;bottom:5px;width:2px;background:var(--ink2)}
 .nolane{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-family:var(--font-mono);
   font-size:11.5px;color:var(--ink3)}
@@ -136,15 +142,15 @@ tr:last-child td{border-bottom:0}
 .mhead{font-family:var(--font-mono);font-size:12px;color:var(--ink3);padding:4px 2px;align-self:end}
 
 #tip{position:fixed;z-index:80;pointer-events:none;opacity:0;transition:opacity .12s;
-  background:#060a0e;border:1px solid var(--line2);border-radius:8px;padding:9px 11px;font-size:12.5px;
+  background:#05070e;border:1px solid var(--line2);border-radius:8px;padding:9px 11px;font-size:12.5px;
   font-family:var(--font-mono);color:var(--ink);box-shadow:0 10px 30px #0008;max-width:250px}
 #tip b{color:#fff;font-weight:500}
 
 /* ---- segmented control ---- */
-.seg3{display:inline-flex;gap:4px;background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:3px}
-.seg3 button{min-height:36px;padding:0 13px;border:0;border-radius:6px;background:transparent;color:var(--ink2);
+.seg3{display:inline-flex;gap:4px;background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius);padding:3px}
+.seg3 button{min-height:var(--ctl-h);padding:0 13px;border:0;border-radius:var(--radius-ctl);background:transparent;color:var(--ink2);
   font-size:13.5px;cursor:pointer}
-.seg3 button[aria-pressed="true"]{background:#273445;color:#fff}
+.seg3 button[aria-pressed="true"]{background:var(--accent-bg);color:var(--accent-ink)}
 
 /* ---- hero ---- */
 .hero{display:flex;flex-direction:column;gap:22px;padding-block:14px 8px}
@@ -152,46 +158,46 @@ tr:last-child td{border-bottom:0}
 .hero .lead{font-size:clamp(16px,2.2vw,19px);max-width:60ch}
 
 /* ---- diagrams ---- */
-.diagram{background:linear-gradient(#111720,#0d1218);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.diagram{background:linear-gradient(#12141d,#0c0e18);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .diagram svg{display:block;width:100%;height:auto;max-width:100%}
 
 /* ---- playground ---- */
-.stage{position:relative;background:linear-gradient(#111720,#0c1117);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stage{position:relative;background:linear-gradient(#12141d,#0b0d17);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .stage svg{display:block;width:100%;height:auto}
-.plug{position:absolute;transform:translate(-50%,-50%);min-height:44px;display:flex;align-items:center;gap:7px;
-  padding:0 13px;border-radius:999px;cursor:pointer;font-family:var(--font-mono);font-size:12.5px;
-  background:#0c1218;border:1.5px solid currentColor;white-space:nowrap}
+.plug{position:absolute;transform:translate(-50%,-50%);min-height:var(--ctl-h);display:flex;align-items:center;gap:7px;
+  padding:0 13px;border-radius:var(--radius-ctl);cursor:pointer;font-family:var(--font-mono);font-size:12.5px;
+  background:#0c0e18;border:1.5px solid currentColor;white-space:nowrap}
 .plug small{font-family:var(--font-ui);font-size:11px;color:var(--ink2)}
 .plug.v6{color:var(--s1)} .plug.v4{color:var(--s2)}
 .plug[data-cut="true"]{color:var(--bad);border-style:dashed;background:#1b0e0e}
-.plug:hover{background:#17212c}
+.plug:hover{background:#1c1d27}
 .clockbar{position:absolute;right:12px;top:12px;font-family:var(--font-mono);font-size:12px;color:var(--ink2);
-  background:#0b1016cc;border:1px solid var(--line);border-radius:6px;padding:5px 9px}
+  background:#0a0c16cc;border:1px solid var(--line);border-radius:6px;padding:5px 9px}
 .ctl{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;
-  padding:10px 0;border-bottom:1px solid #1d232c}
+  padding:10px 0;border-bottom:1px solid #1e2029}
 .ctl:last-child{border-bottom:0}
 .ctl label{flex:1 1 150px;min-width:0;font-size:13.5px}
 .ctl .hint{display:block;font-size:11.5px;color:var(--ink3)}
-input[type=range]{width:116px;accent-color:var(--s1)}
-select{background:var(--surface2);color:var(--ink);border:1px solid var(--line2);border-radius:7px;
-  padding:7px 9px;font-size:13px;min-height:38px}
+input[type=range]{width:116px;accent-color:var(--accent)}
+select{background:var(--surface2);color:var(--ink);border:1px solid var(--line2);border-radius:var(--radius-ctl);
+  padding:7px 9px;font-size:13px;min-height:var(--ctl-h)}
 .val{font-family:var(--font-mono);font-size:12.5px;color:var(--ink2);min-width:60px;text-align:right}
 .rail{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px}
-.scn{flex:0 0 auto;min-height:44px;text-align:left;padding:8px 13px;border-radius:8px;cursor:pointer;
+.scn{flex:0 0 auto;min-height:var(--ctl-h);text-align:left;padding:8px 13px;border-radius:var(--radius-ctl);cursor:pointer;
   background:var(--surface);border:1px solid var(--line);color:var(--ink);display:flex;flex-direction:column;gap:1px}
 .scn:hover{border-color:var(--line2);background:var(--surface2)}
 .scn .id{font-family:var(--font-mono);font-size:13px}
 .scn .nm{font-size:11.5px;color:var(--ink2);white-space:nowrap}
-.scn[aria-pressed="true"]{background:#1c2b3f;border-color:var(--s1);color:#fff}
+.scn[aria-pressed="true"]{background:var(--accent-bg);border-color:var(--accent);color:var(--accent-ink)}
 .log{font-family:var(--font-mono);font-size:12.5px;line-height:1.75;max-height:210px;overflow:auto;
-  background:#0b0f14;border:1px solid var(--line);border-radius:9px;padding:12px}
+  background:#090b15;border:1px solid var(--line);border-radius:9px;padding:12px}
 .log div{white-space:pre;color:var(--ink2)}
 .log b{font-weight:500;color:var(--ink)}
 .tl .tlane{display:grid;grid-template-columns:58px minmax(0,1fr);gap:10px;align-items:center;margin-bottom:8px}
 .track{position:relative;height:40px;background:var(--surface2);border:1px solid var(--line);border-radius:7px}
 .tspan{position:absolute;top:16px;height:8px;border-radius:4px;opacity:.42}
 .mk{position:absolute;top:7px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:3px}
-.mk i{display:block;width:11px;height:11px;border:2px solid #0d1117}
+.mk i{display:block;width:11px;height:11px;border:2px solid #0b0d17}
 .mk span{font-family:var(--font-mono);font-size:10.5px;color:var(--ink2);white-space:nowrap}
 
 details summary{cursor:pointer;font-family:var(--font-mono);font-size:13px;color:var(--ink2)}
@@ -250,26 +256,26 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
         <svg viewBox="0 0 900 250" role="img" aria-labelledby="heT heD">
           <title id="heT">The Happy Eyeballs race</title>
           <desc id="heD">The client resolves both A and AAAA records, starts an IPv6 connection first, and after a short timer starts an IPv4 connection in parallel; whichever handshake completes first is used and the other is abandoned.</desc>
-          <g font-family="Chivo Mono, monospace" font-size="12.5">
-            <line x1="60" y1="60" x2="840" y2="60" stroke="#2b3542" stroke-width="1.5"/>
-            <line x1="60" y1="150" x2="840" y2="150" stroke="#2b3542" stroke-width="1.5"/>
-            <text x="60" y="44" fill="#97a2b2">1 · Resolve</text>
-            <text x="60" y="118" fill="#97a2b2">2 · Race</text>
+          <g font-family="IBM Plex Mono, monospace" font-size="12.5">
+            <line x1="60" y1="60" x2="840" y2="60" stroke="#31323b" stroke-width="1.5"/>
+            <line x1="60" y1="150" x2="840" y2="150" stroke="#31323b" stroke-width="1.5"/>
+            <text x="60" y="44" fill="#90a1b9">1 · Resolve</text>
+            <text x="60" y="118" fill="#90a1b9">2 · Race</text>
 
-            <circle cx="120" cy="60" r="6" fill="#66727f"/><text x="120" y="86" fill="#66727f" text-anchor="middle">query</text>
-            <circle cx="250" cy="60" r="6" fill="#66727f"/><text x="250" y="86" fill="#66727f" text-anchor="middle">A + AAAA</text>
+            <circle cx="120" cy="60" r="6" fill="#7183a0"/><text x="120" y="86" fill="#7183a0" text-anchor="middle">query</text>
+            <circle cx="250" cy="60" r="6" fill="#7183a0"/><text x="250" y="86" fill="#7183a0" text-anchor="middle">A + AAAA</text>
 
-            <rect x="60" y="130" width="540" height="40" rx="6" fill="#0e141b" stroke="#242c36"/>
+            <rect x="60" y="130" width="540" height="40" rx="6" fill="#0e101a" stroke="#20222b"/>
             <rect x="62" y="132" width="198" height="36" rx="5" fill="#15293f"/>
             <rect x="262" y="132" width="328" height="36" rx="5" fill="#2a1a12"/>
             <text x="161" y="155" fill="#3987e5" text-anchor="middle">IPv6 attempt</text>
             <text x="426" y="155" fill="#d95926" text-anchor="middle">IPv4 attempt</text>
 
-            <line x1="262" y1="118" x2="262" y2="184" stroke="#97a2b2" stroke-width="1.5" stroke-dasharray="4 4"/>
-            <text x="262" y="206" fill="#97a2b2" text-anchor="middle">fallback timer fires</text>
+            <line x1="262" y1="118" x2="262" y2="184" stroke="#90a1b9" stroke-width="1.5" stroke-dasharray="4 4"/>
+            <text x="262" y="206" fill="#90a1b9" text-anchor="middle">fallback timer fires</text>
             <circle cx="600" cy="150" r="7" fill="#3fb950"/>
             <text x="612" y="155" fill="#3fb950">handshake completes</text>
-            <text x="60" y="230" fill="#66727f">the attempt that loses the race is abandoned; the user never sees it</text>
+            <text x="60" y="230" fill="#7183a0">the attempt that loses the race is abandoned; the user never sees it</text>
           </g>
         </svg>
       </div>
@@ -338,29 +344,29 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
         <svg viewBox="0 0 900 330" role="img" aria-labelledby="tpT tpD">
           <title id="tpT">Lab topology</title>
           <desc id="tpD">A client namespace and a server namespace joined by an IPv6 link and an IPv4 link, each shaped by netem on the server side, plus an unimpaired control link carrying DNS.</desc>
-          <g font-family="Chivo Mono, monospace" font-size="12">
-            <rect x="40" y="110" width="170" height="120" rx="11" fill="#151b23" stroke="#2b3542"/>
-            <text x="125" y="150" text-anchor="middle" fill="#e4e9f0" font-family="Chivo, sans-serif" font-size="15" font-weight="600">Client</text>
-            <text x="125" y="172" text-anchor="middle" fill="#97a2b2">netns hl-client</text>
-            <text x="125" y="192" text-anchor="middle" fill="#66727f">curl · Chromium</text>
-            <text x="125" y="212" text-anchor="middle" fill="#66727f">tcpdump · no qdisc</text>
+          <g font-family="IBM Plex Mono, monospace" font-size="12">
+            <rect x="40" y="110" width="170" height="120" rx="11" fill="#161821" stroke="#31323b"/>
+            <text x="125" y="150" text-anchor="middle" fill="#e5edf7" font-family="IBM Plex Sans, sans-serif" font-size="15" font-weight="600">Client</text>
+            <text x="125" y="172" text-anchor="middle" fill="#90a1b9">netns hl-client</text>
+            <text x="125" y="192" text-anchor="middle" fill="#7183a0">curl · Chromium</text>
+            <text x="125" y="212" text-anchor="middle" fill="#7183a0">tcpdump · no qdisc</text>
 
-            <rect x="690" y="110" width="170" height="120" rx="11" fill="#151b23" stroke="#2b3542"/>
-            <text x="775" y="150" text-anchor="middle" fill="#e4e9f0" font-family="Chivo, sans-serif" font-size="15" font-weight="600">Server</text>
-            <text x="775" y="172" text-anchor="middle" fill="#97a2b2">netns hl-server</text>
-            <text x="775" y="192" text-anchor="middle" fill="#66727f">nginx :80 · fixed tiny reply</text>
-            <text x="775" y="212" text-anchor="middle" fill="#66727f">netem + ifb here</text>
+            <rect x="690" y="110" width="170" height="120" rx="11" fill="#161821" stroke="#31323b"/>
+            <text x="775" y="150" text-anchor="middle" fill="#e5edf7" font-family="IBM Plex Sans, sans-serif" font-size="15" font-weight="600">Server</text>
+            <text x="775" y="172" text-anchor="middle" fill="#90a1b9">netns hl-server</text>
+            <text x="775" y="192" text-anchor="middle" fill="#7183a0">nginx :80 · fixed tiny reply</text>
+            <text x="775" y="212" text-anchor="middle" fill="#7183a0">netem + ifb here</text>
 
             <line x1="210" y1="146" x2="690" y2="146" stroke="#3987e5" stroke-width="7" stroke-linecap="round"/>
             <text x="450" y="134" text-anchor="middle" fill="#3987e5">IPv6 · 2001:db8:28:6::2</text>
             <line x1="210" y1="200" x2="690" y2="200" stroke="#d95926" stroke-width="7" stroke-linecap="round"/>
             <text x="450" y="224" text-anchor="middle" fill="#d95926">IPv4 · 192.0.2.2</text>
 
-            <rect x="365" y="20" width="170" height="60" rx="10" fill="#151b23" stroke="#2b3542"/>
-            <text x="450" y="45" text-anchor="middle" fill="#e4e9f0" font-family="Chivo, sans-serif" font-size="14" font-weight="600">DNS</text>
-            <text x="450" y="65" text-anchor="middle" fill="#97a2b2">198.51.100.53 · never impaired</text>
-            <path d="M 140 110 L 370 80" stroke="#3b4756" stroke-width="2" stroke-dasharray="6 7" fill="none"/>
-            <text x="212" y="88" fill="#66727f">control link</text>
+            <rect x="365" y="20" width="170" height="60" rx="10" fill="#161821" stroke="#31323b"/>
+            <text x="450" y="45" text-anchor="middle" fill="#e5edf7" font-family="IBM Plex Sans, sans-serif" font-size="14" font-weight="600">DNS</text>
+            <text x="450" y="65" text-anchor="middle" fill="#90a1b9">198.51.100.53 · never impaired</text>
+            <path d="M 140 110 L 370 80" stroke="#43454c" stroke-width="2" stroke-dasharray="6 7" fill="none"/>
+            <text x="212" y="88" fill="#7183a0">control link</text>
 
             <rect x="596" y="256" width="200" height="44" rx="8" fill="#1a1208" stroke="#4a3415"/>
             <text x="696" y="283" text-anchor="middle" fill="#d29922">impairment applied here</text>
@@ -511,34 +517,34 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
             <desc id="pgD">A client joined to a web server by an IPv6 cable and an IPv4 cable, with a DNS server on a separate control link.</desc>
             <defs><filter id="pgGlow" x="-80%" y="-80%" width="260%" height="260%">
               <feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
-            <path id="pgDns" d="M 120 250 L 400 118" fill="none" stroke="#3b4756" stroke-width="2" stroke-dasharray="6 7"/>
-            <text x="196" y="178" fill="#66727f" font-family="Chivo Mono, monospace" font-size="12">control link</text>
+            <path id="pgDns" d="M 120 250 L 400 118" fill="none" stroke="#43454c" stroke-width="2" stroke-dasharray="6 7"/>
+            <text x="196" y="178" fill="#7183a0" font-family="IBM Plex Mono, monospace" font-size="12">control link</text>
             <path id="pgP6" d="M 205 290 C 400 248 560 248 735 290" fill="none" stroke="#1d3a52" stroke-width="9" stroke-linecap="round"/>
             <path id="pgP4" d="M 205 345 C 400 392 560 392 735 345" fill="none" stroke="#38291a" stroke-width="9" stroke-linecap="round"/>
             <g>
-              <rect x="34" y="252" width="148" height="118" rx="11" fill="#161c24" stroke="#2b3542"/>
-              <rect x="50" y="268" width="116" height="62" rx="5" fill="#0b1118" stroke="#313b48"/>
-              <text id="pgCli" x="92" y="305" fill="#97a2b2" font-family="Chivo Mono, monospace" font-size="12">curl</text>
-              <rect x="74" y="336" width="68" height="7" rx="3" fill="#2b3542"/>
-              <text x="108" y="390" text-anchor="middle" fill="#e4e9f0" font-family="Chivo, sans-serif" font-size="14" font-weight="600">Client</text>
-              <text x="108" y="408" text-anchor="middle" fill="#66727f" font-family="Chivo Mono, monospace" font-size="11">netns hl-client</text>
+              <rect x="34" y="252" width="148" height="118" rx="11" fill="#171922" stroke="#31323b"/>
+              <rect x="50" y="268" width="116" height="62" rx="5" fill="#0b0d17" stroke="#2f3039"/>
+              <text id="pgCli" x="92" y="305" fill="#90a1b9" font-family="IBM Plex Mono, monospace" font-size="12">curl</text>
+              <rect x="74" y="336" width="68" height="7" rx="3" fill="#31323b"/>
+              <text x="108" y="390" text-anchor="middle" fill="#e5edf7" font-family="IBM Plex Sans, sans-serif" font-size="14" font-weight="600">Client</text>
+              <text x="108" y="408" text-anchor="middle" fill="#7183a0" font-family="IBM Plex Mono, monospace" font-size="11">netns hl-client</text>
             </g>
             <g>
-              <rect x="370" y="36" width="160" height="84" rx="11" fill="#161c24" stroke="#2b3542"/>
-              <text x="450" y="70" text-anchor="middle" fill="#e4e9f0" font-family="Chivo, sans-serif" font-size="14" font-weight="600">DNS</text>
-              <text x="450" y="90" text-anchor="middle" fill="#97a2b2" font-family="Chivo Mono, monospace" font-size="11">198.51.100.53</text>
-              <text x="450" y="107" text-anchor="middle" fill="#66727f" font-family="Chivo Mono, monospace" font-size="10.5">A + AAAA · www.hl.test</text>
+              <rect x="370" y="36" width="160" height="84" rx="11" fill="#171922" stroke="#31323b"/>
+              <text x="450" y="70" text-anchor="middle" fill="#e5edf7" font-family="IBM Plex Sans, sans-serif" font-size="14" font-weight="600">DNS</text>
+              <text x="450" y="90" text-anchor="middle" fill="#90a1b9" font-family="IBM Plex Mono, monospace" font-size="11">198.51.100.53</text>
+              <text x="450" y="107" text-anchor="middle" fill="#7183a0" font-family="IBM Plex Mono, monospace" font-size="10.5">A + AAAA · www.hl.test</text>
             </g>
             <g>
-              <rect x="758" y="252" width="148" height="118" rx="11" fill="#161c24" stroke="#2b3542"/>
-              <rect x="774" y="268" width="116" height="40" rx="4" fill="#0b1118" stroke="#313b48"/>
-              <rect x="774" y="314" width="116" height="16" rx="3" fill="#0b1118" stroke="#313b48"/>
-              <text x="832" y="294" text-anchor="middle" fill="#97a2b2" font-family="Chivo Mono, monospace" font-size="11">nginx :80</text>
-              <text x="832" y="390" text-anchor="middle" fill="#e4e9f0" font-family="Chivo, sans-serif" font-size="14" font-weight="600">Server</text>
-              <text x="832" y="408" text-anchor="middle" fill="#66727f" font-family="Chivo Mono, monospace" font-size="11">netns hl-server</text>
+              <rect x="758" y="252" width="148" height="118" rx="11" fill="#171922" stroke="#31323b"/>
+              <rect x="774" y="268" width="116" height="40" rx="4" fill="#0b0d17" stroke="#2f3039"/>
+              <rect x="774" y="314" width="116" height="16" rx="3" fill="#0b0d17" stroke="#2f3039"/>
+              <text x="832" y="294" text-anchor="middle" fill="#90a1b9" font-family="IBM Plex Mono, monospace" font-size="11">nginx :80</text>
+              <text x="832" y="390" text-anchor="middle" fill="#e5edf7" font-family="IBM Plex Sans, sans-serif" font-size="14" font-weight="600">Server</text>
+              <text x="832" y="408" text-anchor="middle" fill="#7183a0" font-family="IBM Plex Mono, monospace" font-size="11">netns hl-server</text>
             </g>
-            <text id="pgLab6" x="214" y="262" fill="#3987e5" font-family="Chivo Mono, monospace" font-size="12.5">IPv6 · 20 ms RTT</text>
-            <text id="pgLab4" x="214" y="386" fill="#d95926" font-family="Chivo Mono, monospace" font-size="12.5">IPv4 · 20 ms RTT</text>
+            <text id="pgLab6" x="214" y="262" fill="#3987e5" font-family="IBM Plex Mono, monospace" font-size="12.5">IPv6 · 20 ms RTT</text>
+            <text id="pgLab4" x="214" y="386" fill="#d95926" font-family="IBM Plex Mono, monospace" font-size="12.5">IPv4 · 20 ms RTT</text>
             <g id="pgFx"></g><g id="pgDots"></g>
           </svg>
           <button class="plug v6" id="pgPlug6" style="left:52%;top:59.5%" data-cut="false" aria-pressed="false"><span aria-hidden="true">⏻</span> IPv6 <small id="pgPlug6s">connected</small></button>
@@ -812,7 +818,7 @@ function drawResults(){
   $("chart3").innerHTML=SCEN.map(function(s){
     var rows=cls.map(function(c){
       var w=WIN[c][s.id],tot=w[0]+w[1]+w[2];
-      var segs=[[w[0],C.v6,"IPv6"],[w[1],C.v4,"IPv4"],[w[2],"#4a5260","no winner"]].filter(function(x){return x[0]>0})
+      var segs=[[w[0],C.v6,"IPv6"],[w[1],C.v4,"IPv4"],[w[2],"#505158","no winner"]].filter(function(x){return x[0]>0})
         .map(function(x){return '<div class="seg" data-tip="<b>'+s.id+' · '+c+'</b><br>'+x[2]+' won '+x[0]+' of '+tot+
           ' runs" style="flex:'+x[0]+';background:'+x[1]+'"></div>'}).join("");
       return '<div class="bar"><span class="lbl">'+(cls.length>1?c:s.id)+(cls.length>1?'<i>'+s.id+'</i>':'<i>'+s.nm+'</i>')+
@@ -845,7 +851,7 @@ function drawResults(){
     html+='<div class="mhead" style="align-self:center">'+c+'</div>';
     SCEN.forEach(function(s){
       var r=D[c][s.id].runs,pct=r[0]/r[1],
-          bg=pct===0?"#161c24":pct<1?"rgba(57,135,229,"+(0.14+pct*0.5)+")":"rgba(57,135,229,0.82)",
+          bg=pct===0?"#171922":pct<1?"rgba(57,135,229,"+(0.14+pct*0.5)+")":"rgba(57,135,229,0.82)",
           fg=pct>0.6?"#ffffff":"var(--ink2)";
       html+='<div class="mcell" data-tip="<b>'+s.id+' · '+c+'</b><br>'+r[0]+' of '+r[1]+' runs<br>0 conflicts" '+
         'style="background:'+bg+'"><div class="mv" style="color:'+fg+'">'+r[0]+"/"+r[1]+'</div><div class="ms">'+
@@ -1033,7 +1039,7 @@ function pgTimeline(r){
 }
 function pgFill(r,upto){
   $("pgLog").innerHTML=r.log.filter(function(l){return l[0]<=upto}).map(function(l){
-    return '<div><span style="color:#66727f">'+l[0].toFixed(3).padStart(8," ")+'</span>  '+l[1]+'</div>'}).join("");
+    return '<div><span style="color:#7183a0">'+l[0].toFixed(3).padStart(8," ")+'</span>  '+l[1]+'</div>'}).join("");
 }
 function pgStop(){if(raf){cancelAnimationFrame(raf);raf=null}$("pgDots").innerHTML="";$("pgFx").innerHTML=""}
 function pgRun(){
@@ -1042,9 +1048,9 @@ function pgRun(){
   var mult=Number($("pgSpeed").value);
   if(mult===0||reduce){pgFill(r,r.total);$("pgClock").textContent="t = "+r.total.toFixed(3)+" ms";return}
   var dp=$("pgDns"),dl=dp.getTotalLength();
-  var fl=[{p:dp,len:dl,t0:0,dur:DNS_BASE/2,dir:1,c:"#97a2b2"},
-          {p:dp,len:dl,t0:DNS_BASE/2,dur:DNS_BASE/2,dir:-1,c:"#97a2b2"},
-          {p:dp,len:dl,t0:DNS_BASE/2+P.aaaa,dur:DNS_BASE/2,dir:-1,c:"#97a2b2"}];
+  var fl=[{p:dp,len:dl,t0:0,dur:DNS_BASE/2,dir:1,c:"#90a1b9"},
+          {p:dp,len:dl,t0:DNS_BASE/2,dur:DNS_BASE/2,dir:-1,c:"#90a1b9"},
+          {p:dp,len:dl,t0:DNS_BASE/2+P.aaaa,dur:DNS_BASE/2,dir:-1,c:"#90a1b9"}];
   r.att.forEach(function(a){
     var p=a.f==="v6"?$("pgP6"):$("pgP4"),len=p.getTotalLength(),t=r.dns+a.t0;
     if(a.end!==null){
@@ -1072,7 +1078,7 @@ function pgRun(){
       if(f.dies&&k>=1&&!f.x){f.x=1;
         var g=document.createElementNS(ns,"text");
         g.setAttribute("x",pt.x);g.setAttribute("y",pt.y-14);g.setAttribute("text-anchor","middle");
-        g.setAttribute("fill","#f0564a");g.setAttribute("font-family","Chivo Mono, monospace");g.setAttribute("font-size","13");
+        g.setAttribute("fill","#f0564a");g.setAttribute("font-family","IBM Plex Mono, monospace");g.setAttribute("font-size","13");
         g.textContent="✕ dropped";$("pgFx").appendChild(g)}
     });
     $("pgClock").textContent="t = "+Math.min(T,end).toFixed(3)+" ms";
