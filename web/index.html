@@ -275,7 +275,7 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
       </div>
 
       <div class="grid g3">
-        <div class="card"><h3>Prefer IPv6</h3><p class="small">The resolver returns both records and the client sorts IPv6 first, which is what glibc does by default inside our lab namespace.</p></div>
+        <div class="card"><h3>Prefer IPv6</h3><p class="small">The client gets both records and orders IPv6 first. curl does this through glibc with the lab namespace's default address-selection rules; Chromium uses its own built-in DNS client, whose log shows IPv6 ordered first in all 140 of its runs.</p></div>
         <div class="card"><h3>Start a timer</h3><p class="small">Rather than waiting for a TCP timeout, the client gives IPv6 a short head start and then opens an IPv4 connection alongside it.</p></div>
         <div class="card"><h3>Take the first answer</h3><p class="small">Whichever handshake completes first carries the request. The other attempt is abandoned, and the user never sees the failure.</p></div>
       </div>
@@ -348,7 +348,7 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
             <rect x="690" y="110" width="170" height="120" rx="11" fill="#151b23" stroke="#2b3542"/>
             <text x="775" y="150" text-anchor="middle" fill="#e4e9f0" font-family="Chivo, sans-serif" font-size="15" font-weight="600">Server</text>
             <text x="775" y="172" text-anchor="middle" fill="#97a2b2">netns hl-server</text>
-            <text x="775" y="192" text-anchor="middle" fill="#66727f">nginx :80 · 9-byte reply</text>
+            <text x="775" y="192" text-anchor="middle" fill="#66727f">nginx :80 · fixed tiny reply</text>
             <text x="775" y="212" text-anchor="middle" fill="#66727f">netem + ifb here</text>
 
             <line x1="210" y1="146" x2="690" y2="146" stroke="#3987e5" stroke-width="7" stroke-linecap="round"/>
@@ -404,9 +404,9 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
     <div class="stack g22">
       <h3 style="font-size:19px">What has to pass before a run counts</h3>
       <div class="grid g2">
-        <div class="card stack g8"><h3>Cross-checks</h3><p class="small">Every record carries a cross-check block: the client's success claim against the capture, the HTTP status, the address the client says it used against the destination of the winning handshake, whether the capture was ambiguous, and the kernel's dropped-packet counters. A disagreement flags the run and exits with an error rather than being resolved silently.</p></div>
+        <div class="card stack g8"><h3>Cross-checks</h3><p class="small">Every record carries a cross-check block covering six checks: the client's success claim against the capture, the HTTP status, the address the client says it used against the destination of the winning handshake, whether the capture was ambiguous, any port-443, QUIC or other-port traffic, and whether tcpdump dropped or failed to write any packet. A dropped or unwritten packet is recorded as a capture conflict and stops the session. Any disagreement flags the run and exits with an error rather than being resolved silently.</p></div>
         <div class="card stack g8"><h3>Fault verification</h3><p class="small">A blackhole is only accepted at 100% loss with zero ICMP errors, using static neighbour entries so no address resolution is needed. Latency targets are measured before each scenario, and the lab is restored and re-verified after every run.</p></div>
-        <div class="card stack g8"><h3>Pinned fixtures</h3><p class="small">Two hand-checked captures are stored as test fixtures with pinned checksums. The parser must reproduce every value that was verified by hand before any change is accepted.</p></div>
+        <div class="card stack g8"><h3>Pinned fixtures</h3><p class="small">Two small captures are stored as test fixtures with pinned checksums, listed on the Evidence page. The parser tests must keep reproducing their known values before any change is accepted.</p></div>
         <div class="card stack g8"><h3>Known limits</h3><p class="small">Where the parser had to define a rule that the metric description leaves open — what counts as abandoned, where DNS time ends — the rule is written down and marked for sign-off rather than buried in the code.</p></div>
       </div>
     </div>
@@ -428,13 +428,13 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
       <p class="lead">Medians across repetitions, with each figure labelled by where it came from. Hover any mark for its exact value.</p>
     </div>
 
-    <div class="card stack g12" style="border-color:#4a3415;background:#15110a">
-      <div class="row" style="gap:10px"><span class="chip warn"><span class="dt"></span>Demo data</span>
-      <span class="small" style="color:#d6c188">Placeholder figures stand in until the full matrix finishes. Nothing here is a final result.</span></div>
+    <div class="card stack g12">
+      <div class="row" style="gap:10px"><span class="chip ok"><span class="dt"></span>Measured data</span>
+      <span class="small">280 runs across 14 sessions: 2 clients × 7 conditions × 20 repetitions, with every cross-check agreeing. X1 (both paths degraded) is the only condition not yet measured; its figures are placeholders and are marked as such.</span></div>
       <div class="legend">
-        <span><span class="chip ok" style="padding:2px 6px">validated</span> reproduced by hand from the capture</span>
-        <span><span class="chip info" style="padding:2px 6px">pilot</span> three repetitions, zero conflicts</span>
-        <span><span class="chip warn" style="padding:2px 6px">placeholder</span> invented, awaiting runs</span>
+        <span><span class="chip ok" style="padding:2px 6px">complete</span> 20 of 20 runs, every cross-check agrees</span>
+        <span><span class="chip info" style="padding:2px 6px">pilot</span> 1 to 19 runs</span>
+        <span><span class="chip warn" style="padding:2px 6px">placeholder</span> invented for layout, no runs yet</span>
       </div>
     </div>
 
@@ -595,7 +595,7 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
             <li>Baseline 20 ms round-trip time; added latency stacks on top.</li>
             <li>Resolution takes 4 ms plus any record delay, and the client waits for both answers.</li>
             <li>Setup time runs from the first SYN to the completing ACK and excludes DNS.</li>
-            <li>The fallback timeout and Chromium's backup attempt at 250 ms are placeholders, not measurements.</li>
+            <li>The fallback timer and Chromium's backup attempt are model settings, not measurements. In the dataset's S1 and S2 runs, curl started IPv4 a median 201 ms after its first IPv6 SYN; Chromium sent a second IPv6 attempt at a median 251 ms and started IPv4 at 301 ms.</li>
           </ul></details></div>
       </div>
     </div>
@@ -641,8 +641,8 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
       <h3 style="font-size:19px">Open items</h3>
       <div class="grid g2">
         <div class="card stack g8"><span class="chip warn"><span class="dt"></span>needs sign-off</span><h3>Parser rules not in the brief</h3><p class="small">The definitions of an abandoned attempt, a no-reply attempt and the end of DNS time were written by us because the metric description does not fix them. They are documented and awaiting explicit approval.</p></div>
-        <div class="card stack g8"><span class="chip warn"><span class="dt"></span>needs a decision</span><h3>A misleading capture name</h3><p class="small">One early capture is named as a control run but actually holds two concatenated loopback runs. It is kept for history and should be renamed before submission.</p></div>
-        <div class="card stack g8"><span class="chip info"><span class="dt"></span>in progress</span><h3>Chromium timings</h3><p class="small">The Chromium runner shares the orchestrator with curl. Until its pilot runs, every Chromium figure on this site is a placeholder.</p></div>
+        <div class="card stack g8"><span class="chip ok"><span class="dt"></span>resolved</span><h3>A misleading capture name</h3><p class="small">An early capture named as a control run held two concatenated loopback runs. It has been renamed <span class="mono">loopback_two_harness_runs.pcap</span> and kept as a parser test fixture.</p></div>
+        <div class="card stack g8"><span class="chip ok"><span class="dt"></span>done</span><h3>Chromium timings</h3><p class="small">The Chromium runner shares the orchestrator with curl. All Chromium figures for C0 and S1 to S6 are measured: 140 runs, 20 per condition.</p></div>
         <div class="card stack g8"><span class="chip info"><span class="dt"></span>optional</span><h3>Sensitivity sweep</h3><p class="small">Varying the client's fallback timeout would show how sharply the penalty tracks it. Planned only if the core matrix finishes early.</p></div>
       </div>
     </div>
@@ -660,7 +660,7 @@ var C={v6:"#3987e5",v4:"#d95926",curl:"#199e70",chromium:"#9085e9"};
 var PAGES=["overview","method","results","playground","evidence"];
 
 /* ===================== data ===================== */
-var SRC={val:["validated","ok"],pil:["pilot","info"],ph:["placeholder","warn"]};
+var SRC={val:["complete","ok"],pil:["pilot","info"],ph:["placeholder","warn"]};
 var SCEN=[
   {id:"C0",nm:"Healthy control",v6:"Healthy",v4:"Healthy",dns:"Immediate",q:"Baseline for each client",cut6:0,cut4:0,a6:0,a4:0,aaaa:0},
   {id:"S1",nm:"IPv6 blackhole",v6:"Blackhole",v4:"Healthy",dns:"Immediate",q:"How fast is fallback when IPv6 is dead?",cut6:1,cut4:0,a6:0,a4:0,aaaa:0},
@@ -672,53 +672,56 @@ var SCEN=[
   {id:"X1",nm:"Both degraded",v6:"+300 ms RTT",v4:"+300 ms RTT",dns:"Immediate",q:"What happens when neither path is good?",cut6:0,cut4:0,a6:300,a4:300,aaaa:0,opt:1}
 ];
 var FIND=[
-  {chip:["S1 · IPv6 blackhole","ok"],t:"curl falls back after about 200 ms",b:"The IPv6 SYN goes unanswered. curl opens IPv4 200.443 ms later and completes the handshake at 220.553 ms, abandoning the IPv6 attempt. Hand-checked from the capture and reproduced by the parser to within 0.1 ms."},
+  {chip:["S1 · IPv6 blackhole","ok"],t:"curl falls back after about 200 ms",b:"The IPv6 SYN goes unanswered. Across 20 runs curl opens IPv4 a median 200.956 ms later and completes the handshake at 222.221 ms, abandoning the IPv6 attempt. Chromium falls back later: IPv4 at a median 301.067 ms, setup 322.392 ms."},
   {chip:["S3 · IPv6 +150 ms","ok"],t:"A slower IPv6 path still wins",b:"At a 170 ms target round-trip time, IPv6 completes before the fallback timer fires, so IPv4 is never attempted. The user pays the latency but never leaves IPv6."},
   {chip:["S4 and S5 · IPv4 impaired","ok"],t:"IPv4 faults stay invisible while IPv6 is healthy",b:"Because the resolver sorts IPv6 first, the client succeeds before it ever needs IPv4. A broken IPv4 path is never exercised. This is resilience working as designed, not a gap in the measurement."},
-  {chip:["S6 · AAAA delayed","ok"],t:"curl waits for the slow AAAA answer",b:"DNS time rises to roughly 300 ms, but curl does not race ahead on the A record that already arrived. Setup time, which excludes DNS, stays near 20 ms."}
+  {chip:["S6 · AAAA delayed","ok"],t:"Both clients wait for the slow AAAA answer",b:"DNS time rises to a median 302.07 ms for curl and 301.851 ms for Chromium, and in every run both send their first SYN only after the AAAA answer, not on the A record that arrived about 1 ms in. Setup time, which excludes DNS, stays near 20 ms (20.812 and 21.317 ms)."}
 ];
 /* === HAPPYLAB DATA START — generated by export_web.py, do not edit by hand === */
+/* 280 runs from the 14 sessions in docs/dataset.md; runs dated 2026-10-26; code ecba28c */
 /* med = median setup ms · win = winning family · ifd = inter-family delay median (null = not observed)
    runs = completed/target · src = provenance key */
 var D={
   curl:{
-    C0:{med:20.168,win:"v6",ifd:null,runs:[20,20],src:"val"},
-    S1:{med:220.553,win:"v4",ifd:200.443,runs:[20,20],src:"val"},
-    S2:{med:222.1,win:"v4",ifd:200.2,runs:[3,20],src:"pil"},
-    S3:{med:170.4,win:"v6",ifd:null,runs:[3,20],src:"pil"},
-    S4:{med:20.3,win:"v6",ifd:null,runs:[3,20],src:"pil"},
-    S5:{med:20.2,win:"v6",ifd:null,runs:[3,20],src:"pil"},
-    S6:{med:20.1,win:"v6",ifd:null,runs:[3,20],src:"pil"},
+    C0:{med:20.697,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S1:{med:222.221,win:"v4",ifd:200.956,runs:[20,20],src:"val"},
+    S2:{med:222.188,win:"v4",ifd:200.956,runs:[20,20],src:"val"},
+    S3:{med:171.171,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S4:{med:20.715,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S5:{med:20.697,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S6:{med:20.812,win:"v6",ifd:null,runs:[20,20],src:"val"},
     X1:{med:320.6,win:"v6",ifd:200.1,runs:[0,20],src:"ph"}
   },
   chromium:{
-    C0:{med:21.4,win:"v6",ifd:null,runs:[0,20],src:"ph"},
-    S1:{med:320.7,win:"v4",ifd:300.2,runs:[0,20],src:"ph"},
-    S2:{med:318.9,win:"v4",ifd:300.1,runs:[0,20],src:"ph"},
-    S3:{med:171.9,win:"v6",ifd:null,runs:[0,20],src:"ph"},
-    S4:{med:21.6,win:"v6",ifd:null,runs:[0,20],src:"ph"},
-    S5:{med:21.5,win:"v6",ifd:null,runs:[0,20],src:"ph"},
-    S6:{med:21.3,win:"v6",ifd:null,runs:[0,20],src:"ph"},
+    C0:{med:20.135,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S1:{med:322.392,win:"v4",ifd:301.067,runs:[20,20],src:"val"},
+    S2:{med:321.986,win:"v4",ifd:301.12,runs:[20,20],src:"val"},
+    S3:{med:171.109,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S4:{med:20.139,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S5:{med:20.139,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S6:{med:21.317,win:"v6",ifd:null,runs:[20,20],src:"val"},
     X1:{med:322.4,win:"v6",ifd:300.4,runs:[0,20],src:"ph"}
   }
 };
-var WIN={ /* share of repetitions won by each family */
+var WIN={ /* repetitions won by each family: [IPv6, IPv4, no winner] */
   curl:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[13,7,0]},
-  chromium:{C0:[20,0,0],S1:[0,20,0],S2:[1,19,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[11,9,0]}
+  chromium:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[11,9,0]}
 };
 var RUNS=[
-  {id:"C0-curl-017",sc:"C0",cl:"curl",src:"val",setup:20.168,ifd:null,win:"ipv6",ab:0,dns:4.102,out:"success"},
-  {id:"S1-curl-003",sc:"S1",cl:"curl",src:"val",setup:220.553,ifd:200.443,win:"ipv4",ab:1,dns:4.051,out:"success"},
-  {id:"S2-curl-002",sc:"S2",cl:"curl",src:"pil",setup:222.140,ifd:200.219,win:"ipv4",ab:1,dns:4.088,out:"success"},
-  {id:"S4-curl-001",sc:"S4",cl:"curl",src:"pil",setup:20.306,ifd:null,win:"ipv6",ab:0,dns:4.070,out:"success"},
-  {id:"S6-curl-003",sc:"S6",cl:"curl",src:"pil",setup:20.114,ifd:null,win:"ipv6",ab:0,dns:304.221,out:"success"}
+  {id:"20261026T192159Z_C0_curl_r07",sc:"C0",cl:"curl",src:"val",setup:20.695,ifd:null,win:"ipv6",ab:0,dns:1.092,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T192159Z_C0_curl_r07\",\n  \"scenario\": {\n    \"id\": \"C0\",\n    \"repetition\": 7\n  },\n  \"client\": {\n    \"name\": \"curl\",\n    \"version\": \"curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v6\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 38392,\n          \"first_syn_ns\": 1793042525932326000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 0,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 1.092,\n      \"status\": \"computed\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 20.695,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": null,\n      \"status\": \"not_observed\",\n      \"note\": \"only one family tried (v6)\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T192159Z_C0_curl_r07.pcap\",\n    \"pcap_sha256\": \"1f18fce7f0f9e333128b3d7bc6d1addc6dd80d7d9485abc189f59b6d81e68eb8\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "1f18fce7f0f9e333128b3d7bc6d1addc6dd80d7d9485abc189f59b6d81e68eb8", "path": "data/generated/runs/20261026T192159Z_C0_curl_r07.json"}},
+  {id:"20261026T193106Z_S1_curl_r08",sc:"S1",cl:"curl",src:"val",setup:222.254,ifd:200.976,win:"ipv4",ab:1,dns:1.069,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T193106Z_S1_curl_r08\",\n  \"scenario\": {\n    \"id\": \"S1\",\n    \"repetition\": 8\n  },\n  \"client\": {\n    \"name\": \"curl\",\n    \"version\": \"curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v4\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 44938,\n          \"first_syn_ns\": 1793043074281925000,\n          \"syn_retransmits\": 0,\n          \"result\": \"abandoned\"\n        },\n        {\n          \"family\": \"v4\",\n          \"dst\": \"192.0.2.2\",\n          \"src_port\": 54608,\n          \"first_syn_ns\": 1793043074482901000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 1,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 1.069,\n      \"status\": \"computed\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 222.254,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": 200.976,\n      \"status\": \"computed\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T193106Z_S1_curl_r08.pcap\",\n    \"pcap_sha256\": \"9baf0f1220ac8521e62a4a0139507d018e8e2a9b93a007c2aed1eb51c0aa13b1\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "9baf0f1220ac8521e62a4a0139507d018e8e2a9b93a007c2aed1eb51c0aa13b1", "path": "data/generated/runs/20261026T193106Z_S1_curl_r08.json"}},
+  {id:"20261026T193622Z_S1_chromium_r09",sc:"S1",cl:"chromium",src:"val",setup:322.275,ifd:300.841,win:"ipv4",ab:2,dns:1.098,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T193622Z_S1_chromium_r09\",\n  \"scenario\": {\n    \"id\": \"S1\",\n    \"repetition\": 9\n  },\n  \"client\": {\n    \"name\": \"chromium\",\n    \"version\": \"Chromium 156.0.8078.4\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v4\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 59426,\n          \"first_syn_ns\": 1793043391591250000,\n          \"syn_retransmits\": 0,\n          \"result\": \"abandoned\"\n        },\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 59430,\n          \"first_syn_ns\": 1793043391841818000,\n          \"syn_retransmits\": 0,\n          \"result\": \"abandoned\"\n        },\n        {\n          \"family\": \"v4\",\n          \"dst\": \"192.0.2.2\",\n          \"src_port\": 33540,\n          \"first_syn_ns\": 1793043391892091000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 2,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 1.098,\n      \"status\": \"computed\",\n      \"note\": \"only www.hl.test queries counted; 50 queries for other names before the first SYN not counted: accounts.google.com, update.googleapis.com, www.google.com\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 322.275,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": 300.841,\n      \"status\": \"computed\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log (Playwright)\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T193622Z_S1_chromium_r09.pcap\",\n    \"pcap_sha256\": \"7541a5c4557210c16e1d95b9df3274cb4a8b787a61ca544e210167d7aa499adc\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "7541a5c4557210c16e1d95b9df3274cb4a8b787a61ca544e210167d7aa499adc", "path": "data/generated/runs/20261026T193622Z_S1_chromium_r09.json"}},
+  {id:"20261026T200225Z_S4_chromium_r01",sc:"S4",cl:"chromium",src:"val",setup:20.139,ifd:null,win:"ipv6",ab:0,dns:0.961,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T200225Z_S4_chromium_r01\",\n  \"scenario\": {\n    \"id\": \"S4\",\n    \"repetition\": 1\n  },\n  \"client\": {\n    \"name\": \"chromium\",\n    \"version\": \"Chromium 156.0.8078.4\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v6\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 38094,\n          \"first_syn_ns\": 1793044954102304000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 0,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 0.961,\n      \"status\": \"computed\",\n      \"note\": \"only www.hl.test queries counted; 50 queries for other names before the first SYN not counted: accounts.google.com, update.googleapis.com, www.google.com\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 20.139,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": null,\n      \"status\": \"not_observed\",\n      \"note\": \"only one family tried (v6)\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log (Playwright)\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T200225Z_S4_chromium_r01.pcap\",\n    \"pcap_sha256\": \"607fc714b10d84dc98617dd11ba7441642475b324ed435979b2d60335fc1cfa7\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "607fc714b10d84dc98617dd11ba7441642475b324ed435979b2d60335fc1cfa7", "path": "data/generated/runs/20261026T200225Z_S4_chromium_r01.json"}},
+  {id:"20261026T201814Z_S6_curl_r09",sc:"S6",cl:"curl",src:"val",setup:20.812,ifd:null,win:"ipv6",ab:0,dns:302.088,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T201814Z_S6_curl_r09\",\n  \"scenario\": {\n    \"id\": \"S6\",\n    \"repetition\": 9\n  },\n  \"client\": {\n    \"name\": \"curl\",\n    \"version\": \"curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v6\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 56116,\n          \"first_syn_ns\": 1793045900625222000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 0,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 302.088,\n      \"status\": \"computed\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 20.812,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": null,\n      \"status\": \"not_observed\",\n      \"note\": \"only one family tried (v6)\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T201814Z_S6_curl_r09.pcap\",\n    \"pcap_sha256\": \"394816daeee03c5a9ae5b1db943eae252939b53423f93dbae860058577a92289\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "394816daeee03c5a9ae5b1db943eae252939b53423f93dbae860058577a92289", "path": "data/generated/runs/20261026T201814Z_S6_curl_r09.json"}}
 ];
 var CAPS=[
-  ["manual_S1_curl_20261026T042156Z.pcap","S1","curl","412 KB","9f2c…a71d","pinned fixture · hand-checked"],
-  ["C0-curl-001.pcap","—","curl","288 KB","4b80…c0e2","historic · misleading name, see open items"],
-  ["C0-curl-017.pcap","C0","curl","196 KB","e115…7d44","live validation"],
-  ["S2-curl-002.pcap","S2","curl","301 KB","7a63…1f98","pilot"],
-  ["S6-curl-003.pcap","S6","curl","334 KB","c209…55ab","pilot"]
+  ["20261026T192159Z_C0_curl_r07.pcap", "C0", "curl", "2 KB", "1f18…8eb8", "dataset run"],
+  ["20261026T193106Z_S1_curl_r08.pcap", "S1", "curl", "2 KB", "9baf…13b1", "dataset run"],
+  ["20261026T193622Z_S1_chromium_r09.pcap", "S1", "chromium", "20 KB", "7541…9adc", "dataset run"],
+  ["20261026T200225Z_S4_chromium_r01.pcap", "S4", "chromium", "16 KB", "607f…cfa7", "dataset run"],
+  ["20261026T201814Z_S6_curl_r09.pcap", "S6", "curl", "2 KB", "3948…2289", "dataset run"],
+  ["s1_manual_curl.pcap", "S1", "curl", "2 KB", "2e74…a476", "pinned fixture · hand-checked"],
+  ["loopback_two_harness_runs.pcap", "—", "curl", "3 KB", "0a67…421c", "pinned fixture · loopback harness, not lab data"]
 ];
 /* === HAPPYLAB DATA END === */
 
@@ -887,18 +890,23 @@ function showRun(r){
   $("runStats").innerHTML=cells.map(function(c){
     var sm=c[1].length>9?'font-size:15px':'font-size:19px';
     return '<div class="stat"><div class="k">'+c[0]+'</div><div class="v mono" style="'+sm+'">'+c[1]+'</div></div>'}).join("");
-  var j=['{','  "schema": "v0.2",','  "run_id": "'+r.id+'",','  "scenario": "'+r.sc+'",','  "client": "'+r.cl+'",',
-    '  "winning_family":        {"value": "'+r.win+'", "status": "ok"},',
-    '  "tcp_setup_ms":          {"value": '+r.setup.toFixed(3)+', "status": "ok"},',
-    '  "inter_family_delay_ms": '+(r.ifd===null?'{"value": null, "status": "not_observed"}':'{"value": '+r.ifd.toFixed(3)+', "status": "ok"}')+',',
-    '  "dns_time_ms":           {"value": '+r.dns.toFixed(3)+', "status": "ok"},',
-    '  "abandoned_attempts":    {"value": '+r.ab+', "status": "ok"},',
-    '  "outcome":               {"value": "'+r.out+'", "status": "ok"},',
-    '  "cross_checks": {"conflicts": 0}','}'];
+  /* the stored record as written by the orchestrator (excerpt, fields verbatim) */
+  var j=["// excerpt of "+r.chk.path].concat(r.rec.split("\n"));
   $("runJson").innerHTML=j.map(function(l){return "<div>"+esc(l)+"</div>"}).join("");
-  $("runChecks").innerHTML=[["Client success claim agrees with the capture","agrees"],["HTTP status","200"],
-    ["Address used matches the winning handshake","agrees"],["Capture ambiguous","no"],["Kernel-dropped packets","0"]]
-    .map(function(c){return '<div class="kv"><span>'+c[0]+'</span><b style="color:var(--ok)">'+c[1]+'</b></div>'}).join("");
+  /* one row per check the cross_checks block covers (docs/run_record_schema.md); a row agrees
+     unless the stored block lists a conflict for that field */
+  var CHECKS=[["success","Client success claim agrees with the capture"],["http_status","HTTP status matches the captured response"],
+    ["remote_ip","Address used matches the winning handshake"],["winner","Capture unambiguous (one data connection)"],
+    ["unexpected_traffic","No port-443, QUIC or other-port traffic"],
+    ["capture","Capture complete: no kernel-dropped or unwritten packets"]];
+  var rows=[["Cross-check status (stored)",r.chk.status,r.chk.status==="agree"]];
+  CHECKS.forEach(function(c){
+    var hit=r.chk.conflicts.filter(function(x){return x.field===c[0]})[0];
+    rows.push([c[1],hit?(hit.note||"conflict"):"agrees",!hit])});
+  rows.push(["Lab verify before / after the run",(r.chk.pre?"pass":"fail")+" / "+(r.chk.post?"pass":"fail"),r.chk.pre&&r.chk.post]);
+  rows.push(["Capture SHA-256 (stored)",r.chk.sha.slice(0,12)+"…",true]);
+  $("runChecks").innerHTML=rows.map(function(c){return '<div class="kv"><span>'+c[0]+'</span><b style="color:var(--'+
+    (c[2]?"ok":"bad")+')">'+esc(c[1])+'</b></div>'}).join("");
   Array.prototype.forEach.call($("runList").children,function(b){
     b.setAttribute("aria-pressed",String(b.dataset.run===r.id))});
 }
