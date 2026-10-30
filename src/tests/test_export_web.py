@@ -99,7 +99,7 @@ def test_cell_with_no_runs_keeps_placeholder_values(tmp_path, monkeypatch):
     res = run_export(tmp_path, records(tmp_path), monkeypatch)
     d, w = block_values(res.block)
     assert d["curl"]["X1"] == {"med": 320.6, "win": "v6", "ifd": 200.1, "runs": [0, 20], "src": "ph"}
-    assert w["chromium"]["X1"] == [11, 9, 0]
+    assert w["curl"]["X1"] == [0, 0, 0] and w["chromium"]["X1"] == [0, 0, 0]   # invented split dropped
     assert res.ok and not res.warnings
 
 
@@ -224,3 +224,13 @@ def test_ifdv_is_empty_for_a_cell_with_no_runs(tmp_path, monkeypatch):
     res = run_export(tmp_path, records(tmp_path), monkeypatch)
     v = _ifdv(res.block)
     assert v["curl"]["X1"] == [] and v["chromium"]["X1"] == []
+
+
+def test_x1_cell_with_no_data_has_no_win_split_no_dots_and_keeps_d_shape(tmp_path, monkeypatch):
+    res = run_export(tmp_path, records(tmp_path), monkeypatch)
+    d, w = block_values(res.block)
+    for c in ("curl", "chromium"):
+        assert d[c]["X1"]["src"] == "ph" and d[c]["X1"]["runs"] == [0, 20]
+        assert set(d[c]["X1"]) == {"med", "win", "ifd", "runs", "src"}       # D shape unchanged
+        assert w[c]["X1"] == [0, 0, 0]
+        assert _ifdv(res.block)[c]["X1"] == []

@@ -129,7 +129,7 @@ tr:last-child td{border-bottom:0}
 .seg{min-width:2px}
 
 .strip{position:relative;height:38px;background:#171922;border-radius:5px;min-width:0}
-.lane.nm,.strip.nm,.stack100.nm{background:transparent;border:1px dashed var(--line2)}
+.lane.nm,.strip.nm,.stack100.nm{position:relative;background:transparent;border:1px dashed var(--line2)}
 .pt{position:absolute;width:9px;height:9px;border-radius:50%;transform:translate(-50%,-50%);
   box-shadow:0 0 0 2px #11131c}
 .med{position:absolute;top:5px;bottom:5px;width:2px;background:var(--ink2)}
@@ -437,11 +437,11 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
 
     <div class="card stack g12">
       <div class="row" style="gap:10px"><span class="chip ok"><span class="dt"></span>Measured data</span>
-      <span class="small">280 runs across 14 sessions: 2 clients × 7 conditions × 20 repetitions, with every cross-check agreeing. X1 (both paths degraded) is the only condition not yet measured; its figures are placeholders and are marked as such.</span></div>
+      <span class="small">280 runs across 14 sessions: 2 clients × 7 conditions × 20 repetitions, with every cross-check agreeing. X1 (both paths degraded) is the only condition not yet measured; it is shown as not measured, with no figures.</span></div>
       <div class="legend">
         <span><span class="chip ok" style="padding:2px 6px">complete</span> 20 of 20 runs, every cross-check agrees</span>
         <span><span class="chip info" style="padding:2px 6px">pilot</span> 1 to 19 runs</span>
-        <span><span class="chip warn" style="padding:2px 6px">placeholder</span> invented for layout, no runs yet</span>
+        <span><span class="chip" style="padding:2px 6px">not measured</span> no runs yet, so no figure is drawn</span>
       </div>
     </div>
 
@@ -656,7 +656,7 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
   </div>
 </section>
 
-<p class="foot">HappyLab · Team NetDefenders · AIORI-3 PS-028. Figures marked as placeholders are invented for layout and are replaced by measured values as runs complete. RFC 8305 is referenced as a design, not as a predictor of exact client timings.</p>
+<p class="foot">HappyLab · Team NetDefenders · AIORI-3 PS-028. Conditions without runs are shown as not measured, with no figures. RFC 8305 is referenced as a design, not as a predictor of exact client timings.</p>
 </div>
 
 <script>
@@ -667,7 +667,7 @@ var C={v6:"#3987e5",v4:"#d95926",curl:"#199e70",chromium:"#9085e9"};
 var PAGES=["overview","method","results","playground","evidence"];
 
 /* ===================== data ===================== */
-var SRC={val:["complete","ok"],pil:["pilot","info"],ph:["placeholder","warn"]};
+var SRC={val:["complete","ok"],pil:["pilot","info"],ph:["not measured",""]};
 var SCEN=[
   {id:"C0",nm:"Healthy control",v6:"Healthy",v4:"Healthy",dns:"Immediate",q:"Baseline for each client",cut6:0,cut4:0,a6:0,a4:0,aaaa:0},
   {id:"S1",nm:"IPv6 blackhole",v6:"Blackhole",v4:"Healthy",dns:"Immediate",q:"How fast is fallback when IPv6 is dead?",cut6:1,cut4:0,a6:0,a4:0,aaaa:0},
@@ -711,8 +711,8 @@ var D={
   }
 };
 var WIN={ /* repetitions won by each family: [IPv6, IPv4, no winner] */
-  curl:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[13,7,0]},
-  chromium:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[11,9,0]}
+  curl:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[0,0,0]},
+  chromium:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[0,0,0]}
 };
 var IFDV={ /* observed inter-family delays per run: [run_id, ms]; [] = none observed or no runs */
   curl:{
@@ -805,11 +805,15 @@ function drawResults(){
   legend($("leg3"),[["IPv6",C.v6],["IPv4",C.v4]]);
 
   /* chart 1 — median setup */
-  var max1=0;SCEN.forEach(function(s){cls.forEach(function(c){max1=Math.max(max1,D[c][s.id].med)})});
+  /* a cell with no runs (src ph) is shown as "not measured": no bar, no number, not in any scale */
+  var nmLane=function(cls){return '<div class="'+cls+' nm"><span class="nolane">not measured</span></div>'};
+  var max1=0;SCEN.forEach(function(s){cls.forEach(function(c){if(D[c][s.id].src!=="ph")max1=Math.max(max1,D[c][s.id].med)})});
   max1=nice(max1);
   $("chart1").innerHTML=SCEN.map(function(s){
     return cls.map(function(c){
       var d=D[c][s.id],w=(d.med/max1*100),inside=w>55;
+      if(d.src==="ph") return '<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+'</i></span><div class="lanes">'+
+        nmLane("lane")+'</div></div>';
       var lab='<span class="blab" data-in="'+(inside?1:0)+'" style="'+
         (inside?'right:calc(100% - '+w+'%)':'left:'+w+'%')+'">'+d.med.toFixed(1)+'</span>';
       return '<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+'</i></span><div class="lanes">'+
@@ -821,10 +825,12 @@ function drawResults(){
   /* chart 2 — penalty */
   var max2=0,pen={};
   cls.forEach(function(c){pen[c]={};SCEN.forEach(function(s){
-    var p=D[c][s.id].med-D[c].C0.med;pen[c][s.id]=p;max2=Math.max(max2,p)})});
+    if(D[c][s.id].src==="ph")return;var p=D[c][s.id].med-D[c].C0.med;pen[c][s.id]=p;max2=Math.max(max2,p)})});
   max2=nice(max2);
   $("chart2").innerHTML=SCEN.filter(function(s){return s.id!=="C0"}).map(function(s){
     return cls.map(function(c){
+      if(D[c][s.id].src==="ph") return '<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+'</i></span><div class="lanes">'+
+        nmLane("lane")+'</div></div>';
       var p=pen[c][s.id],w=Math.max(p,0)/max2*100,zero=p<1?1:0,inside=w>55;
       var txt=(p>0.5?"+"+p.toFixed(1):"≈0");
       var lab='<span class="blab" data-in="'+(inside?1:0)+'" style="'+
@@ -838,6 +844,8 @@ function drawResults(){
   /* chart 3 — winner share */
   $("chart3").innerHTML=SCEN.map(function(s){
     var rows=cls.map(function(c){
+      if(D[c][s.id].src==="ph") return '<div class="bar"><span class="lbl">'+(cls.length>1?c:s.id)+(cls.length>1?'<i>'+s.id+'</i>':'<i>'+s.nm+'</i>')+
+        '</span>'+nmLane("stack100")+'</div>';
       var w=WIN[c][s.id],tot=w[0]+w[1]+w[2];
       var segs=[[w[0],C.v6,"IPv6"],[w[1],C.v4,"IPv4"],[w[2],"#505158","no winner"]].filter(function(x){return x[0]>0})
         .map(function(x){return '<div class="seg" data-tip="<b>'+s.id+' · '+c+'</b><br>'+x[2]+' won '+x[0]+' of '+tot+
@@ -875,9 +883,9 @@ function drawResults(){
       var r=D[c][s.id].runs,pct=r[0]/r[1],
           bg=pct===0?"#171922":pct<1?"rgba(57,135,229,"+(0.14+pct*0.5)+")":"rgba(57,135,229,0.82)",
           fg=pct>0.6?"#ffffff":"var(--ink2)";
-      html+='<div class="mcell" data-tip="<b>'+s.id+' · '+c+'</b><br>'+r[0]+' of '+r[1]+' runs<br>0 conflicts" '+
+      html+='<div class="mcell" data-tip="<b>'+s.id+' · '+c+'</b><br>'+(s.opt?'optional condition<br>':'')+r[0]+' of '+r[1]+' runs<br>0 conflicts" '+
         'style="background:'+bg+'"><div class="mv" style="color:'+fg+'">'+r[0]+"/"+r[1]+'</div><div class="ms">'+
-        (pct===1?"complete":pct>0?"partial":"not started")+'</div></div>'});
+        (pct===1?"complete":pct>0?"partial":s.opt?"optional":"not started")+'</div></div>'});
   });
   m.innerHTML=html;
 
@@ -885,6 +893,8 @@ function drawResults(){
   var rows=[];
   SCEN.forEach(function(s){cls.forEach(function(c){
     var d=D[c][s.id],p=d.med-D[c].C0.med;
+    if(d.src==="ph"){rows.push("<tr><td class='mono'>"+s.id+"</td><td>"+c+"</td><td class='muted' colspan='4'>not measured</td>"+
+      "<td class='mono'>"+d.runs[0]+"/"+d.runs[1]+"</td><td>"+chip(d.src)+"</td></tr>");return}
     rows.push("<tr><td class='mono'>"+s.id+"</td><td>"+c+"</td><td class='mono'>"+d.med.toFixed(3)+"</td><td class='mono'>"+
       (p>0.5?"+"+p.toFixed(3):"≈0")+"</td><td>"+famN(d.win)+"</td><td class='mono'>"+
       (d.ifd===null?"not_observed":d.ifd.toFixed(3))+"</td><td class='mono'>"+d.runs[0]+"/"+d.runs[1]+"</td><td>"+chip(d.src)+"</td></tr>")})});

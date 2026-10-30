@@ -17,8 +17,9 @@ Rules:
   - A run whose cross_checks are not "agree" (or whose lab verify failed) is excluded from every
     aggregate and named in a warning; the exit status is then 1.
   - src: "val" (shown as "complete") = target runs used, all clean; "pil" = 1 to target-1; "ph" = none.
-  - A cell with no usable runs keeps the placeholder values already in the page, with src "ph" and
-    runs [0, target]. No number is ever made up here.
+  - A cell with no usable runs keeps the placeholder values already in D (the page never draws them;
+    it shows the cell as "not measured"), with src "ph" and runs [0, target]. Its WIN is [0, 0, 0]:
+    no win split is carried for a cell nobody measured. No number is ever made up here.
   - win is the modal winner among IPv6/IPv4; a tie has no mode, is reported, and exits 1.
   - ifd is null when no run observed an inter-family delay (never 0); otherwise the median of the
     observed values only.
@@ -178,14 +179,13 @@ def r3(x: float) -> float:
     return round(x, 3)
 
 
-def build_cell(runs: list[Run], target: int, placeholder: dict, placeholder_win: list[int],
-               label: str, warn) -> tuple[dict, list[int], bool]:
+def build_cell(runs: list[Run], target: int, placeholder: dict, label: str, warn) -> tuple[dict, list[int], bool]:
     """(D cell, WIN cell, ok). ok is False when the cell needs a person (tie, used > target)."""
     setups = [r.setup_ms for r in runs if r.setup_ms is not None]
     if not runs or not setups:
         if runs:
             warn(f"{label}: {len(runs)} usable runs but none has a TCP setup time; keeping the placeholder")
-        return {**placeholder, "runs": [0, target], "src": "ph"}, list(placeholder_win), True
+        return {**placeholder, "runs": [0, target], "src": "ph"}, [0, 0, 0], True
     ok = True
     win = modal_winner(runs)
     if win is None:
@@ -325,7 +325,7 @@ class Export:
 def export(page_text: str, sessions: list[tuple[str, str, str]], runs_dir: Path = RUNS_DIR,
            repo: Path = REPO, target: int = EXPECTED_REPS, fixtures: Path = FIXTURES) -> Export:
     _, block, _ = split_page(page_text)
-    old_d, old_w = parse_existing(block)
+    old_d, _ = parse_existing(block)  # WIN is parsed only to check it matches D
     cells = load_cells(sessions, runs_dir)
     warnings: list[str] = []
     ok = True
@@ -339,7 +339,7 @@ def export(page_text: str, sessions: list[tuple[str, str, str]], runs_dir: Path 
                 warnings.append(f"excluded {run_id} ({why})")
                 ok = False
             d[c][s], win[c][s], cell_ok = build_cell([run for run, _ in cell.used], target, old_d[c][s],
-                                                     old_w[c][s], f"{c}/{s}", warnings.append)
+                                                     f"{c}/{s}", warnings.append)
             ok &= cell_ok
             ifdv[c][s] = ifd_values([run for run, _ in cell.used])
     for (c, s) in cells:
