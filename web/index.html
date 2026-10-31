@@ -14,7 +14,7 @@
   --glow: rgba(103,232,249,.15); --glow2: rgba(103,232,249,.06);
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;
   --ok: #3fb950; --warn: #d29922; --bad: #f0564a;
-  --radius: 10px; --radius-card: 14px; --radius-ctl: 8px; --ctl-h: 42px;
+  --radius: 10px; --radius-card: 14px; --radius-ctl: 8px; --ctl-h: 44px;
   --font-ui: "IBM Plex Sans", Arial, Helvetica, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
   color-scheme: dark;
@@ -93,6 +93,8 @@ button { font-family: inherit }
 .cnode[data-node="race-controller"] { transform: translateY(-60px) }
 .cnode[data-node="race-controller"]:hover { transform: translateY(-60px) scale(1.04) }
 .cnode-box { fill: #111320; stroke: var(--line2) }
+/* invisible hit area: keeps each map node at least 44 px tall when the map scales down on phones */
+.cnode .hit { fill: transparent; stroke: none }
 .cnode:hover .cnode-box { stroke: var(--accent-dim); fill: #151830 }
 .cnode-name { fill: var(--ink); font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 600; letter-spacing: 1.4px }
 .cnode-desc { fill: var(--ink3); font-family: "IBM Plex Sans", sans-serif; font-size: 11px }
@@ -214,7 +216,7 @@ button { font-family: inherit }
   display: flex; align-items: center; gap: 2px;
 }
 .topbar-nav button {
-  height: 34px; padding: 0 13px; border: 0; border-radius: var(--radius-ctl);
+  min-height: var(--ctl-h); padding: 0 13px; border: 0; border-radius: var(--radius-ctl);
   background: transparent; color: var(--ink3); font-size: 13px; cursor: pointer;
   font-weight: 500; transition: background .15s, color .15s; white-space: nowrap;
   font-family: var(--font-ui);
@@ -222,7 +224,7 @@ button { font-family: inherit }
 .topbar-nav button:hover { background: var(--surface2); color: var(--ink) }
 .topbar-nav button[aria-pressed="true"] { color: var(--accent); background: var(--accent-bg) }
 .topbar-hamburger {
-  display: none; width: 36px; height: 36px; border: 1px solid var(--line2); border-radius: var(--radius-ctl);
+  display: none; width: var(--ctl-h); height: var(--ctl-h); border: 1px solid var(--line2); border-radius: var(--radius-ctl);
   background: transparent; color: var(--ink2); cursor: pointer; align-items: center; justify-content: center;
 }
 .topbar-hamburger svg { width: 18px; height: 18px }
@@ -233,7 +235,7 @@ button { font-family: inherit }
 }
 .topbar-mobile-menu.open { display: flex }
 .topbar-mobile-menu button {
-  width: 100%; text-align: left; height: 42px; padding: 0 12px; border: 0; border-radius: var(--radius-ctl);
+  width: 100%; text-align: left; min-height: var(--ctl-h); padding: 0 12px; border: 0; border-radius: var(--radius-ctl);
   background: transparent; color: var(--ink2); font-size: 14px; cursor: pointer;
   font-weight: 500; font-family: var(--font-ui);
 }
@@ -379,7 +381,7 @@ tr:last-child td { border-bottom: 0 }
 .ctl .hint { display: block; font-size: 11.5px; color: var(--ink3); font-weight: 400; margin-top: 1px }
 .ctl .rngrow { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; align-items: center }
 .ctl .rngrow select { width: 100% }
-input[type=range] { width: 100%; min-width: 0; accent-color: var(--accent) }
+input[type=range] { width: 100%; min-width: 0; min-height: var(--ctl-h); margin: 0; accent-color: var(--accent) }
 select { background: var(--surface2); color: var(--ink); border: 1px solid var(--line2); border-radius: var(--radius-ctl);
   padding: 7px 9px; font-size: 13px; min-height: var(--ctl-h) }
 .val { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink); min-width: 62px; text-align: right;
@@ -457,7 +459,8 @@ select { background: var(--surface2); color: var(--ink); border: 1px solid var(-
 .tlkey span { display: inline-flex; align-items: center; gap: 7px }
 .tlkey i { width: 18px; height: 6px; border-radius: 3px; flex: 0 0 auto }
 
-details summary { cursor: pointer; font-family: var(--font-mono); font-size: 13px; color: var(--ink2) }
+details summary { cursor: pointer; font-family: var(--font-mono); font-size: 13px; color: var(--ink2);
+  min-height: var(--ctl-h); display: flex; align-items: center }
 details[open] summary { margin-bottom: 10px }
 details ul { margin: 0; padding-left: 19px; color: var(--ink2); font-size: 13.5px }
 .foot { border-top: 1px solid var(--line); margin-top: 56px; padding-block: 22px 40px; font-size: 13px; color: var(--ink3) }
@@ -589,6 +592,7 @@ section[id^="p-"] { padding-top: 48px }
 
     <!-- RACE CONTROLLER (center) -->
     <g class="cnode" data-node="race-controller">
+      <rect class="hit" x="430" y="236" width="140" height="132"/>
       <circle cx="500" cy="300" r="42" fill="none" stroke="#1b4a56" stroke-width="1" opacity=".55"/>
       <circle cx="500" cy="300" r="30" fill="#0e1b24" stroke="var(--accent-dim)" stroke-width="1.4"/>
       <rect x="492" y="292" width="16" height="16" rx="2.5" stroke="#67e8f9" stroke-width="1.5" fill="none"/>
@@ -599,6 +603,7 @@ section[id^="p-"] { padding-top: 48px }
 
     <!-- PCAP-SNIFFER node -->
     <g class="cnode" data-node="pcap-sniffer">
+      <rect class="hit" x="100" y="348" width="200" height="126"/>
       <rect class="cnode-box" x="100" y="360" width="200" height="100" rx="10"/>
       <rect x="120" y="378" width="32" height="32" rx="6" fill="var(--bg2)" stroke="var(--line2)"/>
       <path d="M128 394h3l2-6 3 12 3-8 2 2h3" stroke="#67e8f9" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
@@ -608,6 +613,7 @@ section[id^="p-"] { padding-top: 48px }
 
     <!-- ORIGIN-SVC node -->
     <g class="cnode" data-node="origin-svc">
+      <rect class="hit" x="700" y="348" width="200" height="126"/>
       <rect class="cnode-box" x="700" y="360" width="200" height="100" rx="10"/>
       <rect x="720" y="378" width="32" height="32" rx="6" fill="var(--bg2)" stroke="var(--line2)"/>
       <rect x="729" y="386" width="14" height="6" rx="1.5" stroke="#67e8f9" stroke-width="1.3" fill="none"/>
@@ -756,18 +762,20 @@ section[id^="p-"] { padding-top: 48px }
           <span class="ac-tag">Linux netns</span>
         </summary>
         <div class="arch-body">
-          <p>The lab runs inside two Linux <span class="hl">network namespaces</span> on one machine — no VMs, no containers, no external hosts. This gives us deterministic, repeatable conditions.</p>
-          <code class="ac-code"><b>hl-client</b>   netns with curl / Chromium (via Playwright)
-  ├─ veth-c6  →  2001:db8:28:6::1/64    (IPv6)
-  └─ veth-c4  →  192.0.2.1/24           (IPv4)
+          <p>The lab runs inside two Linux <span class="hl">network namespaces</span> on one machine: no VMs, no containers, no external hosts. Names and addresses come from one file, <code>src/lab/lab.env</code>.</p>
+          <code class="ac-code"><b>hl-client</b>   curl / Chromium (via Playwright), tcpdump
+  ├─ hl-v6c   2001:db8:28:6::1/64   (IPv6 link, impaired by scenarios)
+  ├─ hl-v4c   192.0.2.1/24          (IPv4 link, impaired by scenarios)
+  └─ hl-ctlc  198.51.100.1/24       (control link for DNS, never impaired)
 
-<b>hl-server</b>   netns running nginx :80
-  ├─ veth-s6  →  2001:db8:28:6::2/64    (IPv6)
-  └─ veth-s4  →  192.0.2.2/24           (IPv4)</code>
+<b>hl-server</b>   nginx :80, DNS responder :53
+  ├─ hl-v6s   2001:db8:28:6::2/64   + hl-ifb6
+  ├─ hl-v4s   192.0.2.2/24          + hl-ifb4
+  └─ hl-ctls  198.51.100.53/24</code>
           <p><span class="ac-label">setup.sh</span></p>
-          <p>Creates both namespaces, the four veth pairs, assigns addresses, brings interfaces up, configures routing tables, and starts nginx in <code>hl-server</code>. A <span class="hl">20 ms baseline RTT</span> is built from 10 ms in each direction: <code>tc qdisc add dev veth-s6 root netem delay 10ms</code> shapes the server's egress, and the client-to-server direction is mirrored through an IFB device carrying the same 10 ms. Both the IPv4 and IPv6 server-side interfaces are shaped this way.</p>
+          <p>Creates both namespaces and the three veth pairs, assigns addresses, adds default routes in <code>hl-client</code> (Chromium checks for an IPv6 route to a global address) and static <code>nud permanent</code> neighbour entries on the v4 and v6 links. It creates <code>hl-ifb4</code>/<code>hl-ifb6</code> inside <code>hl-server</code> and redirects each server end's ingress to its ifb, then sets the <span class="hl">20 ms baseline RTT</span>: 10 ms each way, as netem on the server end (server to client) and on its ifb (client to server). It writes the lab-only <code>resolv.conf</code> and <code>gai.conf</code> under <code>/etc/netns/hl-client/</code>, then runs <code>verify.sh up 20 20</code>, which measures the real RTT. nginx and the DNS responder are started by the orchestrator, not by setup.sh.</p>
           <p><span class="ac-label">teardown.sh</span></p>
-          <p>Deletes both namespaces and all interfaces cleanly, verified by checking <code>ip netns list</code> returns empty.</p>
+          <p>Deletes both namespaces, which removes their veths, qdiscs, routes and neighbour entries, and removes the lab-only resolver files. It then runs <code>verify.sh down</code>, which confirms no <code>hl-</code> namespace or interface is left on the host.</p>
         </div>
       </details>
 
@@ -779,18 +787,17 @@ section[id^="p-"] { padding-top: 48px }
           <span class="ac-tag">dnslib · Python</span>
         </summary>
         <div class="arch-body">
-          <p>A custom authoritative DNS server built with Python's <span class="hl">dnslib</span> library, bound to <code>198.51.100.53</code> on a control-plane link outside the data path. It serves exactly one zone:</p>
+          <p><code>src/dns/hl_dns.py</code> is a small authoritative server built on Python's <span class="hl">dnslib</span>, listening on UDP at <code>198.51.100.53</code> on the control link, outside the impaired data path. It serves one name with TTL 0:</p>
           <code class="ac-code"><b>www.hl.test</b>
   A      192.0.2.2           ← IPv4 server address
   AAAA   2001:db8:28:6::2    ← IPv6 server address</code>
-          <p><span class="ac-label">Key functions</span></p>
+          <p><span class="ac-label">How it works</span></p>
           <ul>
-            <li><span class="hl">resolve(request)</span> — parses the incoming query, matches <code>www.hl.test</code>, returns both A and AAAA records in a single response.</li>
-            <li><span class="hl">delay_aaaa(ms)</span> — for scenario S6, holds the AAAA answer for a configurable number of milliseconds while returning the A record immediately. This tests whether clients wait for the slower record.</li>
-            <li>Uses UDP only (no TCP fallback needed — responses are well under 512 bytes).</li>
-            <li>Resolver configured in <code>hl-client</code> via <code>/etc/resolv.conf</code> pointing to <code>198.51.100.53</code>.</li>
+            <li><span class="hl">answer(data, zone)</span> builds the reply to one query. An A query gets the A record and an AAAA query gets the AAAA record, each in its own response. Other names under <code>hl.test</code> get NXDOMAIN; names outside it are refused.</li>
+            <li>A per-type delay is set on the command line, e.g. <code>--delay AAAA=300</code> for S6. The AAAA reply is held for 300 ms while the A reply goes out at once.</li>
+            <li>The client finds it through <code>/etc/netns/hl-client/resolv.conf</code>, which <code>ip netns exec</code> mounts as <code>/etc/resolv.conf</code> inside <code>hl-client</code> only.</li>
           </ul>
-          <p>Chromium ignores the system resolver and uses its own built-in resolver, but still resolves <code>www.hl.test</code> against the same DNS server. Verified: across 140 Chromium runs, IPv6 was attempted first in 140/140 cases.</p>
+          <p>Chromium resolves with its own built-in DNS client rather than glibc, but it reads the same <code>resolv.conf</code> and queries the same server. Its NetLog showed IPv6 ordered first in 140 of 140 runs.</p>
         </div>
       </details>
 
@@ -802,23 +809,20 @@ section[id^="p-"] { padding-top: 48px }
           <span class="ac-tag">netem · IFB</span>
         </summary>
         <div class="arch-body">
-          <p>Each scenario applies faults on the <span class="hl">server side</span> so the client's network stack is never modified between runs — the client behaves as it would in the real world.</p>
+          <p>Every impairment is applied on the <span class="hl">server side</span>, so the client interfaces, where tcpdump captures, carry no qdisc. A netem qdisc on the client's own egress would act before tcpdump sees the packet, hiding dropped SYNs and timestamping delayed ones late.</p>
           <p><span class="ac-label">Latency injection</span></p>
-          <code class="ac-code"><em># S2: 620 ms target RTT = 310 ms in each direction
-#     (300 ms added each way on top of the 10 ms baseline)</em>
-ip netns exec hl-server \
-  tc qdisc change dev veth-s6 root netem <b>delay 310ms</b>   <em># egress</em>
-ip netns exec hl-server \
-  tc qdisc change dev ifb6    root netem <b>delay 310ms</b>   <em># ingress</em></code>
-          <p>Ingress shaping uses an <span class="hl">IFB (Intermediate Functional Block)</span> device — Linux cannot apply netem directly to incoming packets, so we mirror ingress to the IFB and shape there.</p>
+          <code class="ac-code"><em># S2: +600 ms on IPv6 → 620 ms target RTT = 310 ms each way</em>
+src/lab/netem.sh v6 310 0       <em># family, delay each way (ms), loss %</em>
+<em># which runs, inside hl-server:</em>
+tc -n hl-server qdisc replace dev <b>hl-v6s</b>  root netem <b>delay 310ms</b>   <em># server → client</em>
+tc -n hl-server qdisc replace dev <b>hl-ifb6</b> root netem <b>delay 310ms</b>   <em># client → server</em></code>
+          <p>Linux can't delay ingress traffic directly, so the server end's ingress is redirected to an <span class="hl">ifb (Intermediate Functional Block)</span> device, and netem shapes it there as egress.</p>
           <p><span class="ac-label">Blackhole injection</span></p>
-          <code class="ac-code"><em># S1: IPv6 blackhole — packets arrive at the server but are never answered</em>
-ip netns exec hl-server \
-  ip -6 neighbour replace 2001:db8:28:6::1 \
-  dev veth-s6 <b>nud failed</b>
-<em># Static neighbour entry with 'nud failed' makes the kernel drop
-# reply packets silently — the SYN arrives, but the SYN-ACK is never sent</em></code>
-          <p>This is <em>not</em> a firewall drop — it simulates a real blackhole where the network silently discards packets. The SYN reaches the server interface but the reply never routes back.</p>
+          <code class="ac-code"><em># S1: IPv6 blackhole, 100% loss in both directions on the v6 link</em>
+src/lab/netem.sh v6 10 100
+tc -n hl-server qdisc replace dev hl-v6s  root netem delay 10ms <b>loss 100%</b>
+tc -n hl-server qdisc replace dev hl-ifb6 root netem delay 10ms <b>loss 100%</b></code>
+          <p>The client's SYN leaves <code>hl-client</code> and appears in the capture, then is dropped on the server's ingress, so no SYN-ACK ever comes back. The static <code>nud permanent</code> neighbour entries matter here: without them the loss would also stop ARP/ND, and the client would see "host unreachable" errors instead of a silent drop. <code>verify.sh</code> confirms the drop before each run.</p>
           <p><span class="ac-label">Scenarios → impairments</span></p>
           <div class="arch-stat-row">
             <div class="arch-stat"><div class="as-v">C0</div><div class="as-k">no faults</div></div>
@@ -840,20 +844,20 @@ ip netns exec hl-server \
           <span class="ac-tag">orchestrate.py</span>
         </summary>
         <div class="arch-body">
-          <p>The central controller that drives every measurement. Called as:</p>
-          <code class="ac-code">python3 orchestrate.py <b>--scenario S1</b> <b>--client curl</b> <b>--reps 20</b></code>
-          <p><span class="ac-label">Per-run flow (repeated 20× per scenario×client)</span></p>
+          <p>The controller that drives every measurement. It is run with sudo (never <code>sudo -E</code>, which would pass the shell's ROS variables through), and <code>run_matrix.py</code> calls it once per client and scenario:</p>
+          <code class="ac-code">.venv/bin/python src/runner/orchestrate.py <b>--client curl</b> <b>--scenario S1</b> <b>--reps 20</b></code>
+          <p><span class="ac-label">One run: run_one()</span></p>
           <ol style="padding-left:18px;margin:6px 0 12px">
-            <li><span class="hl">apply_scenario()</span> — calls the impairment engine to set up the correct tc/netem rules and/or blackhole entries for this scenario.</li>
-            <li><span class="hl">verify_fault()</span> — runs <code>verify.sh</code> to confirm the impairment is active (RTT within tolerance, blackhole unreachable), aborting the run if the lab is not in the expected state.</li>
-            <li><span class="hl">start_capture()</span> — launches <code>tcpdump</code> in <code>hl-client</code> writing to a per-run pcap file: <code>data/captures/&lt;timestamp&gt;_&lt;scenario&gt;_&lt;client&gt;_r&lt;N&gt;.pcap</code></li>
-            <li><span class="hl">run_client()</span> — executes <code>curl -so /dev/null http://www.hl.test/</code> or launches Chromium via <span class="hl">Playwright</span> to navigate to <code>http://www.hl.test/</code>.</li>
-            <li><span class="hl">stop_capture()</span> — terminates tcpdump, waits for the pcap file to flush.</li>
-            <li><span class="hl">restore_baseline()</span> — resets all netem rules and neighbour entries to the clean C0 state.</li>
-            <li><span class="hl">verify_clean()</span> — runs <code>verify.sh</code> again to confirm the baseline is restored before the next run.</li>
-            <li><span class="hl">parse_capture()</span> — the pcap parser extracts timing metrics and writes the run record.</li>
+            <li><span class="hl">Apply the scenario</span>: <code>netem.sh</code> for v4 and for v6, with the delay and loss from <code>src/config/scenarios.yaml</code>.</li>
+            <li><span class="hl">Pre-run verify</span>: <code>verify.sh up &lt;v4 target&gt; &lt;v6 target&gt;</code> measures the real RTT, or confirms 100% loss on a blackholed family.</li>
+            <li><span class="hl">start_capture()</span>: tcpdump in <code>hl-client</code> (<code>-i any --immediate-mode</code>), writing <code>captures/&lt;run_id&gt;.pcap</code>, where run_id is <code>&lt;UTC time&gt;_&lt;scenario&gt;_&lt;client&gt;_r&lt;NN&gt;</code>.</li>
+            <li><span class="hl">Run the client</span> inside <code>hl-client</code> as the normal user, with ROS variables stripped from its environment: <code>curl -q -sS --noproxy '*' --max-time 10 -o /dev/null -w '…' http://www.hl.test/</code>, or Chromium via Playwright loading <code>http://www.hl.test/chromium.html</code>.</li>
+            <li><span class="hl">stop_capture()</span>: stops tcpdump and reads its dropped and written packet counts.</li>
+            <li><span class="hl">restore_baseline()</span>: <code>netem.sh</code> back to 10 ms each way, no loss, on both families.</li>
+            <li><span class="hl">Post-run verify</span>: <code>verify.sh up 20 20</code>.</li>
+            <li><span class="hl">parse()</span> from <code>parse_pcap.py</code> reads this run's time window from the pcap; <span class="hl">build_record()</span> computes the metrics and cross-checks, and the record is validated against the schema before it is written.</li>
           </ol>
-          <p>If any verify step fails, the orchestrator aborts that run, re-runs teardown/setup, and retries. This has never triggered in the 280-run dataset — every pre- and post-verify passed.</p>
+          <p>The orchestrator doesn't retry. If a verify fails, it restores the baseline and stops the session, and an incomplete capture stops it too. Every run in the 280-run dataset records <code>pre_verify_ok</code> and <code>post_restore_verify_ok</code> as true.</p>
         </div>
       </details>
 
@@ -862,26 +866,25 @@ ip netns exec hl-server \
         <summary>
           <span class="ac-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
           Pcap parser
-          <span class="ac-tag">scapy · Python</span>
+          <span class="ac-tag">struct · dnslib</span>
         </summary>
         <div class="arch-body">
-          <p>After each run, the parser opens the pcap and extracts timestamps from the TCP handshake packets.</p>
+          <p>After each run, <code>src/analysis/parse_pcap.py</code> reads the capture with its own small pcap reader (Python <code>struct</code>, no scapy or libpcap). It decodes Linux "cooked" (SLL2) frames, IPv4/IPv6, TCP and UDP, and uses <span class="hl">dnslib</span> only to decode DNS messages.</p>
           <p><span class="ac-label">What it extracts</span></p>
-          <code class="ac-code">for pkt in rdpcap(pcap_path):
-  if TCP in pkt and pkt[TCP].flags == <b>'S'</b>:     <em># SYN</em>
-    record syn_time, dst_addr, dst_port
-  if TCP in pkt and pkt[TCP].flags == <b>'SA'</b>:    <em># SYN-ACK</em>
-    record synack_time, src_addr
-  if TCP in pkt and pkt[TCP].flags == <b>'A'</b>:     <em># ACK (handshake done)</em>
-    record ack_time → this family's setup is complete</code>
-          <p><span class="ac-label">Computed metrics</span></p>
+          <code class="ac-code">linktype, packets = <b>read_pcap</b>(path)          <em># every frame, ns timestamps</em>
+timeline = <b>analyse</b>(linktype, packets, window)
+  <b>_track_tcp</b>()   <em># one Attempt per connection: first SYN, retransmits,</em>
+                 <em># SYN-ACK, RST, completing ACK (timestamps only)</em>
+  <b>_track_dns</b>()   <em># pairs each query with its answer, per record type</em></code>
+          <p><span class="ac-label">Computed metrics (metrics.py)</span></p>
+          <p>metrics.py decides which attempt won and labels the others <code>abandoned</code>, <code>failed</code> or <code>no_reply</code>, then computes:</p>
           <ul>
-            <li><span class="hl">tcp_setup_time_ms</span> — time from the first SYN (of any family) to the completing ACK of the winning family. This is the user-visible connection delay.</li>
-            <li><span class="hl">inter_family_attempt_delay_ms</span> — time between the first SYN (preferred family) and the second SYN (fallback family). Measures how long the client waited before trying the backup path. Set to <code>not_observed</code> when only one family was attempted.</li>
-            <li><span class="hl">dns_time_ms</span> — time from the first DNS query packet to the last DNS answer, measuring total resolution time including any AAAA delay.</li>
-            <li><span class="hl">winning_family</span> — which address family completed the handshake: <code>ipv6</code> or <code>ipv4</code>.</li>
+            <li><span class="hl">tcp_setup_time_ms</span>: from the run's first SYN (of either family) to the ACK completing the winning handshake. DNS time is not included.</li>
+            <li><span class="hl">inter_family_attempt_delay_ms</span>: the second family's first SYN minus the first family's first SYN. It is <code>not_observed</code> when only one family was tried.</li>
+            <li><span class="hl">dns_time_ms</span>: from the first DNS query to the last answer, so S6's held AAAA answer shows up here.</li>
+            <li><span class="hl">winning_family</span>: the family whose handshake completed, <code>v6</code> or <code>v4</code>.</li>
           </ul>
-          <p>Every timestamp comes from the pcap's packet headers (kernel-level precision), not from the client's own reporting.</p>
+          <p>Every timestamp is the capture's own packet timestamp (microsecond resolution), not the client's report.</p>
         </div>
       </details>
 
@@ -915,12 +918,12 @@ ip netns exec hl-server \
 }</code>
           <p><span class="ac-label">Status values</span></p>
           <ul>
-            <li><code>computed</code> — derived from pcap timestamps</li>
-            <li><code>not_observed</code> — the event didn't happen (e.g., no fallback attempted → no inter-family delay)</li>
-            <li><code>conflict</code> — parser found a discrepancy (triggers investigation)</li>
+            <li><code>computed</code>: derived from the capture</li>
+            <li><code>not_observed</code>: the event did not appear in the capture (for example, no second family tried, so no inter-family delay)</li>
+            <li><code>not_applicable</code>: the field has no per-run value (the scenario penalty is a per-scenario aggregate)</li>
           </ul>
           <p><span class="ac-label">Cross-checks block</span></p>
-          <p>Each run record includes automated checks that compare the client's own report against what the pcap shows: did the client claim success? Does its reported remote IP match the SYN-ACK source? Were there unexpected TCP streams? Were any kernel-dropped packets flagged by tcpdump? If any check disagrees, the run is flagged. Across 280 runs: <span class="hl">0 conflicts</span>.</p>
+          <p>Each record compares the client's own report with the capture, field by field: winning family, success, HTTP status, the client's connected address against the winning handshake's destination, unexpected traffic (port 443, QUIC or other ports), and capture completeness (tcpdump dropped or failed to write no packet). Any disagreement is stored as a conflict with both values, and a capture conflict stops the session. Across 280 runs: <span class="hl">0 conflicts</span>.</p>
         </div>
       </details>
 
@@ -932,15 +935,20 @@ ip netns exec hl-server \
           <span class="ac-tag">Playwright</span>
         </summary>
         <div class="arch-body">
-          <p>Chromium doesn't use the system's TCP stack preferences or gai.conf — it has its own <span class="hl">built-in DNS client</span> and <span class="hl">Happy Eyeballs implementation</span>. This is why it's tested separately from curl.</p>
-          <p><span class="ac-label">How it runs</span></p>
-          <code class="ac-code">browser = playwright.chromium.launch(
-    args=[<b>'--no-sandbox'</b>])
-page = browser.new_page()
-page.goto(<b>'http://www.hl.test/'</b>, wait_until='networkidle')</code>
-          <p>Chromium's built-in DNS client takes its nameserver from <code>/etc/resolv.conf</code> inside <code>hl-client</code>, so it queries the same responder at <code>198.51.100.53</code> that curl does. What differs is everything after the answer: Chromium sorts the addresses itself and runs its own connection race instead of deferring to glibc.</p>
+          <p>Chromium doesn't use glibc's <code>getaddrinfo</code> or the lab's <code>gai.conf</code> here. It has its own <span class="hl">built-in DNS client</span> and its own connection logic, which is why it is measured separately from curl.</p>
+          <p><span class="ac-label">How it runs (client_chromium.py)</span></p>
+          <code class="ac-code">browser = p.chromium.launch(
+    channel=<b>"chromium"</b>, headless=True,      <em># full Chromium, new headless mode</em>
+    chromium_sandbox=False,
+    args=[<b>"--disable-quic"</b>,
+          <b>"--disable-features=</b>&lt;Playwright's list&gt;<b>,DnsOverHttps"</b>,
+          "--log-net-log=&lt;run_id&gt;_netlog.json",
+          "--net-log-capture-mode=Default"],
+    ignore_default_args=[&lt;Playwright's own --disable-features&gt;])
+page.goto(<b>"http://www.hl.test/chromium.html"</b>, wait_until="load", timeout=15000)</code>
+          <p>Chromium honours only one <code>--disable-features</code> switch, so the runner merges its own entries into Playwright's list instead of adding a second one. QUIC, Secure DNS and HTTPS-Upgrades are off. After each run it reads the browser's command line back from the NetLog and fails the run if those settings are missing.</p>
           <p><span class="ac-label">Key difference from curl</span></p>
-          <p>The captures show Chromium opening a <span class="hl">second IPv6 attempt at around 250 ms</span> before it tries IPv4 at all — two abandoned IPv6 sockets per S1 run, against curl's one. Its median fallback to IPv4 lands at <span class="hl">301.067 ms</span> against curl's <span class="hl">200.956 ms</span>, which leaves Chromium about <span class="hl">100 ms slower to reach the working path</span> in blackhole conditions. We report the timings we measured and do not infer the internal timer that produces them.</p>
+          <p>The captures show Chromium opening a <span class="hl">second IPv6 attempt at around 250 ms</span> before it tries IPv4 at all, so each S1 run has two abandoned IPv6 attempts against curl's one. Its median fallback to IPv4 lands at <span class="hl">301.067 ms</span> against curl's <span class="hl">200.956 ms</span>, so Chromium reaches the working path about <span class="hl">100 ms later</span> under a blackhole. We report the timings we measured and don't infer the internal timer that produces them.</p>
           <div class="arch-stat-row">
             <div class="arch-stat"><div class="as-v">140</div><div class="as-k">Chromium runs</div></div>
             <div class="arch-stat"><div class="as-v">140/140</div><div class="as-k">IPv6 tried first</div></div>
@@ -960,23 +968,23 @@ page.goto(<b>'http://www.hl.test/'</b>, wait_until='networkidle')</code>
           <p>Two scripts turn 280 individual run records into the figures on this site.</p>
           <p><span class="ac-label">summarise.py</span></p>
           <ul>
-            <li>Reads every <code>data/generated/runs/*.json</code> file</li>
-            <li>Groups by (scenario, client), computes <span class="hl">median</span> TCP setup time, median inter-family delay, winner distribution</li>
-            <li>Validates that all cross-checks pass (0 conflicts required)</li>
-            <li>Outputs <code>data/generated/summary.json</code></li>
+            <li>Reads only the 14 sessions listed in <code>docs/dataset.md</code> from <code>data/generated/runs/</code></li>
+            <li>Groups by (scenario, client) and computes median TCP setup time, inter-family delay, winner counts and the scenario penalty against the client's own C0</li>
+            <li>Stops with an error on any cross-check conflict, failed verify or missing run</li>
+            <li>Writes <code>data/generated/summary/summary.json</code> and <code>runs.json</code>; <code>dashboard.py</code> builds the Plotly dashboard from the same loader</li>
           </ul>
           <p><span class="ac-label">export_web.py</span></p>
           <ul>
-            <li>Reads summary.json and the individual run records</li>
-            <li>Generates JavaScript data objects (D, WIN, IFDV, RUNS, CAPS) baked between markers in the static HTML</li>
-            <li>Every inter-family dot on the charts is a <span class="hl">real per-run value</span> with its run ID — no jitter, no synthetic points</li>
-            <li>284 automated tests verify the export against the source data</li>
+            <li>Reads the same 14 sessions' run records directly, using summarise.py's loader, and leaves out any run with a conflict or a failed verify, naming it</li>
+            <li>Rewrites only the JavaScript data objects (D, WIN, IFDV, RUNS, CAPS) between the generated-data markers in this static page</li>
+            <li>Every inter-family dot on the charts is a <span class="hl">real per-run value</span> with its run ID: no jitter, no synthetic points</li>
+            <li>The repository has 285 automated tests; 20 of them cover export_web.py</li>
           </ul>
           <div class="arch-stat-row">
             <div class="arch-stat"><div class="as-v">280</div><div class="as-k">runs total</div></div>
             <div class="arch-stat"><div class="as-v">14</div><div class="as-k">sessions</div></div>
             <div class="arch-stat"><div class="as-v">0</div><div class="as-k">conflicts</div></div>
-            <div class="arch-stat"><div class="as-v">284</div><div class="as-k">tests pass</div></div>
+            <div class="arch-stat"><div class="as-v">285</div><div class="as-k">tests pass</div></div>
           </div>
         </div>
       </details>
@@ -990,7 +998,7 @@ page.goto(<b>'http://www.hl.test/'</b>, wait_until='networkidle')</code>
       <div class="sectitle"><div class="eyebrow">Our work</div><h2>What we built</h2><p class="lead">A measurement harness that can state a number and then prove it.</p></div>
       <div class="grid g2">
         <div class="card stack g8"><span class="chip info"><span class="dt"></span>Lab</span><h3>An isolated two-stack network</h3><p class="small">Linux network namespaces give a client and a server their own IPv4 and IPv6 addresses, plus a separate control link for DNS that is never impaired.</p></div>
-        <div class="card stack g8"><span class="chip info"><span class="dt"></span>Impairment</span><h3>Faults we can switch on and off</h3><p class="small">Blackholes are enforced with static neighbour entries and verified at 100% loss. Latency is applied with netem on the server side.</p></div>
+        <div class="card stack g8"><span class="chip info"><span class="dt"></span>Impairment</span><h3>Faults we can switch on and off</h3><p class="small">Blackholes are 100% netem loss on the server side, kept a silent drop by static neighbour entries, and verified before every run. Latency is applied with netem on the server side, in both directions.</p></div>
         <div class="card stack g8"><span class="chip info"><span class="dt"></span>Harness</span><h3>A runner that refuses to guess</h3><p class="small">Each run applies a scenario, verifies it, captures packets, runs the client, restores the baseline, verifies again, then parses the capture.</p></div>
         <div class="card stack g8"><span class="chip info"><span class="dt"></span>Evidence</span><h3>Every value carries its status</h3><p class="small">Results are stored as a value with a status rather than a bare number, alongside a cross-check block.</p></div>
       </div>
@@ -1321,30 +1329,77 @@ var FIND=[
   {chip:["S1 · IPv6 blackhole","ok"],t:"curl falls back after about 200 ms",b:"The IPv6 SYN goes unanswered. Across 20 runs curl opens IPv4 a median 200.956 ms later and completes the handshake at 222.221 ms. Chromium falls back later: IPv4 at a median 301.067 ms, setup 322.392 ms."},
   {chip:["S3 · IPv6 +150 ms","ok"],t:"A slower IPv6 path still wins",b:"At a 170 ms target round-trip time, IPv6 completes before the fallback timer fires, so IPv4 is never attempted."},
   {chip:["S4 and S5 · IPv4 impaired","ok"],t:"IPv4 faults stay invisible while IPv6 is healthy",b:"Because the resolver sorts IPv6 first, the client succeeds before it ever needs IPv4. A broken IPv4 path is never exercised."},
-  {chip:["S6 · AAAA delayed","ok"],t:"Both clients wait for the slow AAAA answer",b:"DNS time rises to a median 302.07 ms for curl and 301.851 ms for Chromium. Setup time, which excludes DNS, stays near 20 ms."}
+  {chip:["S6 · AAAA delayed","ok"],t:"Both clients wait for the slow AAAA answer",b:"DNS time rises to a median 302.07 ms for curl and 301.851 ms for Chromium, and in every run both send their first SYN only after the AAAA answer, not on the A record that arrived about 1 ms in. Setup time, which excludes DNS, stays near 20 ms (20.812 and 21.317 ms)."}
 ];
+/* === HAPPYLAB DATA START — generated by export_web.py, do not edit by hand === */
+/* 280 runs from the 14 sessions in docs/dataset.md; runs dated 2026-10-26; code ecba28c */
+/* med = median setup ms · win = winning family · ifd = inter-family delay median (null = not observed)
+   runs = completed/target · src = provenance key */
 var D={
-  curl:{C0:{med:20.697,win:"v6",ifd:null,runs:[20,20],src:"val"},S1:{med:222.221,win:"v4",ifd:200.956,runs:[20,20],src:"val"},S2:{med:222.188,win:"v4",ifd:200.956,runs:[20,20],src:"val"},S3:{med:171.171,win:"v6",ifd:null,runs:[20,20],src:"val"},S4:{med:20.715,win:"v6",ifd:null,runs:[20,20],src:"val"},S5:{med:20.697,win:"v6",ifd:null,runs:[20,20],src:"val"},S6:{med:20.812,win:"v6",ifd:null,runs:[20,20],src:"val"},X1:{med:null,win:null,ifd:null,runs:[0,20],src:"ph"}},
-  chromium:{C0:{med:20.135,win:"v6",ifd:null,runs:[20,20],src:"val"},S1:{med:322.392,win:"v4",ifd:301.067,runs:[20,20],src:"val"},S2:{med:321.986,win:"v4",ifd:301.12,runs:[20,20],src:"val"},S3:{med:171.109,win:"v6",ifd:null,runs:[20,20],src:"val"},S4:{med:20.139,win:"v6",ifd:null,runs:[20,20],src:"val"},S5:{med:20.139,win:"v6",ifd:null,runs:[20,20],src:"val"},S6:{med:21.317,win:"v6",ifd:null,runs:[20,20],src:"val"},X1:{med:null,win:null,ifd:null,runs:[0,20],src:"ph"}}
+  curl:{
+    C0:{med:20.697,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S1:{med:222.221,win:"v4",ifd:200.956,runs:[20,20],src:"val"},
+    S2:{med:222.188,win:"v4",ifd:200.956,runs:[20,20],src:"val"},
+    S3:{med:171.171,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S4:{med:20.715,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S5:{med:20.697,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S6:{med:20.812,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    X1:{med:null,win:null,ifd:null,runs:[0,20],src:"ph"}
+  },
+  chromium:{
+    C0:{med:20.135,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S1:{med:322.392,win:"v4",ifd:301.067,runs:[20,20],src:"val"},
+    S2:{med:321.986,win:"v4",ifd:301.12,runs:[20,20],src:"val"},
+    S3:{med:171.109,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S4:{med:20.139,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S5:{med:20.139,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    S6:{med:21.317,win:"v6",ifd:null,runs:[20,20],src:"val"},
+    X1:{med:null,win:null,ifd:null,runs:[0,20],src:"ph"}
+  }
 };
-var WIN={curl:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[0,0,0]},chromium:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[0,0,0]}};
-var IFDV={curl:{C0:[],S1:[["20261026T192924Z_S1_curl_r01",200.405],["20261026T192939Z_S1_curl_r02",200.722],["20261026T192953Z_S1_curl_r03",200.933],["20261026T193008Z_S1_curl_r04",200.433],["20261026T193022Z_S1_curl_r05",200.956],["20261026T193037Z_S1_curl_r06",200.772],["20261026T193051Z_S1_curl_r07",200.956],["20261026T193106Z_S1_curl_r08",200.976],["20261026T193120Z_S1_curl_r09",201.336],["20261026T193135Z_S1_curl_r10",201.542],["20261026T193149Z_S1_curl_r11",200.942],["20261026T193204Z_S1_curl_r12",201.07],["20261026T193219Z_S1_curl_r13",201.954],["20261026T193233Z_S1_curl_r14",201.399],["20261026T193248Z_S1_curl_r15",201.92],["20261026T193302Z_S1_curl_r16",200.924],["20261026T193317Z_S1_curl_r17",201.972],["20261026T193331Z_S1_curl_r18",200.956],["20261026T193346Z_S1_curl_r19",201.081],["20261026T193400Z_S1_curl_r20",200.942]],S2:[["20261026T193931Z_S2_curl_r01",201.98],["20261026T193944Z_S2_curl_r02",200.469],["20261026T193957Z_S2_curl_r03",200.956],["20261026T194010Z_S2_curl_r04",200.953],["20261026T194024Z_S2_curl_r05",200.984],["20261026T194037Z_S2_curl_r06",200.948],["20261026T194050Z_S2_curl_r07",200.974],["20261026T194103Z_S2_curl_r08",202.046],["20261026T194116Z_S2_curl_r09",201.975],["20261026T194129Z_S2_curl_r10",200.412],["20261026T194142Z_S2_curl_r11",200.968],["20261026T194155Z_S2_curl_r12",200.948],["20261026T194208Z_S2_curl_r13",200.925],["20261026T194222Z_S2_curl_r14",200.956],["20261026T194235Z_S2_curl_r15",200.81],["20261026T194248Z_S2_curl_r16",200.925],["20261026T194301Z_S2_curl_r17",201.975],["20261026T194314Z_S2_curl_r18",201.939],["20261026T194327Z_S2_curl_r19",201.069],["20261026T194340Z_S2_curl_r20",200.926]],S3:[],S4:[],S5:[],S6:[],X1:[]},chromium:{C0:[],S1:[["20261026T193420Z_S1_chromium_r01",301.266],["20261026T193435Z_S1_chromium_r02",301.421],["20261026T193450Z_S1_chromium_r03",300.23],["20261026T193506Z_S1_chromium_r04",301.059],["20261026T193521Z_S1_chromium_r05",301.081],["20261026T193537Z_S1_chromium_r06",301.042],["20261026T193552Z_S1_chromium_r07",300.287],["20261026T193607Z_S1_chromium_r08",301.199],["20261026T193622Z_S1_chromium_r09",300.841],["20261026T193638Z_S1_chromium_r10",302.905],["20261026T193653Z_S1_chromium_r11",301.101],["20261026T193709Z_S1_chromium_r12",300.775],["20261026T193724Z_S1_chromium_r13",301.076],["20261026T193739Z_S1_chromium_r14",300.421],["20261026T193754Z_S1_chromium_r15",300.968],["20261026T193810Z_S1_chromium_r16",300.353],["20261026T193825Z_S1_chromium_r17",301.705],["20261026T193841Z_S1_chromium_r18",301.587],["20261026T193856Z_S1_chromium_r19",300.436],["20261026T193911Z_S1_chromium_r20",301.69]],S2:[["20261026T194358Z_S2_chromium_r01",301.076],["20261026T194412Z_S2_chromium_r02",300.362],["20261026T194426Z_S2_chromium_r03",300.396],["20261026T194440Z_S2_chromium_r04",301.542],["20261026T194454Z_S2_chromium_r05",301.746],["20261026T194508Z_S2_chromium_r06",301.54],["20261026T194522Z_S2_chromium_r07",300.505],["20261026T194536Z_S2_chromium_r08",301.251],["20261026T194550Z_S2_chromium_r09",301.103],["20261026T194603Z_S2_chromium_r10",301.509],["20261026T194617Z_S2_chromium_r11",301.351],["20261026T194631Z_S2_chromium_r12",301.227],["20261026T194645Z_S2_chromium_r13",300.975],["20261026T194659Z_S2_chromium_r14",301.136],["20261026T194713Z_S2_chromium_r15",300.43],["20261026T194726Z_S2_chromium_r16",300.333],["20261026T194740Z_S2_chromium_r17",300.6],["20261026T194754Z_S2_chromium_r18",302.543],["20261026T194808Z_S2_chromium_r19",301.685],["20261026T194822Z_S2_chromium_r20",300.906]],S3:[],S4:[],S5:[],S6:[],X1:[]}};
+var WIN={ /* repetitions won by each family: [IPv6, IPv4, no winner] */
+  curl:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[0,0,0]},
+  chromium:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[0,0,0]}
+};
+var IFDV={ /* observed inter-family delays per run: [run_id, ms]; [] = none observed or no runs */
+  curl:{
+    C0:[],
+    S1:[["20261026T192924Z_S1_curl_r01",200.405],["20261026T192939Z_S1_curl_r02",200.722],["20261026T192953Z_S1_curl_r03",200.933],["20261026T193008Z_S1_curl_r04",200.433],["20261026T193022Z_S1_curl_r05",200.956],["20261026T193037Z_S1_curl_r06",200.772],["20261026T193051Z_S1_curl_r07",200.956],["20261026T193106Z_S1_curl_r08",200.976],["20261026T193120Z_S1_curl_r09",201.336],["20261026T193135Z_S1_curl_r10",201.542],["20261026T193149Z_S1_curl_r11",200.942],["20261026T193204Z_S1_curl_r12",201.07],["20261026T193219Z_S1_curl_r13",201.954],["20261026T193233Z_S1_curl_r14",201.399],["20261026T193248Z_S1_curl_r15",201.92],["20261026T193302Z_S1_curl_r16",200.924],["20261026T193317Z_S1_curl_r17",201.972],["20261026T193331Z_S1_curl_r18",200.956],["20261026T193346Z_S1_curl_r19",201.081],["20261026T193400Z_S1_curl_r20",200.942]],
+    S2:[["20261026T193931Z_S2_curl_r01",201.98],["20261026T193944Z_S2_curl_r02",200.469],["20261026T193957Z_S2_curl_r03",200.956],["20261026T194010Z_S2_curl_r04",200.953],["20261026T194024Z_S2_curl_r05",200.984],["20261026T194037Z_S2_curl_r06",200.948],["20261026T194050Z_S2_curl_r07",200.974],["20261026T194103Z_S2_curl_r08",202.046],["20261026T194116Z_S2_curl_r09",201.975],["20261026T194129Z_S2_curl_r10",200.412],["20261026T194142Z_S2_curl_r11",200.968],["20261026T194155Z_S2_curl_r12",200.948],["20261026T194208Z_S2_curl_r13",200.925],["20261026T194222Z_S2_curl_r14",200.956],["20261026T194235Z_S2_curl_r15",200.81],["20261026T194248Z_S2_curl_r16",200.925],["20261026T194301Z_S2_curl_r17",201.975],["20261026T194314Z_S2_curl_r18",201.939],["20261026T194327Z_S2_curl_r19",201.069],["20261026T194340Z_S2_curl_r20",200.926]],
+    S3:[],
+    S4:[],
+    S5:[],
+    S6:[],
+    X1:[]
+  },
+  chromium:{
+    C0:[],
+    S1:[["20261026T193420Z_S1_chromium_r01",301.266],["20261026T193435Z_S1_chromium_r02",301.421],["20261026T193450Z_S1_chromium_r03",300.23],["20261026T193506Z_S1_chromium_r04",301.059],["20261026T193521Z_S1_chromium_r05",301.081],["20261026T193537Z_S1_chromium_r06",301.042],["20261026T193552Z_S1_chromium_r07",300.287],["20261026T193607Z_S1_chromium_r08",301.199],["20261026T193622Z_S1_chromium_r09",300.841],["20261026T193638Z_S1_chromium_r10",302.905],["20261026T193653Z_S1_chromium_r11",301.101],["20261026T193709Z_S1_chromium_r12",300.775],["20261026T193724Z_S1_chromium_r13",301.076],["20261026T193739Z_S1_chromium_r14",300.421],["20261026T193754Z_S1_chromium_r15",300.968],["20261026T193810Z_S1_chromium_r16",300.353],["20261026T193825Z_S1_chromium_r17",301.705],["20261026T193841Z_S1_chromium_r18",301.587],["20261026T193856Z_S1_chromium_r19",300.436],["20261026T193911Z_S1_chromium_r20",301.69]],
+    S2:[["20261026T194358Z_S2_chromium_r01",301.076],["20261026T194412Z_S2_chromium_r02",300.362],["20261026T194426Z_S2_chromium_r03",300.396],["20261026T194440Z_S2_chromium_r04",301.542],["20261026T194454Z_S2_chromium_r05",301.746],["20261026T194508Z_S2_chromium_r06",301.54],["20261026T194522Z_S2_chromium_r07",300.505],["20261026T194536Z_S2_chromium_r08",301.251],["20261026T194550Z_S2_chromium_r09",301.103],["20261026T194603Z_S2_chromium_r10",301.509],["20261026T194617Z_S2_chromium_r11",301.351],["20261026T194631Z_S2_chromium_r12",301.227],["20261026T194645Z_S2_chromium_r13",300.975],["20261026T194659Z_S2_chromium_r14",301.136],["20261026T194713Z_S2_chromium_r15",300.43],["20261026T194726Z_S2_chromium_r16",300.333],["20261026T194740Z_S2_chromium_r17",300.6],["20261026T194754Z_S2_chromium_r18",302.543],["20261026T194808Z_S2_chromium_r19",301.685],["20261026T194822Z_S2_chromium_r20",300.906]],
+    S3:[],
+    S4:[],
+    S5:[],
+    S6:[],
+    X1:[]
+  }
+};
 var RUNS=[
-  {id:"20261026T192159Z_C0_curl_r07",sc:"C0",cl:"curl",src:"val",setup:20.695,ifd:null,win:"ipv6",ab:0,dns:1.092,out:"success",rec:'{\n  "schema_version": "0.2",\n  "run_id": "20261026T192159Z_C0_curl_r07",\n  "scenario": { "id": "C0", "repetition": 7 },\n  "client": { "name": "curl" },\n  "metrics": {\n    "tcp_setup_time_ms": { "value": 20.695, "status": "computed" },\n    "inter_family_attempt_delay_ms": { "value": null, "status": "not_observed" },\n    "dns_time_ms": { "value": 1.092, "status": "computed" }\n  },\n  "outcome": { "success": true, "http_status": 200 },\n  "cross_checks": { "status": "agree", "conflicts": [] }\n}',chk:{status:"agree",conflicts:[],pre:true,post:true,sha:"1f18fce7f0f9e333128b3d7bc6d1addc6dd80d7d9485abc189f59b6d81e68eb8",path:"data/generated/runs/20261026T192159Z_C0_curl_r07.json"}},
-  {id:"20261026T193106Z_S1_curl_r08",sc:"S1",cl:"curl",src:"val",setup:222.254,ifd:200.976,win:"ipv4",ab:1,dns:1.069,out:"success",rec:'{\n  "schema_version": "0.2",\n  "run_id": "20261026T193106Z_S1_curl_r08",\n  "scenario": { "id": "S1", "repetition": 8 },\n  "client": { "name": "curl" },\n  "metrics": {\n    "tcp_setup_time_ms": { "value": 222.254, "status": "computed" },\n    "inter_family_attempt_delay_ms": { "value": 200.976, "status": "computed" },\n    "dns_time_ms": { "value": 1.069, "status": "computed" }\n  },\n  "outcome": { "success": true, "http_status": 200 },\n  "cross_checks": { "status": "agree", "conflicts": [] }\n}',chk:{status:"agree",conflicts:[],pre:true,post:true,sha:"9baf0f1220ac8521e62a4a0139507d018e8e2a9b93a007c2aed1eb51c0aa13b1",path:"data/generated/runs/20261026T193106Z_S1_curl_r08.json"}},
-  {id:"20261026T193622Z_S1_chromium_r09",sc:"S1",cl:"chromium",src:"val",setup:322.275,ifd:300.841,win:"ipv4",ab:2,dns:1.098,out:"success",rec:'{\n  "schema_version": "0.2",\n  "run_id": "20261026T193622Z_S1_chromium_r09",\n  "scenario": { "id": "S1", "repetition": 9 },\n  "client": { "name": "chromium" },\n  "metrics": {\n    "tcp_setup_time_ms": { "value": 322.275, "status": "computed" },\n    "inter_family_attempt_delay_ms": { "value": 300.841, "status": "computed" },\n    "dns_time_ms": { "value": 1.098, "status": "computed" }\n  },\n  "outcome": { "success": true, "http_status": 200 },\n  "cross_checks": { "status": "agree", "conflicts": [] }\n}',chk:{status:"agree",conflicts:[],pre:true,post:true,sha:"7541a5c4557210c16e1d95b9df3274cb4a8b787a61ca544e210167d7aa499adc",path:"data/generated/runs/20261026T193622Z_S1_chromium_r09.json"}},
-  {id:"20261026T200225Z_S4_chromium_r01",sc:"S4",cl:"chromium",src:"val",setup:20.139,ifd:null,win:"ipv6",ab:0,dns:0.961,out:"success",rec:'{\n  "schema_version": "0.2",\n  "run_id": "20261026T200225Z_S4_chromium_r01",\n  "scenario": { "id": "S4", "repetition": 1 },\n  "client": { "name": "chromium" },\n  "metrics": {\n    "tcp_setup_time_ms": { "value": 20.139, "status": "computed" },\n    "inter_family_attempt_delay_ms": { "value": null, "status": "not_observed" },\n    "dns_time_ms": { "value": 0.961, "status": "computed" }\n  },\n  "outcome": { "success": true, "http_status": 200 },\n  "cross_checks": { "status": "agree", "conflicts": [] }\n}',chk:{status:"agree",conflicts:[],pre:true,post:true,sha:"607fc714b10d84dc98617dd11ba7441642475b324ed435979b2d60335fc1cfa7",path:"data/generated/runs/20261026T200225Z_S4_chromium_r01.json"}},
-  {id:"20261026T201814Z_S6_curl_r09",sc:"S6",cl:"curl",src:"val",setup:20.812,ifd:null,win:"ipv6",ab:0,dns:302.088,out:"success",rec:'{\n  "schema_version": "0.2",\n  "run_id": "20261026T201814Z_S6_curl_r09",\n  "scenario": { "id": "S6", "repetition": 9 },\n  "client": { "name": "curl" },\n  "metrics": {\n    "tcp_setup_time_ms": { "value": 20.812, "status": "computed" },\n    "inter_family_attempt_delay_ms": { "value": null, "status": "not_observed" },\n    "dns_time_ms": { "value": 302.088, "status": "computed" }\n  },\n  "outcome": { "success": true, "http_status": 200 },\n  "cross_checks": { "status": "agree", "conflicts": [] }\n}',chk:{status:"agree",conflicts:[],pre:true,post:true,sha:"394816daeee03c5a9ae5b1db943eae252939b53423f93dbae860058577a92289",path:"data/generated/runs/20261026T201814Z_S6_curl_r09.json"}}
+  {id:"20261026T192159Z_C0_curl_r07",sc:"C0",cl:"curl",src:"val",setup:20.695,ifd:null,win:"ipv6",ab:0,dns:1.092,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T192159Z_C0_curl_r07\",\n  \"scenario\": {\n    \"id\": \"C0\",\n    \"repetition\": 7\n  },\n  \"client\": {\n    \"name\": \"curl\",\n    \"version\": \"curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v6\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 38392,\n          \"first_syn_ns\": 1793042525932326000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 0,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 1.092,\n      \"status\": \"computed\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 20.695,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": null,\n      \"status\": \"not_observed\",\n      \"note\": \"only one family tried (v6)\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T192159Z_C0_curl_r07.pcap\",\n    \"pcap_sha256\": \"1f18fce7f0f9e333128b3d7bc6d1addc6dd80d7d9485abc189f59b6d81e68eb8\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "1f18fce7f0f9e333128b3d7bc6d1addc6dd80d7d9485abc189f59b6d81e68eb8", "path": "data/generated/runs/20261026T192159Z_C0_curl_r07.json"}},
+  {id:"20261026T193106Z_S1_curl_r08",sc:"S1",cl:"curl",src:"val",setup:222.254,ifd:200.976,win:"ipv4",ab:1,dns:1.069,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T193106Z_S1_curl_r08\",\n  \"scenario\": {\n    \"id\": \"S1\",\n    \"repetition\": 8\n  },\n  \"client\": {\n    \"name\": \"curl\",\n    \"version\": \"curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v4\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 44938,\n          \"first_syn_ns\": 1793043074281925000,\n          \"syn_retransmits\": 0,\n          \"result\": \"abandoned\"\n        },\n        {\n          \"family\": \"v4\",\n          \"dst\": \"192.0.2.2\",\n          \"src_port\": 54608,\n          \"first_syn_ns\": 1793043074482901000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 1,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 1.069,\n      \"status\": \"computed\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 222.254,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": 200.976,\n      \"status\": \"computed\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T193106Z_S1_curl_r08.pcap\",\n    \"pcap_sha256\": \"9baf0f1220ac8521e62a4a0139507d018e8e2a9b93a007c2aed1eb51c0aa13b1\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "9baf0f1220ac8521e62a4a0139507d018e8e2a9b93a007c2aed1eb51c0aa13b1", "path": "data/generated/runs/20261026T193106Z_S1_curl_r08.json"}},
+  {id:"20261026T193622Z_S1_chromium_r09",sc:"S1",cl:"chromium",src:"val",setup:322.275,ifd:300.841,win:"ipv4",ab:2,dns:1.098,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T193622Z_S1_chromium_r09\",\n  \"scenario\": {\n    \"id\": \"S1\",\n    \"repetition\": 9\n  },\n  \"client\": {\n    \"name\": \"chromium\",\n    \"version\": \"Chromium 156.0.8078.4\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v4\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 59426,\n          \"first_syn_ns\": 1793043391591250000,\n          \"syn_retransmits\": 0,\n          \"result\": \"abandoned\"\n        },\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 59430,\n          \"first_syn_ns\": 1793043391841818000,\n          \"syn_retransmits\": 0,\n          \"result\": \"abandoned\"\n        },\n        {\n          \"family\": \"v4\",\n          \"dst\": \"192.0.2.2\",\n          \"src_port\": 33540,\n          \"first_syn_ns\": 1793043391892091000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 2,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 1.098,\n      \"status\": \"computed\",\n      \"note\": \"only www.hl.test queries counted; 50 queries for other names before the first SYN not counted: accounts.google.com, update.googleapis.com, www.google.com\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 322.275,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": 300.841,\n      \"status\": \"computed\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log (Playwright)\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T193622Z_S1_chromium_r09.pcap\",\n    \"pcap_sha256\": \"7541a5c4557210c16e1d95b9df3274cb4a8b787a61ca544e210167d7aa499adc\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "7541a5c4557210c16e1d95b9df3274cb4a8b787a61ca544e210167d7aa499adc", "path": "data/generated/runs/20261026T193622Z_S1_chromium_r09.json"}},
+  {id:"20261026T200225Z_S4_chromium_r01",sc:"S4",cl:"chromium",src:"val",setup:20.139,ifd:null,win:"ipv6",ab:0,dns:0.961,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T200225Z_S4_chromium_r01\",\n  \"scenario\": {\n    \"id\": \"S4\",\n    \"repetition\": 1\n  },\n  \"client\": {\n    \"name\": \"chromium\",\n    \"version\": \"Chromium 156.0.8078.4\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v6\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 38094,\n          \"first_syn_ns\": 1793044954102304000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 0,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 0.961,\n      \"status\": \"computed\",\n      \"note\": \"only www.hl.test queries counted; 50 queries for other names before the first SYN not counted: accounts.google.com, update.googleapis.com, www.google.com\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 20.139,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": null,\n      \"status\": \"not_observed\",\n      \"note\": \"only one family tried (v6)\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log (Playwright)\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T200225Z_S4_chromium_r01.pcap\",\n    \"pcap_sha256\": \"607fc714b10d84dc98617dd11ba7441642475b324ed435979b2d60335fc1cfa7\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "607fc714b10d84dc98617dd11ba7441642475b324ed435979b2d60335fc1cfa7", "path": "data/generated/runs/20261026T200225Z_S4_chromium_r01.json"}},
+  {id:"20261026T201814Z_S6_curl_r09",sc:"S6",cl:"curl",src:"val",setup:20.812,ifd:null,win:"ipv6",ab:0,dns:302.088,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T201814Z_S6_curl_r09\",\n  \"scenario\": {\n    \"id\": \"S6\",\n    \"repetition\": 9\n  },\n  \"client\": {\n    \"name\": \"curl\",\n    \"version\": \"curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v6\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 56116,\n          \"first_syn_ns\": 1793045900625222000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 0,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 302.088,\n      \"status\": \"computed\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 20.812,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": null,\n      \"status\": \"not_observed\",\n      \"note\": \"only one family tried (v6)\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T201814Z_S6_curl_r09.pcap\",\n    \"pcap_sha256\": \"394816daeee03c5a9ae5b1db943eae252939b53423f93dbae860058577a92289\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "394816daeee03c5a9ae5b1db943eae252939b53423f93dbae860058577a92289", "path": "data/generated/runs/20261026T201814Z_S6_curl_r09.json"}}
 ];
 var CAPS=[
-  ["20261026T192159Z_C0_curl_r07.pcap","C0","curl","2 KB","1f18...8eb8","dataset run"],
-  ["20261026T193106Z_S1_curl_r08.pcap","S1","curl","2 KB","9baf...13b1","dataset run"],
-  ["20261026T193622Z_S1_chromium_r09.pcap","S1","chromium","20 KB","7541...9adc","dataset run"],
-  ["20261026T200225Z_S4_chromium_r01.pcap","S4","chromium","16 KB","607f...cfa7","dataset run"],
-  ["20261026T201814Z_S6_curl_r09.pcap","S6","curl","2 KB","3948...2289","dataset run"],
-  ["s1_manual_curl.pcap","S1","curl","2 KB","2e74...a476","pinned fixture"],
-  ["loopback_two_harness_runs.pcap","--","curl","3 KB","0a67...421c","pinned fixture · loopback"]
+  ["20261026T192159Z_C0_curl_r07.pcap", "C0", "curl", "2 KB", "1f18…8eb8", "dataset run"],
+  ["20261026T193106Z_S1_curl_r08.pcap", "S1", "curl", "2 KB", "9baf…13b1", "dataset run"],
+  ["20261026T193622Z_S1_chromium_r09.pcap", "S1", "chromium", "20 KB", "7541…9adc", "dataset run"],
+  ["20261026T200225Z_S4_chromium_r01.pcap", "S4", "chromium", "16 KB", "607f…cfa7", "dataset run"],
+  ["20261026T201814Z_S6_curl_r09.pcap", "S6", "curl", "2 KB", "3948…2289", "dataset run"],
+  ["s1_manual_curl.pcap", "S1", "curl", "2 KB", "2e74…a476", "pinned fixture · hand-checked"],
+  ["loopback_two_harness_runs.pcap", "—", "curl", "3 KB", "0a67…421c", "pinned fixture · loopback harness, not lab data"]
 ];
+/* === HAPPYLAB DATA END === */
 
 /* ===================== helpers ===================== */
 function chip(key){var s=SRC[key];return '<span class="chip '+s[1]+'"><span class="dt"></span>'+s[0]+'</span>'}
@@ -1368,17 +1423,21 @@ function axis(el,max,unit){var out=[];for(var i=0;i<=4;i++)out.push("<span>"+Mat
 /* ===================== research map (replaced by static architecture section) ===================== */
 
 /* ===================== packet trace (one stored run, not live) =====================
-   Times are milliseconds from the first DNS query, derived from the recorded metrics of
-   run 20261026T193106Z_S1_curl_r08: dns_time 1.069, inter_family 200.976, setup 222.254. */
+   Every line is a packet in captures/20261026T193106Z_S1_curl_r08.pcap (sha256 9baf0f12…aa13b1),
+   read with src/analysis/parse_pcap.py. Times are ms from the first DNS query in the capture.
+   Setup 223.637 - 1.383 = 222.254 ms and inter-family 202.359 - 1.383 = 200.976 ms match the record. */
 var TLINES=[
-  {t:"  0.000",m:"client -> 198.51.100.53           <b>query</b>    A + AAAA www.hl.test",cls:""},
-  {t:"  1.069",m:"198.51.100.53 -> client           <b>answer</b>   A 192.0.2.2 · AAAA 2001:db8:28:6::2",cls:""},
-  {t:"  1.069",m:"client -> [2001:db8:28:6::2]:80   <b>SYN</b>      IPv6 attempt 1",cls:"tl-probe"},
-  {t:"202.045",m:"client -> 192.0.2.2:80            <b>SYN</b>      IPv4 fallback · 200.976 ms after the first SYN",cls:"tl-probe"},
-  {t:"223.280",m:"192.0.2.2 -> client               <b>SYN-ACK</b>  IPv4",cls:"tl-ok"},
-  {t:"223.323",m:"client -> 192.0.2.2:80            <b>ACK</b>      handshake complete · TCP setup 222.254 ms",cls:"tl-ok"},
-  {t:"223.4  ",m:"IPv6 attempt abandoned — no SYN-ACK ever arrived on the blackholed path",cls:""},
-  {t:"224.6  ",m:"client -> 192.0.2.2:80            <b>GET</b>      / HTTP/1.1 -> 200 OK",cls:"tl-ok"}
+  {t:"  0.000",m:"client -> 198.51.100.53:53         <b>query</b>    A www.hl.test",cls:""},
+  {t:"  0.040",m:"client -> 198.51.100.53:53         <b>query</b>    AAAA www.hl.test",cls:""},
+  {t:"  0.998",m:"198.51.100.53 -> client            <b>answer</b>   A 192.0.2.2",cls:""},
+  {t:"  1.069",m:"198.51.100.53 -> client            <b>answer</b>   AAAA 2001:db8:28:6::2",cls:""},
+  {t:"  1.383",m:"client -> [2001:db8:28:6::2]:80    <b>SYN</b>      IPv6 attempt",cls:"tl-probe"},
+  {t:"202.359",m:"client -> 192.0.2.2:80             <b>SYN</b>      IPv4 attempt · 200.976 ms after the first SYN",cls:"tl-probe"},
+  {t:"223.567",m:"192.0.2.2:80 -> client             <b>SYN-ACK</b>  IPv4",cls:"tl-ok"},
+  {t:"223.637",m:"client -> 192.0.2.2:80             <b>ACK</b>      handshake complete · TCP setup 222.254 ms",cls:"tl-ok"},
+  {t:"223.828",m:"client -> 192.0.2.2:80             <b>GET</b>      / HTTP/1.1",cls:""},
+  {t:"244.527",m:"192.0.2.2:80 -> client             <b>HTTP</b>     200 OK",cls:"tl-ok"},
+  {t:"       ",m:"no SYN-ACK and no SYN retransmit on IPv6 in the capture: the attempt was abandoned",cls:""}
 ];
 function renderTerminal(){
   $("termBody").innerHTML=TLINES.map(function(l){
