@@ -2,3 +2,5 @@
 This repository will contain the code and resources for the AIORI-3 hackathon that will be developed during the AIORI-3
 ## Team Introduction Video
 Youtube - https://youtu.be/TA8UYlIY-GY
+## Demo website
+https://happylab-aiori-ps-028.vercel.app/
