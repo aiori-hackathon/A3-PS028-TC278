@@ -1,0 +1,162 @@
+{
+  "schema_version": "0.2",
+  "run_id": "20261026T193106Z_S1_curl_r08",
+  "scenario": {
+    "id": "S1",
+    "label": "IPv6 blackhole",
+    "repetition": 8,
+    "netem": {
+      "v4": {
+        "delay_ms_each_way": 10,
+        "loss_pct": 0
+      },
+      "v6": {
+        "delay_ms_each_way": 10,
+        "loss_pct": 100
+      }
+    },
+    "dns": {
+      "delay_ms": {
+        "A": 0,
+        "AAAA": 0
+      }
+    },
+    "measured_rtt_ms": {
+      "v4": {
+        "value": 21.15,
+        "status": "computed",
+        "note": "median of 10 pings, loss 0% (verify.sh PASS)"
+      },
+      "v6": {
+        "value": null,
+        "status": "not_observed",
+        "note": "blackhole: loss 100%, ICMP errors 0 (verify.sh PASS)"
+      }
+    }
+  },
+  "client": {
+    "name": "curl",
+    "version": "curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10",
+    "argv": [
+      "curl",
+      "-q",
+      "-sS",
+      "--noproxy",
+      "*",
+      "--max-time",
+      "10",
+      "-o",
+      "/dev/null",
+      "-w",
+      "%{http_code}|%{remote_ip}|%{time_namelookup}|%{time_connect}|%{time_total}|%{num_connects}",
+      "http://www.hl.test/"
+    ],
+    "config": {
+      "happy_eyeballs_timeout_ms": "default (not set)",
+      "curlrc": "ignored (-q)",
+      "proxy": "disabled (--noproxy '*')",
+      "url": "http://www.hl.test/",
+      "launcher": "ip netns exec hl-client runuser -u sr --"
+    }
+  },
+  "environment": {
+    "kernel": "7.0.0-38-generic",
+    "python": "3.12.3",
+    "git_commit": "ecba28c",
+    "session_id": "20261026T192924Z",
+    "network": "HappyLab namespaces hl-client/hl-server; impairment server-side only (netem + ifb)",
+    "resolver": "198.51.100.53 (src/dns/hl_dns.py, TTL 0)",
+    "gai_conf": "lab default (/etc/netns/hl-client/gai.conf)",
+    "server": "nginx version: nginx/1.24.0 (Ubuntu), src/config/nginx.conf (HTTP/1.1, keep-alive off)",
+    "child_env": "inherited, with PYTHONPATH, LD_LIBRARY_PATH removed (none were set in parent)",
+    "capture_interfaces": {
+      "1": "lo",
+      "2": "hl-v4c",
+      "3": "hl-v6c",
+      "4": "hl-ctlc"
+    }
+  },
+  "timestamps": {
+    "run_start_utc": "2026-10-26T19:31:06.424751Z",
+    "client_start_epoch_ns": 1793043074262973496,
+    "client_end_epoch_ns": 1793043074528963239,
+    "capture_start_epoch_ns": 1793043074262922881,
+    "capture_end_epoch_ns": 1793043075044048247
+  },
+  "outcome": {
+    "success": true,
+    "exit_code": 0,
+    "http_status": 200,
+    "error": null,
+    "source": "client/runner log",
+    "client_report": {
+      "http_code": 200,
+      "remote_ip": "192.0.2.2",
+      "time_namelookup_s": 0.002168,
+      "time_connect_s": 0.224565,
+      "time_total_s": 0.245622,
+      "num_connects": 1
+    }
+  },
+  "evidence": {
+    "pcap_path": "captures/20261026T193106Z_S1_curl_r08.pcap",
+    "pcap_sha256": "9baf0f1220ac8521e62a4a0139507d018e8e2a9b93a007c2aed1eb51c0aa13b1",
+    "client_log_path": "data/generated/logs/20261026T193106Z_S1_curl_r08.log",
+    "pre_verify_ok": true,
+    "post_restore_verify_ok": true
+  },
+  "packet_observations": {
+    "winning_family": {
+      "value": "v4",
+      "status": "computed"
+    },
+    "attempts": {
+      "value": [
+        {
+          "family": "v6",
+          "dst": "2001:db8:28:6::2",
+          "src_port": 44938,
+          "first_syn_ns": 1793043074281925000,
+          "syn_retransmits": 0,
+          "result": "abandoned"
+        },
+        {
+          "family": "v4",
+          "dst": "192.0.2.2",
+          "src_port": 54608,
+          "first_syn_ns": 1793043074482901000,
+          "syn_retransmits": 0,
+          "result": "won"
+        }
+      ],
+      "status": "computed"
+    },
+    "failed_or_abandoned_attempts": {
+      "value": 1,
+      "status": "computed"
+    }
+  },
+  "metrics": {
+    "dns_time_ms": {
+      "value": 1.069,
+      "status": "computed"
+    },
+    "tcp_setup_time_ms": {
+      "value": 222.254,
+      "status": "computed"
+    },
+    "inter_family_attempt_delay_ms": {
+      "value": 200.976,
+      "status": "computed"
+    },
+    "scenario_penalty_ms": {
+      "value": null,
+      "status": "not_applicable",
+      "note": "per-scenario aggregate; see scenario summary"
+    }
+  },
+  "cross_checks": {
+    "status": "agree",
+    "conflicts": []
+  }
+}
