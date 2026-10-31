@@ -1,0 +1,155 @@
+{
+  "schema_version": "0.2",
+  "run_id": "20261026T192159Z_C0_curl_r07",
+  "scenario": {
+    "id": "C0",
+    "label": "Healthy baseline (control)",
+    "repetition": 7,
+    "netem": {
+      "v4": {
+        "delay_ms_each_way": 10,
+        "loss_pct": 0
+      },
+      "v6": {
+        "delay_ms_each_way": 10,
+        "loss_pct": 0
+      }
+    },
+    "dns": {
+      "delay_ms": {
+        "A": 0,
+        "AAAA": 0
+      }
+    },
+    "measured_rtt_ms": {
+      "v4": {
+        "value": 21.1,
+        "status": "computed",
+        "note": "median of 10 pings, loss 0% (verify.sh PASS)"
+      },
+      "v6": {
+        "value": 21.1,
+        "status": "computed",
+        "note": "median of 10 pings, loss 0% (verify.sh PASS)"
+      }
+    }
+  },
+  "client": {
+    "name": "curl",
+    "version": "curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10",
+    "argv": [
+      "curl",
+      "-q",
+      "-sS",
+      "--noproxy",
+      "*",
+      "--max-time",
+      "10",
+      "-o",
+      "/dev/null",
+      "-w",
+      "%{http_code}|%{remote_ip}|%{time_namelookup}|%{time_connect}|%{time_total}|%{num_connects}",
+      "http://www.hl.test/"
+    ],
+    "config": {
+      "happy_eyeballs_timeout_ms": "default (not set)",
+      "curlrc": "ignored (-q)",
+      "proxy": "disabled (--noproxy '*')",
+      "url": "http://www.hl.test/",
+      "launcher": "ip netns exec hl-client runuser -u sr --"
+    }
+  },
+  "environment": {
+    "kernel": "7.0.0-38-generic",
+    "python": "3.12.3",
+    "git_commit": "ecba28c",
+    "session_id": "20261026T192045Z",
+    "network": "HappyLab namespaces hl-client/hl-server; impairment server-side only (netem + ifb)",
+    "resolver": "198.51.100.53 (src/dns/hl_dns.py, TTL 0)",
+    "gai_conf": "lab default (/etc/netns/hl-client/gai.conf)",
+    "server": "nginx version: nginx/1.24.0 (Ubuntu), src/config/nginx.conf (HTTP/1.1, keep-alive off)",
+    "child_env": "inherited, with PYTHONPATH, LD_LIBRARY_PATH removed (none were set in parent)",
+    "capture_interfaces": {
+      "1": "lo",
+      "2": "hl-v4c",
+      "3": "hl-v6c",
+      "4": "hl-ctlc"
+    }
+  },
+  "timestamps": {
+    "run_start_utc": "2026-10-26T19:21:59.955888Z",
+    "client_start_epoch_ns": 1793042525908578279,
+    "client_end_epoch_ns": 1793042525977913549,
+    "capture_start_epoch_ns": 1793042525908523889,
+    "capture_end_epoch_ns": 1793042526493982640
+  },
+  "outcome": {
+    "success": true,
+    "exit_code": 0,
+    "http_status": 200,
+    "error": null,
+    "source": "client/runner log",
+    "client_report": {
+      "http_code": 200,
+      "remote_ip": "2001:db8:28:6::2",
+      "time_namelookup_s": 0.00234,
+      "time_connect_s": 0.023168,
+      "time_total_s": 0.044176,
+      "num_connects": 1
+    }
+  },
+  "evidence": {
+    "pcap_path": "captures/20261026T192159Z_C0_curl_r07.pcap",
+    "pcap_sha256": "1f18fce7f0f9e333128b3d7bc6d1addc6dd80d7d9485abc189f59b6d81e68eb8",
+    "client_log_path": "data/generated/logs/20261026T192159Z_C0_curl_r07.log",
+    "pre_verify_ok": true,
+    "post_restore_verify_ok": true
+  },
+  "packet_observations": {
+    "winning_family": {
+      "value": "v6",
+      "status": "computed"
+    },
+    "attempts": {
+      "value": [
+        {
+          "family": "v6",
+          "dst": "2001:db8:28:6::2",
+          "src_port": 38392,
+          "first_syn_ns": 1793042525932326000,
+          "syn_retransmits": 0,
+          "result": "won"
+        }
+      ],
+      "status": "computed"
+    },
+    "failed_or_abandoned_attempts": {
+      "value": 0,
+      "status": "computed"
+    }
+  },
+  "metrics": {
+    "dns_time_ms": {
+      "value": 1.092,
+      "status": "computed"
+    },
+    "tcp_setup_time_ms": {
+      "value": 20.695,
+      "status": "computed"
+    },
+    "inter_family_attempt_delay_ms": {
+      "value": null,
+      "status": "not_observed",
+      "note": "only one family tried (v6)"
+    },
+    "scenario_penalty_ms": {
+      "value": null,
+      "status": "not_applicable",
+      "note": "per-scenario aggregate; see scenario summary"
+    }
+  },
+  "cross_checks": {
+    "status": "agree",
+    "conflicts": []
+  }
+}

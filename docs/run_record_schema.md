@@ -4,7 +4,11 @@ Version 0.2 adds the required `cross_checks` block. 0.1 records (the Milestone 1
 runs) remain valid and must not contain it.
 
 One JSON file per run, written to `data/generated/runs/<run_id>.json`.
-A worked example is in [`examples/run_record_example.json`](examples/run_record_example.json).
+An illustrative example is in [`examples/run_record_example.json`](examples/run_record_example.json).
+It was written by hand before any measurement ran, so it shows the field layout and the
+`not_yet_computed` status, not real values; the validator tests use it as their base record.
+Real records written by the orchestrator, with their packet captures, are in
+[`../examples/`](../examples/).
 The validator is `src/analysis/validate_record.py`:
 
 ```

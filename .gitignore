@@ -21,12 +21,14 @@ htmlcov/
 # Generated experiment data
 data/generated/
 
-# Packet captures: keep large generated captures out of Git
-captures/*.pcap
-captures/*.pcapng
+# Packet captures and their logs: never committed (small reviewer examples live in examples/)
+captures/
 
 # Editor and operating-system files
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local style reference for the website (Next.js download); not part of the project
+web/dual-stack-lab-ui/
