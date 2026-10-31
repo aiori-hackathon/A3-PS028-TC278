@@ -234,3 +234,14 @@ def test_x1_cell_with_no_data_has_no_win_split_no_dots_and_keeps_d_shape(tmp_pat
         assert set(d[c]["X1"]) == {"med", "win", "ifd", "runs", "src"}       # D shape unchanged
         assert w[c]["X1"] == [0, 0, 0]
         assert _ifdv(res.block)[c]["X1"] == []
+
+
+def test_cell_with_null_placeholders_round_trips_as_null(tmp_path, monkeypatch):
+    page = PAGE.replace('X1:{med:320.6,win:"v6",ifd:200.1,', "X1:{med:null,win:null,ifd:null,")
+    monkeypatch.setattr(ew, "REPRESENTATIVE", (("C0", "curl"), ("S1", "curl")))
+    res = ew.export(page, SESSIONS, runs_dir=records(tmp_path), repo=Path("/"), fixtures=FIX)
+    d, w = block_values(res.block)
+    assert d["curl"]["X1"] == {"med": None, "win": None, "ifd": None, "runs": [0, 20], "src": "ph"}
+    assert "X1:{med:null,win:null,ifd:null," in res.block                # nothing invented on rewrite
+    assert d["chromium"]["X1"]["med"] == 322.4                              # numeric placeholders still parse
+    assert res.ok

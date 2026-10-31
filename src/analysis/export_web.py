@@ -75,7 +75,8 @@ def split_page(text: str) -> tuple[str, str, str]:
     return text[:a], text[a:b], text[b:]
 
 
-_D_CELL = re.compile(r'(\w+):\{med:([-\d.]+),win:"(v[46])",ifd:(null|[-\d.]+),runs:\[(\d+),(\d+)\],src:"(\w+)"\}')
+# med and win may be null in a cell with no runs (nothing measured, so nothing to show).
+_D_CELL = re.compile(r'(\w+):\{med:(null|[-\d.]+),win:(null|"v[46]"),ifd:(null|[-\d.]+),runs:\[(\d+),(\d+)\],src:"(\w+)"\}')
 _WIN_CELL = re.compile(r"(\w+):\[(\d+),(\d+),(\d+)\]")
 
 
@@ -99,9 +100,13 @@ def _client_sections(block: str, var: str) -> dict[str, str]:
     return out
 
 
+def _num(s: str) -> float | None:
+    return None if s == "null" else float(s)
+
+
 def parse_existing(block: str) -> tuple[dict, dict]:
     """The page's current D and WIN, used only for cells that keep their placeholder values."""
-    d = {c: {sid: {"med": float(med), "win": win, "ifd": None if ifd == "null" else float(ifd),
+    d = {c: {sid: {"med": _num(med), "win": None if win == "null" else win.strip('"'), "ifd": _num(ifd),
                    "runs": [int(r0), int(r1)], "src": src}
              for sid, med, win, ifd, r0, r1, src in _D_CELL.findall(sec)}
          for c, sec in _client_sections(block, "D").items()}
@@ -274,6 +279,11 @@ def ifd_values(runs: list[Run]) -> list[list]:
             if r.inter_family_ms is not None]
 
 
+def _js(v) -> str:
+    """null for a missing value; strings quoted; numbers as written."""
+    return "null" if v is None else (f'"{v}"' if isinstance(v, str) else str(v))
+
+
 def render_block(d: dict, win: dict, runs: list[dict], caps: list[list[str]], header: str,
                  ifdv: dict | None = None) -> str:
     scen = list(next(iter(d.values())).keys())
@@ -285,7 +295,7 @@ def render_block(d: dict, win: dict, runs: list[dict], caps: list[list[str]], he
         out.append(f"  {c}:{{")
         for j, s in enumerate(scen):
             x = d[c][s]
-            out.append(f'    {s}:{{med:{x["med"]},win:"{x["win"]}",ifd:{"null" if x["ifd"] is None else x["ifd"]},'
+            out.append(f'    {s}:{{med:{_js(x["med"])},win:{_js(x["win"])},ifd:{"null" if x["ifd"] is None else x["ifd"]},'
                        f'runs:[{x["runs"][0]},{x["runs"][1]}],src:"{x["src"]}"}}' + ("," if j < len(scen) - 1 else ""))
         out.append("  }" + ("," if i < len(CLIENT_ORDER) - 1 else ""))
     out.append("};")
