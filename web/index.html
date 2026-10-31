@@ -2,329 +2,1003 @@
 <title>HappyLab</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
 <style>
-/* Layout: instrument-panel site — sticky nav, one column of panels per page, charts drawn as positioned HTML so they stay honest at any width. Single dark look, chosen to match the lab's own displays. */
-:root{
-  /* Theme from the team's Vercel reference (web/dual-stack-lab-ui): navy ground #070913, glass
-     surfaces as white overlays (4% / 7%), hairlines at white 10% / 16%, cyan-300 accent,
-     radius .65rem. Series and status colours are unchanged and re-validated on this ground. */
-  --bg:#070913; --surface:#11131c; --surface2:#181a24; --line:#20222b; --line2:#2f3039;
-  --ink:#e5edf7; --ink2:#90a1b9; --ink3:#7183a0;
-  --accent:#67e8f9; --accent-ink:#a5f3fc; --accent-bg:#152a36; --accent-hover:#a5f3fc;
-  --s1:#3987e5;  /* IPv6 */
-  --s2:#d95926;  /* IPv4 */
-  --s3:#199e70;  /* curl */
-  --s4:#9085e9;  /* Chromium */
-  --ok:#3fb950; --warn:#d29922; --bad:#f0564a;
-  --radius:10px; --radius-card:12px; --radius-ctl:8px; --ctl-h:44px;
-  --shadow-card:0 14px 45px rgba(0,0,0,.2);
-  --font-ui:"IBM Plex Sans",Arial,Helvetica,sans-serif;
-  --font-mono:"IBM Plex Mono",ui-monospace,monospace;
-  color-scheme:dark;
+/* Layout: sci-fi instrument panel — scrolling constellation hero + research map on landing,
+   then tabbed navigation for detailed sections. Single dark look, cyberpunk lab aesthetic. */
+:root {
+  --bg: #070913; --bg2: #0c0e19; --surface: #111320; --surface2: #171a28;
+  --line: #1e2133; --line2: #2a2d40; --line3: #363a50;
+  --ink: #e5edf7; --ink2: #8e9cb6; --ink3: #5e6a82;
+  --accent: #67e8f9; --accent2: #a5f3fc; --accent-dim: #2a6a78; --accent-bg: #0d2a34;
+  --glow: rgba(103,232,249,.15); --glow2: rgba(103,232,249,.06);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;
+  --ok: #3fb950; --warn: #d29922; --bad: #f0564a;
+  --radius: 10px; --radius-card: 14px; --radius-ctl: 8px; --ctl-h: 42px;
+  --font-ui: "IBM Plex Sans", Arial, Helvetica, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: dark;
 }
-*{box-sizing:border-box}
-body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:15.5px;line-height:1.6}
-body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:60;background:#070913}
-h1,h2,h3,h4{margin:0;text-wrap:balance;letter-spacing:-.015em}
-p{margin:0}
-a{color:var(--accent)}
-.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
-button{font-family:inherit}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+* { box-sizing: border-box }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-ui);
+  font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0;
+}
+body::before { content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top,0px); z-index:60; background:#070913 }
+h1,h2,h3,h4 { margin:0; text-wrap:balance; letter-spacing:-.02em }
+p { margin:0 }
+a { color: var(--accent) }
+button { font-family: inherit }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums }
 
-/* ---- chrome ---- */
-.nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:50;background:#070913ee;
-  backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
-.navin{max-width:1180px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;
-  padding-block:11px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-.brand{display:flex;align-items:baseline;gap:9px;margin-right:auto}
-.brand b{font-size:17px;font-weight:700}
-.brand span{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
-.navlinks{display:flex;flex-wrap:wrap;gap:4px}
-.navlinks a{min-height:var(--ctl-h);display:inline-flex;align-items:center;padding:0 11px;border-radius:var(--radius-ctl);
-  color:var(--ink2);text-decoration:none;font-size:14px}
-.navlinks a:hover{background:var(--surface2);color:var(--ink)}
-.navlinks a[aria-current="page"]{background:var(--accent-bg);color:var(--accent-ink)}
+/* ---- top bar ---- */
+.topbar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 50;
+  background: rgba(7,9,19,.92); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line); /* relative for mobile menu absolute */
+}
+.topbar-in {
+  max-width: 1240px; margin: 0 auto; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; padding-block: 10px;
+}
+.brand { display: flex; align-items: center; gap: 10px }
+.brand-icon {
+  width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #0d2a34, #152e3a); border: 1px solid var(--accent-dim);
+}
+.brand-icon svg { width: 20px; height: 20px }
+.brand-text { display: flex; flex-direction: column; gap: 0 }
+.brand-sub { font-family: var(--font-mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); line-height: 1 }
+.brand-name { font-size: 16px; font-weight: 700; letter-spacing: .01em; line-height: 1.2 }
+.topbar-right { display: flex; align-items: center; gap: 16px; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink3) }
 
-.wrap{max-width:1180px;margin:0 auto;padding-block:36px 72px;
-  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-section[hidden]{display:none!important}
-
-/* ---- primitives ---- */
-.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-card);padding:22px;box-shadow:var(--shadow-card)}
-.card>h3{font-size:17px;font-weight:600;margin-bottom:6px}
-.eyebrow{font-family:var(--font-mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3)}
-.lead{color:var(--ink2);font-size:16.5px;max-width:64ch}
-.muted{color:var(--ink2)}
-.small{font-size:13px;color:var(--ink3)}
-.stack{display:flex;flex-direction:column}
-.g8{gap:8px}.g12{gap:12px}.g16{gap:16px}.g22{gap:22px}.g34{gap:34px}.g52{gap:52px}
-.grid{display:grid;gap:16px}
-.g2{grid-template-columns:repeat(auto-fit,minmax(248px,1fr))}
-.g3{grid-template-columns:repeat(auto-fit,minmax(214px,1fr))}
-.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-.sectitle{display:flex;flex-direction:column;gap:7px;max-width:68ch}
-.sectitle h2{font-size:clamp(23px,3.2vw,30px);font-weight:700}
-hr{border:0;border-top:1px solid var(--line);margin:0}
-
-.chip{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;
-  letter-spacing:.06em;text-transform:uppercase;padding:4px 8px;border-radius:5px;border:1px solid var(--line2);color:var(--ink2);white-space:nowrap}
-.chip.ok{border-color:#1e5c2c;background:#0f2214;color:#6fd47e}
-.chip.warn{border-color:#5d4a16;background:#221c0c;color:#e3bb5a}
-.chip.info{border-color:#234365;background:#0e1a27;color:#7fb6f0}
-.chip .dt{width:7px;height:7px;border-radius:50%;background:currentColor}
-
-.kv{display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px solid #1e2029;font-size:14px}
-.kv:last-child{border-bottom:0}
-.kv b{font-family:var(--font-mono);font-weight:500;color:var(--ink)}
-
-.stat{background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius);padding:16px;min-width:0}
-.stat .k{font-size:12.5px;color:var(--ink2)}
-.stat .v{font-family:var(--font-mono);font-size:27px;line-height:1.15;margin-top:5px;overflow-wrap:anywhere}
-.stat .n{font-size:12px;color:var(--ink3);margin-top:5px}
-
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:var(--ctl-h);padding:0 20px;
-  border-radius:var(--radius-ctl);border:1px solid var(--line2);background:var(--surface2);color:var(--ink);
-  font-size:15px;font-weight:600;cursor:pointer;text-decoration:none}
-.btn:hover{background:#282932}
-.btn.pri{background:var(--accent);border-color:var(--accent);color:#04121f}
-.btn.pri:hover{background:var(--accent-hover)}
-
-table{width:100%;border-collapse:collapse;font-size:14px}
-th{text-align:left;font-weight:500;font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;
-  color:var(--ink3);padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
-td{padding:11px 12px;border-bottom:1px solid #1c1e27;vertical-align:top}
-tr:last-child td{border-bottom:0}
-.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;min-width:0;max-width:100%}
-.scroll table{min-width:600px}
-
-/* ---- charts (positioned HTML) ---- */
-.figure{display:flex;flex-direction:column;gap:14px;min-width:0}
-.figure>*{min-width:0}
-.fighead{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between}
-.fighead h3{font-size:16.5px;font-weight:600}
-.figsub{font-size:13px;color:var(--ink2);max-width:72ch}
-.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--ink2)}
-.legend span{display:inline-flex;align-items:center;gap:7px}
-.swatch{width:11px;height:11px;border-radius:3px;flex:0 0 auto}
-
-.bars{display:flex;flex-direction:column;gap:11px}
-.bar{display:grid;grid-template-columns:84px minmax(0,1fr);gap:12px;align-items:center}
-.bar .lbl{font-family:var(--font-mono);font-size:12.5px;color:var(--ink2);min-width:0}
-.bar .lbl i{display:block;font-style:normal;font-size:10.5px;color:var(--ink3)}
-.lanes{display:flex;flex-direction:column;gap:4px;min-width:0}
-.lane{position:relative;height:19px;background:#171922;border-radius:4px}
-.fill{position:absolute;left:0;top:0;height:100%;border-radius:0 4px 4px 0;min-width:3px}
-.fill[data-zero="1"]{border-radius:4px;width:3px!important;opacity:.55}
-.blab{position:absolute;top:50%;transform:translateY(-50%);font-family:var(--font-mono);font-size:11.5px;
-  color:var(--ink2);white-space:nowrap;padding-left:7px}
-.blab[data-in="1"]{padding-left:0;padding-right:7px;color:#070913;font-weight:500}
-.ctag{position:absolute;left:7px;top:50%;transform:translateY(-50%);font-family:var(--font-mono);
-  font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);pointer-events:none}
-.axis{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--ink3);
-  border-top:1px solid var(--line);padding-top:6px;margin-left:84px}
-
-.stack100{display:flex;gap:2px;height:22px;border-radius:4px;overflow:hidden;min-width:0}
-.seg{min-width:2px}
-
-.strip{position:relative;height:38px;background:#171922;border-radius:5px;min-width:0}
-.lane.nm,.strip.nm,.stack100.nm{position:relative;background:transparent;border:1px dashed var(--line2)}
-.pt{position:absolute;width:9px;height:9px;border-radius:50%;transform:translate(-50%,-50%);
-  box-shadow:0 0 0 2px #11131c}
-.med{position:absolute;top:5px;bottom:5px;width:2px;background:var(--ink2)}
-.nolane{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-family:var(--font-mono);
-  font-size:11.5px;color:var(--ink3)}
-
-.matrix{display:grid;gap:6px;min-width:440px}
-.mcell{border-radius:7px;padding:11px 12px;border:1px solid var(--line);min-width:0}
-.mcell .mv{font-family:var(--font-mono);font-size:14px}
-.mcell .ms{font-size:11px;color:var(--ink2);margin-top:2px}
-.mhead{font-family:var(--font-mono);font-size:12px;color:var(--ink3);padding:4px 2px;align-self:end}
-
-#tip{position:fixed;z-index:80;pointer-events:none;opacity:0;transition:opacity .12s;
-  background:#05070e;border:1px solid var(--line2);border-radius:8px;padding:9px 11px;font-size:12.5px;
-  font-family:var(--font-mono);color:var(--ink);box-shadow:0 10px 30px #0008;max-width:250px}
-#tip b{color:#fff;font-weight:500}
-
-/* ---- segmented control ---- */
-.seg3{display:inline-flex;gap:4px;background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius);padding:3px}
-.seg3 button{min-height:var(--ctl-h);padding:0 13px;border:0;border-radius:var(--radius-ctl);background:transparent;color:var(--ink2);
-  font-size:13.5px;cursor:pointer}
-.seg3 button[aria-pressed="true"]{background:var(--accent-bg);color:var(--accent-ink)}
+/* ---- wrap ---- */
+.wrap { max-width: 1240px; margin: 0 auto }
 
 /* ---- hero ---- */
-.hero{display:flex;flex-direction:column;gap:22px;padding-block:14px 8px}
-.hero h1{font-size:clamp(33px,6vw,56px);font-weight:700;line-height:1.04;max-width:17ch}
-.hero .lead{font-size:clamp(16px,2.2vw,19px);max-width:60ch}
+.hero { padding-block: 44px 0 }
+.hero-eyebrow {
+  font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.hero-eyebrow svg { width: 14px; height: 14px; fill: var(--accent) }
+.hero h1 { font-size: clamp(32px, 5.5vw, 52px); font-weight: 700; line-height: 1.06; max-width: 14ch }
+.hero h1 em { font-style: normal; color: var(--accent) }
+.hero-row { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; margin-top: 10px }
+.protocol-health { display: flex; align-items: center; gap: 20px; font-family: var(--font-mono); font-size: 12px }
+.protocol-health .ph-label { color: var(--ink3); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 2px }
+.protocol-health .ph-val { display: flex; align-items: center; gap: 8px }
+.protocol-health .ph-val .num { font-size: 15px; font-weight: 600 }
+
+/* ---- constellation ---- */
+.constellation {
+  position: relative; margin-top: 28px; border-radius: var(--radius-card);
+  background: linear-gradient(170deg, #0a0d1a 0%, #080b16 50%, #0a0e1c 100%);
+  border: 1px solid var(--line); overflow: hidden; padding: 0;
+}
+.constellation::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse 60% 50% at 50% 40%, rgba(103,232,249,.04), transparent);
+}
+.constellation svg { display: block; width: 100%; height: auto }
+.cnode {
+  cursor: pointer; transition: transform .2s; transform-box: fill-box; transform-origin: center;
+}
+.cnode:hover { transform: scale(1.04) }
+.cnode[data-node="race-controller"] { transform: translateY(-60px) }
+.cnode[data-node="race-controller"]:hover { transform: translateY(-60px) scale(1.04) }
+.cnode-box { fill: #111320; stroke: var(--line2) }
+.cnode:hover .cnode-box { stroke: var(--accent-dim); fill: #151830 }
+.cnode-name { fill: var(--ink); font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 600; letter-spacing: 1.4px }
+.cnode-desc { fill: var(--ink3); font-family: "IBM Plex Sans", sans-serif; font-size: 11px }
+.cnode-stat { fill: var(--ink3); font-family: "IBM Plex Mono", monospace; font-size: 10px }
+.clink { stroke: var(--line); stroke-width: 1; fill: none; stroke-dasharray: 6 8; opacity: .5 }
+
+/* ---- technical architecture ---- */
+.arch { padding-block: 56px 0 }
+.arch-eyebrow {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 10px;
+}
+.arch-head { margin-bottom: 6px }
+.arch-head h2 { font-size: clamp(22px, 3vw, 30px); font-weight: 700; margin: 0 }
+.arch-intro { font-size: 14px; color: var(--ink2); line-height: 1.65; margin: 0 0 22px; max-width: 820px }
+.arch-pipeline {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin-bottom: 24px; padding: 14px 18px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card);
+}
+.arch-pipeline .ap-step {
+  font-family: var(--font-mono); font-size: 12.5px; font-weight: 500;
+  padding: 5px 11px; border-radius: 6px; background: rgba(57,135,229,.12); color: var(--accent);
+}
+.arch-pipeline .ap-arr { color: var(--ink3); font-size: 14px }
+.arch-grid { display: flex; flex-direction: column; gap: 16px }
+.arch-card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-left: 3px solid var(--accent); border-radius: var(--radius-card); overflow: hidden;
+}
+.arch-card.ac-infra  { border-left-color: #3987e5 }
+.arch-card.ac-data   { border-left-color: #d29922 }
+.arch-card.ac-runner { border-left-color: #3fb950 }
+.arch-card summary {
+  display: flex; align-items: center; gap: 12px; padding: 18px 24px;
+  cursor: pointer; list-style: none; font-weight: 600; font-size: 16.5px;
+  transition: background .12s;
+}
+.arch-card summary::-webkit-details-marker { display: none }
+.arch-card summary::before {
+  content: '▸'; font-size: 13px; color: var(--ink3);
+  transition: transform .15s; flex-shrink: 0; width: 14px;
+}
+.arch-card[open] summary::before { transform: rotate(90deg) }
+.arch-card summary:hover { background: var(--surface2) }
+.arch-card .ac-icon { width: 22px; height: 22px; flex-shrink: 0; color: var(--accent) }
+.arch-card .ac-icon svg { width: 100%; height: 100% }
+.arch-card .ac-tag {
+  margin-left: auto; font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--ink3); letter-spacing: .04em;
+}
+.arch-body {
+  padding: 0 24px 22px; font-size: 15px; line-height: 1.7; color: var(--ink2);
+}
+.arch-body p { margin: 0 0 12px }
+.arch-body ul { margin: 6px 0 12px; padding-left: 20px }
+.arch-body li { margin-bottom: 5px }
+.ac-code {
+  background: var(--bg2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 14px 16px; margin: 12px 0;
+  font: 13.5px/1.6 var(--font-mono); color: var(--ink2);
+  overflow-x: auto; white-space: pre; display: block;
+}
+.ac-code b { color: var(--accent); font-weight: 500 }
+.ac-code em { color: #d95926; font-style: normal }
+.ac-label {
+  display: inline-block; font: 600 10.5px/1 var(--font-mono);
+  letter-spacing: .06em; text-transform: uppercase;
+  color: var(--accent); margin: 12px 0 4px;
+}
+.arch-body .hl { color: var(--ink); font-weight: 600 }
+.arch-stat-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 }
+.arch-stat {
+  flex: 1 1 120px; padding: 12px 14px; background: var(--bg2);
+  border: 1px solid var(--line); border-radius: 8px; text-align: center;
+}
+.arch-stat .as-v { font: 600 20px/1 var(--font-mono); color: var(--ink) }
+.arch-stat .as-k { font-size: 12px; color: var(--ink3); margin-top: 4px }
+
+/* ---- telemetry terminal ---- */
+.terminal {
+  margin-top: 44px; border-radius: var(--radius-card); background: var(--bg2);
+  border: 1px solid var(--line); overflow: hidden;
+}
+.term-head {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 12px 18px; border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--ink3);
+}
+.term-head .th-title { display: flex; align-items: center; gap: 8px; color: var(--ink2); letter-spacing: .1em; text-transform: uppercase }
+.term-head .th-title svg { width: 14px; height: 14px; fill: var(--accent) }
+.term-body {
+  padding: 14px 18px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.8;
+  min-height: 160px; max-height: 200px; overflow: auto; color: var(--ink2);
+}
+.term-body .tl-time { color: var(--ink3) }
+.term-body .tl-ok { color: var(--ok); font-weight: 500 }
+.term-body .tl-probe { color: var(--accent) }
+.term-status {
+  display: flex; flex-wrap: wrap; gap: 12px 24px; padding: 10px 18px;
+  border-top: 1px solid var(--line); font-family: var(--font-mono); font-size: 11px; color: var(--ink3);
+}
+.term-status .ts-val { color: var(--ink2) }
+.term-status .ts-active { color: var(--ok) }
+
+/* ---- footer strip ---- */
+.foot-strip {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px;
+  padding-block: 16px; margin-top: 20px;
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--ink3);
+  letter-spacing: .06em; text-transform: uppercase;
+}
+.foot-strip .fs-lock { display: flex; align-items: center; gap: 6px }
+
+/* ---- (divider removed — nav moved to topbar) ---- */
+
+/* ---- topbar nav ---- */
+.topbar-nav {
+  display: flex; align-items: center; gap: 2px;
+}
+.topbar-nav button {
+  height: 34px; padding: 0 13px; border: 0; border-radius: var(--radius-ctl);
+  background: transparent; color: var(--ink3); font-size: 13px; cursor: pointer;
+  font-weight: 500; transition: background .15s, color .15s; white-space: nowrap;
+  font-family: var(--font-ui);
+}
+.topbar-nav button:hover { background: var(--surface2); color: var(--ink) }
+.topbar-nav button[aria-pressed="true"] { color: var(--accent); background: var(--accent-bg) }
+.topbar-hamburger {
+  display: none; width: 36px; height: 36px; border: 1px solid var(--line2); border-radius: var(--radius-ctl);
+  background: transparent; color: var(--ink2); cursor: pointer; align-items: center; justify-content: center;
+}
+.topbar-hamburger svg { width: 18px; height: 18px }
+.topbar-mobile-menu {
+  display: none; position: absolute; top: 100%; right: 0; left: 0;
+  background: rgba(7,9,19,.97); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line); padding: 8px 16px; flex-direction: column; gap: 2px; z-index: 55;
+}
+.topbar-mobile-menu.open { display: flex }
+.topbar-mobile-menu button {
+  width: 100%; text-align: left; height: 42px; padding: 0 12px; border: 0; border-radius: var(--radius-ctl);
+  background: transparent; color: var(--ink2); font-size: 14px; cursor: pointer;
+  font-weight: 500; font-family: var(--font-ui);
+}
+.topbar-mobile-menu button:hover { background: var(--surface2); color: var(--ink) }
+.topbar-mobile-menu button[aria-pressed="true"] { color: var(--accent); background: var(--accent-bg) }
+
+/* ---- shared primitives ---- */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card); padding: 22px }
+.card > h3 { font-size: 17px; font-weight: 600; margin-bottom: 6px }
+.eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink3) }
+.lead { color: var(--ink2); font-size: 16px; max-width: 64ch; line-height: 1.6 }
+.muted { color: var(--ink2) }
+.small { font-size: 13px; color: var(--ink3) }
+.stack { display: flex; flex-direction: column }
+.g8{gap:8px}.g12{gap:12px}.g16{gap:16px}.g22{gap:22px}.g34{gap:34px}.g52{gap:52px}
+.grid { display: grid; gap: 16px }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(248px, 1fr)) }
+.g3 { grid-template-columns: repeat(auto-fit, minmax(214px, 1fr)) }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center }
+.sectitle { display: flex; flex-direction: column; gap: 7px; max-width: 68ch }
+.sectitle h2 { font-size: clamp(23px, 3.2vw, 30px); font-weight: 700 }
+hr { border: 0; border-top: 1px solid var(--line); margin: 0 }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  padding: 4px 8px; border-radius: 5px; border: 1px solid var(--line2); color: var(--ink2); white-space: nowrap;
+}
+.chip.ok { border-color: #1e5c2c; background: #0f2214; color: #6fd47e }
+.chip.warn { border-color: #5d4a16; background: #221c0c; color: #e3bb5a }
+.chip.info { border-color: #234365; background: #0e1a27; color: #7fb6f0 }
+.chip .dt { width: 7px; height: 7px; border-radius: 50%; background: currentColor }
+.fighead .chip.mono { text-transform: none; letter-spacing: 0 }
+
+.kv { display: flex; justify-content: space-between; gap: 14px; padding: 9px 0; border-bottom: 1px solid #1e2029; font-size: 14px }
+.kv:last-child { border-bottom: 0 }
+.kv b { font-family: var(--font-mono); font-weight: 500; color: var(--ink) }
+
+.stat { background: var(--surface2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; min-width: 0 }
+.stat .k { font-size: 12.5px; color: var(--ink2) }
+.stat .v { font-family: var(--font-mono); font-size: 27px; line-height: 1.15; margin-top: 5px; overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums }
+.stat .v u { font-family: var(--font-ui); font-size: 12px; font-weight: 500; color: var(--ink3);
+  text-decoration: none; margin-left: 4px; letter-spacing: .02em }
+.stat .n { font-size: 12px; color: var(--ink3); margin-top: 5px }
+/* KPI tiles inside the playground result card run at a tighter scale */
+#pgKpis .stat { padding: 13px 14px }
+#pgKpis .stat .k { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink3) }
+#pgKpis .stat .v { font-size: 21px; margin-top: 4px }
+#pgKpis .stat .n { font-size: 11px; margin-top: 3px }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: var(--ctl-h); padding: 0 20px; border-radius: var(--radius-ctl);
+  border: 1px solid var(--line2); background: var(--surface2); color: var(--ink);
+  font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none;
+}
+.btn:hover { background: #282932 }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: #04121f }
+.btn.pri:hover { background: var(--accent2) }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px }
+th { text-align: left; font-weight: 500; font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--ink3); padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap }
+td { padding: 11px 12px; border-bottom: 1px solid #1c1e27; vertical-align: top }
+tr:last-child td { border-bottom: 0 }
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; min-width: 0; max-width: 100% }
+.scroll table { min-width: 600px }
+
+/* ---- charts ---- */
+.figure { display: flex; flex-direction: column; gap: 14px; min-width: 0 }
+.figure > * { min-width: 0 }
+.fighead { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between }
+.fighead h3 { font-size: 16.5px; font-weight: 600 }
+.figsub { font-size: 13px; color: var(--ink2); max-width: 72ch }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--ink2) }
+.legend span { display: inline-flex; align-items: center; gap: 7px }
+.swatch { width: 11px; height: 11px; border-radius: 3px; flex: 0 0 auto }
+
+.bars { display: flex; flex-direction: column; gap: 11px }
+.bar { display: grid; grid-template-columns: 84px minmax(0,1fr); gap: 12px; align-items: center }
+.bar .lbl { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink2); min-width: 0 }
+.bar .lbl i { display: block; font-style: normal; font-size: 10.5px; color: var(--ink3) }
+.lanes { display: flex; flex-direction: column; gap: 4px; min-width: 0 }
+.lane { position: relative; height: 19px; background: #12141e; border-radius: 4px }
+.fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 0 4px 4px 0; min-width: 3px }
+.fill[data-zero="1"] { border-radius: 4px; width: 3px !important; opacity: .55 }
+.blab { position: absolute; top: 50%; transform: translateY(-50%); font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--ink2); white-space: nowrap; padding-left: 7px }
+.blab[data-in="1"] { padding-left: 0; padding-right: 7px; color: #070913; font-weight: 500 }
+.axis { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 11px; color: var(--ink3);
+  border-top: 1px solid var(--line); padding-top: 6px; margin-left: 84px }
+
+.stack100 { display: flex; gap: 2px; height: 22px; border-radius: 4px; overflow: hidden; min-width: 0 }
+.seg { min-width: 2px }
+
+.strip { position: relative; height: 38px; background: #12141e; border-radius: 5px; min-width: 0 }
+.lane.nm,.strip.nm,.stack100.nm { position: relative; background: transparent; border: 1px dashed var(--line2) }
+.pt { position: absolute; width: 9px; height: 9px; border-radius: 50%; transform: translate(-50%,-50%);
+  box-shadow: 0 0 0 2px #11131c }
+.med { position: absolute; top: 5px; bottom: 5px; width: 2px; background: var(--ink2) }
+.nolane { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--font-mono);
+  font-size: 11.5px; color: var(--ink3) }
+
+.matrix { display: grid; gap: 6px; min-width: 440px }
+.mcell { border-radius: 7px; padding: 11px 12px; border: 1px solid var(--line); min-width: 0 }
+.mcell .mv { font-family: var(--font-mono); font-size: 14px }
+.mcell .ms { font-size: 11px; color: var(--ink2); margin-top: 2px }
+.mhead { font-family: var(--font-mono); font-size: 12px; color: var(--ink3); padding: 4px 2px; align-self: end }
+
+#tip { position: fixed; z-index: 80; pointer-events: none; opacity: 0; transition: opacity .12s;
+  background: #05070e; border: 1px solid var(--line2); border-radius: 8px; padding: 9px 11px; font-size: 12.5px;
+  font-family: var(--font-mono); color: var(--ink); box-shadow: 0 10px 30px #0008; max-width: 250px }
+#tip b { color: #fff; font-weight: 500 }
+
+/* ---- segmented control ---- */
+.seg3 { display: inline-flex; gap: 4px; background: var(--surface2); border: 1px solid var(--line); border-radius: var(--radius); padding: 3px }
+.seg3 button { min-height: var(--ctl-h); padding: 0 13px; border: 0; border-radius: var(--radius-ctl); background: transparent; color: var(--ink2);
+  font-size: 13.5px; cursor: pointer }
+.seg3 button[aria-pressed="true"] { background: var(--accent-bg); color: var(--accent2) }
 
 /* ---- diagrams ---- */
-.diagram{background:linear-gradient(#12141d,#0c0e18);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.diagram svg{display:block;width:100%;height:auto;max-width:100%}
+.diagram { background: linear-gradient(#12141d, #0c0e18); border: 1px solid var(--line); border-radius: 12px; overflow: hidden }
+.diagram svg { display: block; width: 100%; height: auto; max-width: 100% }
 
 /* ---- playground ---- */
-.stage{position:relative;background:linear-gradient(#12141d,#0b0d17);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.stage svg{display:block;width:100%;height:auto}
-.plug{position:absolute;transform:translate(-50%,-50%);min-height:var(--ctl-h);display:flex;align-items:center;gap:7px;
-  padding:0 13px;border-radius:var(--radius-ctl);cursor:pointer;font-family:var(--font-mono);font-size:12.5px;
-  background:#0c0e18;border:1.5px solid currentColor;white-space:nowrap}
-.plug small{font-family:var(--font-ui);font-size:11px;color:var(--ink2)}
-.plug.v6{color:var(--s1)} .plug.v4{color:var(--s2)}
-.plug[data-cut="true"]{color:var(--bad);border-style:dashed;background:#1b0e0e}
-.plug:hover{background:#1c1d27}
-.clockbar{position:absolute;right:12px;top:12px;font-family:var(--font-mono);font-size:12px;color:var(--ink2);
-  background:#0a0c16cc;border:1px solid var(--line);border-radius:6px;padding:5px 9px}
-.ctl{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;
-  padding:10px 0;border-bottom:1px solid #1e2029}
-.ctl:last-child{border-bottom:0}
-.ctl label{flex:1 1 150px;min-width:0;font-size:13.5px}
-.ctl .hint{display:block;font-size:11.5px;color:var(--ink3)}
-input[type=range]{width:116px;accent-color:var(--accent)}
-select{background:var(--surface2);color:var(--ink);border:1px solid var(--line2);border-radius:var(--radius-ctl);
-  padding:7px 9px;font-size:13px;min-height:var(--ctl-h)}
-.val{font-family:var(--font-mono);font-size:12.5px;color:var(--ink2);min-width:60px;text-align:right}
-.rail{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px}
-.scn{flex:0 0 auto;min-height:var(--ctl-h);text-align:left;padding:8px 13px;border-radius:var(--radius-ctl);cursor:pointer;
-  background:var(--surface);border:1px solid var(--line);color:var(--ink);display:flex;flex-direction:column;gap:1px}
-.scn:hover{border-color:var(--line2);background:var(--surface2)}
-.scn .id{font-family:var(--font-mono);font-size:13px}
-.scn .nm{font-size:11.5px;color:var(--ink2);white-space:nowrap}
-.scn[aria-pressed="true"]{background:var(--accent-bg);border-color:var(--accent);color:var(--accent-ink)}
-.log{font-family:var(--font-mono);font-size:12.5px;line-height:1.75;max-height:210px;overflow:auto;
-  background:#090b15;border:1px solid var(--line);border-radius:9px;padding:12px}
-.log div{white-space:pre;color:var(--ink2)}
-.log b{font-weight:500;color:var(--ink)}
-.tl .tlane{display:grid;grid-template-columns:58px minmax(0,1fr);gap:10px;align-items:center;margin-bottom:8px}
-.track{position:relative;height:40px;background:var(--surface2);border:1px solid var(--line);border-radius:7px}
-.tspan{position:absolute;top:16px;height:8px;border-radius:4px;opacity:.42}
-.mk{position:absolute;top:7px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:3px}
-.mk i{display:block;width:11px;height:11px;border:2px solid #0b0d17}
-.mk span{font-family:var(--font-mono);font-size:10.5px;color:var(--ink2);white-space:nowrap}
+.stage { position: relative; background: linear-gradient(#12141d, #0b0d17); border: 1px solid var(--line); border-radius: 12px; overflow: hidden }
+.stage svg { display: block; width: 100%; height: auto }
+.plug { position: absolute; transform: translate(-50%,-50%); min-height: var(--ctl-h); display: flex; align-items: center; gap: 7px;
+  padding: 0 13px; border-radius: var(--radius-ctl); cursor: pointer; font-family: var(--font-mono); font-size: 12.5px;
+  background: #0c0e18; border: 1.5px solid currentColor; white-space: nowrap }
+.plug small { font-family: var(--font-ui); font-size: 11px; color: var(--ink2) }
+.plug.v6 { color: var(--s1) } .plug.v4 { color: var(--s2) }
+.plug[data-cut="true"] { color: var(--bad); border-style: dashed; background: #1b0e0e }
+.plug:hover { background: #1c1d27 }
+.clockbar { position: absolute; right: 12px; top: 12px; font-family: var(--font-mono); font-size: 12px; color: var(--ink2);
+  background: #0a0c16cc; border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px }
+.ctl { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px 12px; align-items: center;
+  padding: 13px 0; border-bottom: 1px solid var(--line) }
+.ctl:first-of-type { padding-top: 4px }
+.ctl:last-child { border-bottom: 0; padding-bottom: 2px }
+.ctl label { min-width: 0; font-size: 13.5px; font-weight: 500 }
+.ctl .hint { display: block; font-size: 11.5px; color: var(--ink3); font-weight: 400; margin-top: 1px }
+.ctl .rngrow { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; align-items: center }
+.ctl .rngrow select { width: 100% }
+input[type=range] { width: 100%; min-width: 0; accent-color: var(--accent) }
+select { background: var(--surface2); color: var(--ink); border: 1px solid var(--line2); border-radius: var(--radius-ctl);
+  padding: 7px 9px; font-size: 13px; min-height: var(--ctl-h) }
+.val { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink); min-width: 62px; text-align: right;
+  font-variant-numeric: tabular-nums }
+.rail { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px }
+.scn { flex: 0 0 auto; min-height: var(--ctl-h); text-align: left; padding: 8px 13px; border-radius: var(--radius-ctl); cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line); color: var(--ink); display: flex; flex-direction: column; gap: 1px }
+.scn:hover { border-color: var(--line2); background: var(--surface2) }
+.scn .id { font-family: var(--font-mono); font-size: 13px }
+.scn .nm { font-size: 11.5px; color: var(--ink2); white-space: nowrap }
+.scn[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); color: var(--accent2) }
+.log { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.75; max-height: 210px; overflow: auto;
+  background: #070912; border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px;
+  overscroll-behavior: contain }
+/* the packet log keeps a fixed height so the page does not jump as lines stream in */
+#pgLog { height: 212px; max-height: none }
+.log div { white-space: pre; color: var(--ink2) }
+.log b { font-weight: 500; color: var(--ink) }
+.log .lg-syn { color: var(--accent2) }
+.log .lg-ok { color: #6fd47e }
+.log .lg-warn { color: #e3bb5a }
+.log .lg-bad { color: #f2a39c }
+.log .lg-t { color: var(--ink3) }
+.log .lg-note { color: var(--ink3); font-style: normal }
 
-details summary{cursor:pointer;font-family:var(--font-mono);font-size:13px;color:var(--ink2)}
-details[open] summary{margin-bottom:10px}
-details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
-.foot{border-top:1px solid var(--line);margin-top:56px;padding-top:22px;font-size:13px;color:var(--ink3)}
-@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* ---- attempt timeline ---- */
+.tl .tlane { display: grid; grid-template-columns: 58px minmax(0,1fr); gap: 10px; align-items: center; margin-bottom: 10px }
+.tl .tlane:last-child { margin-bottom: 0 }
+.track {
+  position: relative; height: 62px; background: var(--surface2);
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+  background-image: repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 25%);
+  background-position: 0 0; background-size: 100% 100%;
+}
+.tspan { position: absolute; top: 27px; height: 8px; border-radius: 4px }
+.tspan[data-s="won"] { opacity: 1 }
+.tspan[data-s="abandoned"] { opacity: .34 }
+.tspan[data-s="no_reply"] { opacity: .26 }
+/* 62px lane: label band, 8px bar at 27px, label band. The dot always sits against the bar. */
+.mk { position: absolute; transform: translateX(-50%); display: flex; align-items: center; gap: 2px;
+  pointer-events: none }
+.mk[data-pos="top"] { top: 2px; flex-direction: column-reverse }
+.mk[data-pos="bot"] { bottom: 2px; flex-direction: column }
+.mk[data-edge="l"] { transform: none; align-items: flex-start }
+.mk[data-edge="r"] { transform: translateX(-100%); align-items: flex-end }
+.mk i { display: block; width: 8px; height: 8px; border: 2px solid #0b0d17; flex: 0 0 auto }
+.mk span { font-family: var(--font-mono); font-size: 10.5px; line-height: 13px; color: var(--ink2);
+  white-space: nowrap; font-variant-numeric: tabular-nums }
+
+/* ---- verdict banner ---- */
+.verdict { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: var(--radius);
+  border: 1px solid var(--line2); background: var(--surface2); font-size: 13.5px; line-height: 1.5; color: var(--ink2) }
+.verdict .vdot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex: 0 0 auto; margin-top: 6px }
+.verdict[data-s="ok"] { border-color: #1e5c2c; background: #0e2013; color: #8fe3a0 }
+.verdict[data-s="bad"] { border-color: #6a2320; background: #1d0e0e; color: #f2a39c }
+.verdict b { font-weight: 600 }
+.verdict em { font-style: normal; color: var(--ink2) }
+
+/* ---- cut-the-cable controls (narrow screens) ---- */
+.cutrow { display: none; grid-template-columns: 1fr 1fr; gap: 10px }
+.cutbtn { min-height: var(--ctl-h); display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 0 12px; border-radius: var(--radius-ctl); cursor: pointer; font-family: var(--font-mono); font-size: 12.5px;
+  background: #0c0e18; border: 1.5px solid currentColor; white-space: nowrap }
+.cutbtn small { font-family: var(--font-ui); font-size: 11px; color: var(--ink2) }
+.cutbtn.v6 { color: var(--s1) } .cutbtn.v4 { color: var(--s2) }
+.cutbtn[data-cut="true"] { color: var(--bad); border-style: dashed; background: #1b0e0e }
+.cutbtn:hover { background: #1c1d27 }
+@media (max-width: 580px) {
+  .plug { display: none }
+  .cutrow { display: grid }
+}
+
+/* ---- timeline legend ---- */
+.tlkey { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; color: var(--ink3) }
+.tlkey span { display: inline-flex; align-items: center; gap: 7px }
+.tlkey i { width: 18px; height: 6px; border-radius: 3px; flex: 0 0 auto }
+
+details summary { cursor: pointer; font-family: var(--font-mono); font-size: 13px; color: var(--ink2) }
+details[open] summary { margin-bottom: 10px }
+details ul { margin: 0; padding-left: 19px; color: var(--ink2); font-size: 13.5px }
+.foot { border-top: 1px solid var(--line); margin-top: 56px; padding-block: 22px 40px; font-size: 13px; color: var(--ink3) }
+
+/* ---- hidden sections ---- */
+section[hidden] { display: none !important }
+section[id^="p-"] { padding-top: 48px }
+@media (max-width: 640px) { section[id^="p-"] { padding-top: 32px } }
+#homePage[hidden] { display: none !important }
+
+@media (max-width: 800px) {
+  .topbar-nav { display: none }
+  .topbar-hamburger { display: flex }
+}
+@media (max-width: 640px) {
+  .topbar-right { display: none }
+  .protocol-health { flex-direction: column; gap: 8px }
+  .constellation svg { min-height: 280px }
+  .bar { grid-template-columns: 64px minmax(0,1fr) }
+  .axis { margin-left: 64px }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important } }
 </style>
 
 <div id="tip" role="status" aria-live="off"></div>
 
-<nav class="nav">
-  <div class="navin">
-    <div class="brand"><b>HappyLab</b><span>PS-028 · NetDefenders</span></div>
-    <div class="navlinks" id="nav">
-      <a href="#overview">Overview</a>
-      <a href="#method">Method</a>
-      <a href="#results">Results</a>
-      <a href="#playground">Playground</a>
-      <a href="#evidence">Evidence</a>
+<!-- ============ TOP BAR ============ -->
+<nav class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <div class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
+      <div class="brand-text">
+        <span class="brand-sub">AIORI // PS-028</span>
+        <span class="brand-name">HappyLab</span>
+      </div>
     </div>
+    <nav class="topbar-nav" id="topbarNav">
+      <button data-tab="home" aria-pressed="true">Home</button>
+      <button data-tab="overview" aria-pressed="false">Overview</button>
+      <button data-tab="method" aria-pressed="false">Method</button>
+      <button data-tab="results" aria-pressed="false">Results</button>
+      <button data-tab="playground" aria-pressed="false">Playground</button>
+      <button data-tab="evidence" aria-pressed="false">Evidence</button>
+    </nav>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="topbar-right">
+        <span>280 runs · 14 sessions · 0 conflicts</span>
+      </div>
+      <button class="topbar-hamburger" id="hamburgerBtn" aria-label="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="topbar-mobile-menu" id="mobileMenu">
+    <button data-tab="home" aria-pressed="true">Home</button>
+    <button data-tab="overview" aria-pressed="false">Overview</button>
+    <button data-tab="method" aria-pressed="false">Method</button>
+    <button data-tab="results" aria-pressed="false">Results</button>
+    <button data-tab="playground" aria-pressed="false">Playground</button>
+    <button data-tab="evidence" aria-pressed="false">Evidence</button>
   </div>
 </nav>
 
 <div class="wrap">
 
-<!-- ================= OVERVIEW ================= -->
-<section id="p-overview">
-  <div class="stack g52">
-
-    <div class="hero">
-      <div class="eyebrow">AIORI-3 · Problem statement 028 · Team code A3-PS028-TC278</div>
-      <h1>How long does a browser wait on a broken IPv6 path?</h1>
-      <p class="lead">Happy Eyeballs is the rule that stops a dead or slow IPv6 route from stalling your connection. We built an isolated two-stack lab, broke one address family at a time, and measured what real clients actually do — from the packets, not from the client's own log.</p>
-      <div class="row">
-        <a class="btn pri" href="#playground">Try the scenario player</a>
-        <a class="btn" href="#results">See the measurements</a>
+<!-- ============ HOME (LANDING) ============ -->
+<div id="homePage">
+<!-- ============ HERO ============ -->
+<div class="hero" id="landing">
+  <div class="hero-eyebrow"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> AIORI-3 · Problem statement 028 · Team code A3-PS028-TC278</div>
+  <h1>Which path wins <em>the race?</em></h1>
+  <div class="hero-row">
+    <div></div>
+    <div class="protocol-health">
+      <div class="ph-label">Measured dataset</div>
+      <div class="ph-val">
+        <span class="num">280</span> <span style="color:var(--ink3)">runs</span>
+        <span style="color:var(--ink3)">·</span>
+        <span class="num">14</span> <span style="color:var(--ink3)">sessions</span>
+        <span style="color:var(--ink3)">·</span>
+        <span class="num" style="color:var(--ok)">0</span> <span style="color:var(--ink3)">conflicts</span>
       </div>
     </div>
+  </div>
+</div>
 
-    <div class="grid g3">
-      <div class="stat"><div class="k">Conditions measured</div><div class="v">7<span style="font-size:15px;color:var(--ink3)"> + 1 optional</span></div><div class="n">blackholes, added latency, delayed DNS</div></div>
-      <div class="stat"><div class="k">Runs in the full matrix</div><div class="v">280</div><div class="n">2 clients × 7 conditions × 20 repetitions</div></div>
-      <div class="stat"><div class="k">Fallback cost, dead IPv6</div><div class="v">≈200 ms</div><div class="n">curl, measured from the capture</div></div>
-      <div class="stat"><div class="k">Evidence per run</div><div class="v">1 pcap</div><div class="n">plus a cross-checked JSON record</div></div>
+<!-- ============ CONSTELLATION ============ -->
+<div class="constellation" id="constellationBox">
+  <svg viewBox="0 0 1000 480" role="img" aria-label="Navigation map of the project sections">
+    <!-- hub-and-spoke links, drawn from node edges to the race controller -->
+    <ellipse cx="500" cy="240" rx="340" ry="150" fill="none" stroke="#1b2a3a" stroke-width="1" stroke-dasharray="2 7" opacity=".7"/>
+    <line class="clink" id="ol-edge-v6" x1="500" y1="240" x2="200" y2="200"/>
+    <line class="clink" id="ol-browser-01" x1="500" y1="240" x2="500" y2="150"/>
+    <line class="clink" id="ol-dns-resolver" x1="500" y1="240" x2="800" y2="200"/>
+    <line class="clink" id="ol-pcap-sniffer" x1="500" y1="240" x2="200" y2="410"/>
+    <line class="clink" id="ol-origin-svc" x1="500" y1="240" x2="800" y2="410"/>
+
+    <!-- EDGE-V6 node -->
+    <g class="cnode" data-node="edge-v6">
+      <rect class="cnode-box" x="100" y="140" width="200" height="120" rx="10"/>
+      <rect x="120" y="160" width="32" height="32" rx="6" fill="var(--bg2)" stroke="var(--line2)"/>
+      <path d="M128 171h14m-4-4 4 4-4 4M144 181h-14m4-4-4 4 4 4" stroke="#67e8f9" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text class="cnode-name" x="120" y="216">RESULTS</text>
+      <text class="cnode-desc" x="120" y="232">Measurements &amp; charts</text>
+      <text class="cnode-stat" x="120" y="250">7 scenarios · 280 runs</text>
+    </g>
+
+    <!-- BROWSER-01 node (center top, highlighted) -->
+    <g class="cnode" data-node="browser-01">
+      <rect x="380" y="90" width="240" height="120" rx="10" fill="#111320" stroke="var(--accent-dim)" stroke-width="1.5"/>
+      <rect x="400" y="108" width="32" height="32" rx="6" fill="var(--bg2)" stroke="var(--line2)"/>
+      <rect x="408" y="117" width="16" height="11" rx="1.5" stroke="#67e8f9" stroke-width="1.4" fill="none"/>
+      <path d="M413 132h6M416 128v4" stroke="#67e8f9" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+      <text class="cnode-name" x="400" y="164">OVERVIEW</text>
+      <text class="cnode-desc" x="400" y="180">The problem &amp; what we built</text>
+      <text class="cnode-stat" x="400" y="198">RFC 8305 · PS-028</text>
+    </g>
+
+    <!-- DNS-RESOLVER node -->
+    <g class="cnode" data-node="dns-resolver">
+      <rect class="cnode-box" x="700" y="140" width="200" height="120" rx="10"/>
+      <rect x="720" y="160" width="32" height="32" rx="6" fill="var(--bg2)" stroke="var(--line2)"/>
+      <circle cx="736" cy="176" r="7" stroke="#67e8f9" stroke-width="1.4" fill="none"/>
+      <path d="M729 176h14M736 169c3 3.5 3 10.5 0 14-3-3.5-3-10.5 0-14" stroke="#67e8f9" stroke-width="1.3" fill="none"/>
+      <text class="cnode-name" x="720" y="216">METHOD</text>
+      <text class="cnode-desc" x="720" y="232">Lab topology &amp; metrics</text>
+      <text class="cnode-stat" x="720" y="250">netns · netem · pcap</text>
+    </g>
+
+    <!-- RACE CONTROLLER (center) -->
+    <g class="cnode" data-node="race-controller">
+      <circle cx="500" cy="300" r="42" fill="none" stroke="#1b4a56" stroke-width="1" opacity=".55"/>
+      <circle cx="500" cy="300" r="30" fill="#0e1b24" stroke="var(--accent-dim)" stroke-width="1.4"/>
+      <rect x="492" y="292" width="16" height="16" rx="2.5" stroke="#67e8f9" stroke-width="1.5" fill="none"/>
+      <rect x="496" y="296" width="8" height="8" rx="1" fill="#67e8f9" opacity=".45"/>
+      <path d="M496 292v-4M500 292v-4M504 292v-4M496 308v4M500 308v4M504 308v4M492 296h-4M492 300h-4M492 304h-4M508 296h4M508 300h4M508 304h4" stroke="#67e8f9" stroke-width="1.2" stroke-linecap="round"/>
+      <text x="500" y="358" fill="var(--ink3)" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="2" text-anchor="middle">PLAYGROUND</text>
+    </g>
+
+    <!-- PCAP-SNIFFER node -->
+    <g class="cnode" data-node="pcap-sniffer">
+      <rect class="cnode-box" x="100" y="360" width="200" height="100" rx="10"/>
+      <rect x="120" y="378" width="32" height="32" rx="6" fill="var(--bg2)" stroke="var(--line2)"/>
+      <path d="M128 394h3l2-6 3 12 3-8 2 2h3" stroke="#67e8f9" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text class="cnode-name" x="120" y="434">EVIDENCE</text>
+      <text class="cnode-desc" x="120" y="450">Run records &amp; captures</text>
+    </g>
+
+    <!-- ORIGIN-SVC node -->
+    <g class="cnode" data-node="origin-svc">
+      <rect class="cnode-box" x="700" y="360" width="200" height="100" rx="10"/>
+      <rect x="720" y="378" width="32" height="32" rx="6" fill="var(--bg2)" stroke="var(--line2)"/>
+      <rect x="729" y="386" width="14" height="6" rx="1.5" stroke="#67e8f9" stroke-width="1.3" fill="none"/>
+      <rect x="729" y="396" width="14" height="6" rx="1.5" stroke="#67e8f9" stroke-width="1.3" fill="none"/>
+      <circle cx="732.5" cy="389" r="1" fill="#67e8f9"/><circle cx="732.5" cy="399" r="1" fill="#67e8f9"/>
+      <text class="cnode-name" x="720" y="434">TEAM</text>
+      <text class="cnode-desc" x="720" y="450">NetDefenders &amp; project info</text>
+    </g>
+  </svg>
+</div>
+
+<!-- ============ OVERVIEW INTRO (swapped from Overview tab) ============ -->
+<div class="stack g52" style="padding-block:56px 0">
+  <div class="stack g22">
+    <div class="sectitle">
+      <div class="eyebrow">The problem</div>
+      <h2>How long does a browser wait on a broken IPv6 path?</h2>
+      <p class="lead">As IPv6 deployment grows, dual-stack hosts must connect over both address families. When one path is broken — a black-holed route, unreachable next-hop, or slow DNS — a naive client that tries only one address family forces the user to wait out a full TCP connect timeout — on Linux, around 130 seconds with default SYN retries. Happy Eyeballs (RFC 8305) removes that wait by racing both families and taking whichever completes first.</p>
+    </div>
+    <p class="muted" style="font-size:14px;max-width:68ch;line-height:1.65">We built an isolated dual-stack lab, broke one address family at a time under seven controlled conditions, and measured what real clients actually do — from the packets on the wire, not from the client's own log.</p>
+  </div>
+
+  <div class="grid g3">
+    <div class="stat"><div class="k">Conditions measured</div><div class="v">7<span style="font-size:15px;color:var(--ink3)"> + 1 optional</span></div><div class="n">blackholes, added latency, delayed DNS</div></div>
+    <div class="stat"><div class="k">Runs in the full matrix</div><div class="v">280</div><div class="n">2 clients × 7 conditions × 20 repetitions</div></div>
+    <div class="stat"><div class="k">Fallback cost, dead IPv6</div><div class="v">~200 ms</div><div class="n">curl, measured from the capture</div></div>
+    <div class="stat"><div class="k">Evidence per run</div><div class="v">1 pcap</div><div class="n">plus a cross-checked JSON record</div></div>
+  </div>
+
+  <div class="stack g22">
+    <div class="sectitle" style="max-width:none">
+      <div class="eyebrow">RFC 8305 · Happy Eyeballs Version 2</div>
+      <h2>What Happy Eyeballs does</h2>
+      <p class="lead" style="max-width:none">A dual-stack host resolves a hostname to both A (IPv4) and AAAA (IPv6) records. Without Happy Eyeballs, if the preferred family is unreachable, the connection stalls until TCP times out — often tens of seconds. RFC 8305 defines a connection-racing algorithm that eliminates this penalty.</p>
+    </div>
+    <div class="diagram">
+      <svg viewBox="0 0 900 250" role="img" aria-label="The Happy Eyeballs race diagram">
+        <g font-family="IBM Plex Mono, monospace" font-size="12.5">
+          <line x1="60" y1="60" x2="840" y2="60" stroke="#31323b" stroke-width="1.5"/>
+          <line x1="60" y1="150" x2="840" y2="150" stroke="#31323b" stroke-width="1.5"/>
+          <text x="60" y="44" fill="#90a1b9">1 Resolve</text>
+          <text x="60" y="118" fill="#90a1b9">2 Race</text>
+          <circle cx="120" cy="60" r="6" fill="#7183a0"/><text x="120" y="86" fill="#7183a0" text-anchor="middle">query</text>
+          <circle cx="250" cy="60" r="6" fill="#7183a0"/><text x="250" y="86" fill="#7183a0" text-anchor="middle">A + AAAA</text>
+          <rect x="60" y="130" width="540" height="40" rx="6" fill="#0e101a" stroke="#20222b"/>
+          <rect x="62" y="132" width="198" height="36" rx="5" fill="#15293f"/>
+          <rect x="262" y="132" width="328" height="36" rx="5" fill="#2a1a12"/>
+          <text x="161" y="155" fill="#3987e5" text-anchor="middle">IPv6 attempt</text>
+          <text x="426" y="155" fill="#d95926" text-anchor="middle">IPv4 attempt</text>
+          <line x1="262" y1="118" x2="262" y2="184" stroke="#90a1b9" stroke-width="1.5" stroke-dasharray="4 4"/>
+          <text x="262" y="206" fill="#90a1b9" text-anchor="middle">fallback timer fires</text>
+          <circle cx="600" cy="150" r="7" fill="#3fb950"/>
+          <text x="612" y="155" fill="#3fb950">handshake completes</text>
+          <text x="60" y="230" fill="#7183a0">the attempt that loses the race is abandoned; the user never sees it</text>
+        </g>
+      </svg>
     </div>
 
     <div class="stack g22">
-      <div class="sectitle">
-        <div class="eyebrow">The algorithm</div>
-        <h2>What Happy Eyeballs does</h2>
-        <p class="lead">A dual-stack host has two ways to reach the same server. If it tries only one and that one is broken, the user waits for a TCP timeout — often tens of seconds. Happy Eyeballs says: prefer IPv6, but do not wait forever.</p>
-      </div>
-
-      <div class="diagram">
-        <svg viewBox="0 0 900 250" role="img" aria-labelledby="heT heD">
-          <title id="heT">The Happy Eyeballs race</title>
-          <desc id="heD">The client resolves both A and AAAA records, starts an IPv6 connection first, and after a short timer starts an IPv4 connection in parallel; whichever handshake completes first is used and the other is abandoned.</desc>
-          <g font-family="IBM Plex Mono, monospace" font-size="12.5">
-            <line x1="60" y1="60" x2="840" y2="60" stroke="#31323b" stroke-width="1.5"/>
-            <line x1="60" y1="150" x2="840" y2="150" stroke="#31323b" stroke-width="1.5"/>
-            <text x="60" y="44" fill="#90a1b9">1 · Resolve</text>
-            <text x="60" y="118" fill="#90a1b9">2 · Race</text>
-
-            <circle cx="120" cy="60" r="6" fill="#7183a0"/><text x="120" y="86" fill="#7183a0" text-anchor="middle">query</text>
-            <circle cx="250" cy="60" r="6" fill="#7183a0"/><text x="250" y="86" fill="#7183a0" text-anchor="middle">A + AAAA</text>
-
-            <rect x="60" y="130" width="540" height="40" rx="6" fill="#0e101a" stroke="#20222b"/>
-            <rect x="62" y="132" width="198" height="36" rx="5" fill="#15293f"/>
-            <rect x="262" y="132" width="328" height="36" rx="5" fill="#2a1a12"/>
-            <text x="161" y="155" fill="#3987e5" text-anchor="middle">IPv6 attempt</text>
-            <text x="426" y="155" fill="#d95926" text-anchor="middle">IPv4 attempt</text>
-
-            <line x1="262" y1="118" x2="262" y2="184" stroke="#90a1b9" stroke-width="1.5" stroke-dasharray="4 4"/>
-            <text x="262" y="206" fill="#90a1b9" text-anchor="middle">fallback timer fires</text>
-            <circle cx="600" cy="150" r="7" fill="#3fb950"/>
-            <text x="612" y="155" fill="#3fb950">handshake completes</text>
-            <text x="60" y="230" fill="#7183a0">the attempt that loses the race is abandoned; the user never sees it</text>
-          </g>
-        </svg>
-      </div>
-
-      <div class="grid g3">
-        <div class="card"><h3>Prefer IPv6</h3><p class="small">The client gets both records and orders IPv6 first. curl does this through glibc with the lab namespace's default address-selection rules; Chromium uses its own built-in DNS client, whose log shows IPv6 ordered first in all 140 of its runs.</p></div>
-        <div class="card"><h3>Start a timer</h3><p class="small">Rather than waiting for a TCP timeout, the client gives IPv6 a short head start and then opens an IPv4 connection alongside it.</p></div>
-        <div class="card"><h3>Take the first answer</h3><p class="small">Whichever handshake completes first carries the request. The other attempt is abandoned, and the user never sees the failure.</p></div>
-      </div>
-      <p class="small">RFC 8305 describes this design. We cite it as a reference for the mechanism, not as a predictor of the exact timings any particular client uses — which is the thing this project set out to measure.</p>
+      <p class="muted" style="font-size:14.5px;max-width:none;line-height:1.7">The algorithm runs in three phases, and RFC 8305 names a timer for two of them. The client sends the A and AAAA queries together; if the A answer comes back first it waits a short <span style="color:var(--accent)">Resolution Delay</span> — recommended 50 ms — to give the AAAA answer a chance before committing to IPv4. It then sorts the addresses with IPv6 preferred and opens a TCP connection to the first one. If that handshake has not completed within the <span style="color:var(--accent)">Connection Attempt Delay</span> — recommended 250 ms, with a floor of 100 ms and a ceiling of 2 seconds — it opens a parallel attempt to the first address of the other family, and further attempts follow at the same stagger until one succeeds.</p>
     </div>
+
+    <div class="grid g3">
+      <div class="card"><h3>1. Prefer IPv6</h3><p class="small">The client resolves both A and AAAA records and interleaves them with IPv6 first, following the address-sorting rules of RFC 6724. This gives IPv6 priority without betting the whole connection on it.</p></div>
+      <div class="card"><h3>2. Connection Attempt Delay</h3><p class="small">RFC 8305 recommends 250 ms before starting a fallback attempt. If the first SYN has drawn no SYN-ACK within that window, the client opens a second connection to the other address family in parallel. curl's own default is 200 ms, which is what we measure here.</p></div>
+      <div class="card"><h3>3. First handshake wins</h3><p class="small">Whichever TCP three-way handshake completes first carries the application data. All other in-flight attempts are cancelled. The user never sees the failed path — the penalty is just the fallback delay, not a full timeout.</p></div>
+    </div>
+
+    <p class="small" style="max-width:none">RFC 8305 ("Happy Eyeballs Version 2: Better Connectivity Using Concurrency," D. Schinazi and T. Pauly, December 2017) defines this mechanism. The original Happy Eyeballs algorithm was specified in RFC 6555 (2012). Our lab measures how closely real clients — curl and Chromium — follow this design under controlled fault conditions.</p>
+  </div>
+
+</div>
+<!-- ============ TELEMETRY TERMINAL ============ -->
+<div class="terminal">
+  <div class="term-head">
+    <span class="th-title"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V6a2 2 0 00-2-2zM7.5 16.5L4 13l3.5-3.5 1.42 1.42L6.84 13l2.08 2.08-1.42 1.42zM16.5 16.5l-1.42-1.42L17.16 13l-2.08-2.08 1.42-1.42L20 13l-3.5 3.5z"/></svg> Packet trace · one stored run</span>
+    <span>20261026T193106Z_S1_curl_r08.pcap</span>
+  </div>
+  <div class="term-body" id="termBody"></div>
+  <div class="term-status">
+    <span>Condition: <span class="ts-val">S1 · IPv6 blackhole</span></span>
+    <span>Client: <span class="ts-val">curl</span></span>
+    <span>Winner: <span class="ts-val">IPv4</span></span>
+    <span style="margin-left:auto">Cross-checks: <span class="ts-active">agree</span></span>
+  </div>
+</div>
+
+<!-- ============ FOOTER STRIP ============ -->
+<div class="foot-strip">
+  <span>RFC 8305 / Controlled dual-stack lab</span>
+  <span class="fs-lock">SHA-256 recorded for every capture</span>
+</div>
+
+<!-- ============ TEAM ============ -->
+<div id="teamSection" style="margin-top:48px; padding-top:48px; border-top:1px solid var(--line)">
+  <div class="stack g22">
+    <div class="sectitle"><div class="eyebrow">Who</div><h2>Team NetDefenders</h2></div>
+    <div class="grid g3">
+      <div class="card stack g8"><h3>Sam Rajeev</h3><p class="small">Backend and measurement — lab topology, impairment scripts, the run orchestrator, packet parsing and metrics.</p></div>
+      <div class="card stack g8"><h3>Pranav Murali</h3><p class="small">Frontend and testing — this site, the scenario player, the results dashboard and test coverage.</p></div>
+      <div class="card stack g8"><h3>Dr. Monika Puttaramaiah</h3><p class="small">Mentor — methodology review and guidance on validity and reporting.</p></div>
+    </div>
+    <div class="card">
+      <div class="kv"><span>Problem statement</span><b>PS-028 · Happy Eyeballs IPv4/IPv6 fallback measurement</b></div>
+      <div class="kv"><span>Team code</span><b>A3-PS028-TC278</b></div>
+      <div class="kv"><span>Platform</span><b>Ubuntu 24.04 · Linux network namespaces · nginx · dnslib</b></div>
+      <div class="kv"><span>Clients under test</span><b>curl · Chromium via Playwright</b></div>
+    </div>
+  </div>
+</div>
+
+<!-- end homePage -->
+</div>
+
+<!-- ================= OVERVIEW ================= -->
+<section id="p-overview" hidden>
+  <div class="stack g52">
+
+    <!-- ============ SYSTEM ARCHITECTURE (moved from Home) ============ -->
+    <div class="stack g22">
+      <div class="sectitle">
+        <div class="eyebrow">System Architecture / How every measurement is made</div>
+        <h2>Inside the measurement engine</h2>
+        <p class="lead">Every number on this site comes from a fully automated pipeline that sets up isolated network namespaces, injects precise faults, captures packets, runs the client, parses timestamps from the wire, and cross-checks every result.</p>
+      </div>
+    </div>
+
+    <!-- Pipeline visualization -->
+    <div class="arch-pipeline">
+      <span class="ap-step">setup.sh</span><span class="ap-arr">→</span>
+      <span class="ap-step">verify.sh</span><span class="ap-arr">→</span>
+      <span class="ap-step">orchestrate.py</span><span class="ap-arr">→</span>
+      <span class="ap-step">teardown.sh</span><span class="ap-arr">→</span>
+      <span class="ap-step">summarise.py</span><span class="ap-arr">→</span>
+      <span class="ap-step">export_web.py</span>
+    </div>
+
+    <!-- Architecture cards in 2-col grid -->
+    <div class="arch-grid">
+
+      <!-- 1. Network Isolation -->
+      <details class="arch-card ac-infra" open>
+        <summary>
+          <span class="ac-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+          Network isolation
+          <span class="ac-tag">Linux netns</span>
+        </summary>
+        <div class="arch-body">
+          <p>The lab runs inside two Linux <span class="hl">network namespaces</span> on one machine — no VMs, no containers, no external hosts. This gives us deterministic, repeatable conditions.</p>
+          <code class="ac-code"><b>hl-client</b>   netns with curl / Chromium (via Playwright)
+  ├─ veth-c6  →  2001:db8:28:6::1/64    (IPv6)
+  └─ veth-c4  →  192.0.2.1/24           (IPv4)
+
+<b>hl-server</b>   netns running nginx :80
+  ├─ veth-s6  →  2001:db8:28:6::2/64    (IPv6)
+  └─ veth-s4  →  192.0.2.2/24           (IPv4)</code>
+          <p><span class="ac-label">setup.sh</span></p>
+          <p>Creates both namespaces, the four veth pairs, assigns addresses, brings interfaces up, configures routing tables, and starts nginx in <code>hl-server</code>. A <span class="hl">20 ms baseline RTT</span> is built from 10 ms in each direction: <code>tc qdisc add dev veth-s6 root netem delay 10ms</code> shapes the server's egress, and the client-to-server direction is mirrored through an IFB device carrying the same 10 ms. Both the IPv4 and IPv6 server-side interfaces are shaped this way.</p>
+          <p><span class="ac-label">teardown.sh</span></p>
+          <p>Deletes both namespaces and all interfaces cleanly, verified by checking <code>ip netns list</code> returns empty.</p>
+        </div>
+      </details>
+
+      <!-- 2. DNS Responder -->
+      <details class="arch-card ac-infra" open>
+        <summary>
+          <span class="ac-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></span>
+          DNS responder
+          <span class="ac-tag">dnslib · Python</span>
+        </summary>
+        <div class="arch-body">
+          <p>A custom authoritative DNS server built with Python's <span class="hl">dnslib</span> library, bound to <code>198.51.100.53</code> on a control-plane link outside the data path. It serves exactly one zone:</p>
+          <code class="ac-code"><b>www.hl.test</b>
+  A      192.0.2.2           ← IPv4 server address
+  AAAA   2001:db8:28:6::2    ← IPv6 server address</code>
+          <p><span class="ac-label">Key functions</span></p>
+          <ul>
+            <li><span class="hl">resolve(request)</span> — parses the incoming query, matches <code>www.hl.test</code>, returns both A and AAAA records in a single response.</li>
+            <li><span class="hl">delay_aaaa(ms)</span> — for scenario S6, holds the AAAA answer for a configurable number of milliseconds while returning the A record immediately. This tests whether clients wait for the slower record.</li>
+            <li>Uses UDP only (no TCP fallback needed — responses are well under 512 bytes).</li>
+            <li>Resolver configured in <code>hl-client</code> via <code>/etc/resolv.conf</code> pointing to <code>198.51.100.53</code>.</li>
+          </ul>
+          <p>Chromium ignores the system resolver and uses its own built-in resolver, but still resolves <code>www.hl.test</code> against the same DNS server. Verified: across 140 Chromium runs, IPv6 was attempted first in 140/140 cases.</p>
+        </div>
+      </details>
+
+      <!-- 3. Impairment Engine -->
+      <details class="arch-card ac-data">
+        <summary>
+          <span class="ac-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>
+          Impairment engine
+          <span class="ac-tag">netem · IFB</span>
+        </summary>
+        <div class="arch-body">
+          <p>Each scenario applies faults on the <span class="hl">server side</span> so the client's network stack is never modified between runs — the client behaves as it would in the real world.</p>
+          <p><span class="ac-label">Latency injection</span></p>
+          <code class="ac-code"><em># S2: 620 ms target RTT = 310 ms in each direction
+#     (300 ms added each way on top of the 10 ms baseline)</em>
+ip netns exec hl-server \
+  tc qdisc change dev veth-s6 root netem <b>delay 310ms</b>   <em># egress</em>
+ip netns exec hl-server \
+  tc qdisc change dev ifb6    root netem <b>delay 310ms</b>   <em># ingress</em></code>
+          <p>Ingress shaping uses an <span class="hl">IFB (Intermediate Functional Block)</span> device — Linux cannot apply netem directly to incoming packets, so we mirror ingress to the IFB and shape there.</p>
+          <p><span class="ac-label">Blackhole injection</span></p>
+          <code class="ac-code"><em># S1: IPv6 blackhole — packets arrive at the server but are never answered</em>
+ip netns exec hl-server \
+  ip -6 neighbour replace 2001:db8:28:6::1 \
+  dev veth-s6 <b>nud failed</b>
+<em># Static neighbour entry with 'nud failed' makes the kernel drop
+# reply packets silently — the SYN arrives, but the SYN-ACK is never sent</em></code>
+          <p>This is <em>not</em> a firewall drop — it simulates a real blackhole where the network silently discards packets. The SYN reaches the server interface but the reply never routes back.</p>
+          <p><span class="ac-label">Scenarios → impairments</span></p>
+          <div class="arch-stat-row">
+            <div class="arch-stat"><div class="as-v">C0</div><div class="as-k">no faults</div></div>
+            <div class="arch-stat"><div class="as-v">S1</div><div class="as-k">v6 blackhole</div></div>
+            <div class="arch-stat"><div class="as-v">S2</div><div class="as-k">v6 +600 ms</div></div>
+            <div class="arch-stat"><div class="as-v">S3</div><div class="as-k">v6 +150 ms</div></div>
+            <div class="arch-stat"><div class="as-v">S4</div><div class="as-k">v4 blackhole</div></div>
+            <div class="arch-stat"><div class="as-v">S5</div><div class="as-k">v4 +600 ms</div></div>
+            <div class="arch-stat"><div class="as-v">S6</div><div class="as-k">AAAA +300 ms</div></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- 4. Orchestrator -->
+      <details class="arch-card ac-runner">
+        <summary>
+          <span class="ac-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>
+          Orchestrator
+          <span class="ac-tag">orchestrate.py</span>
+        </summary>
+        <div class="arch-body">
+          <p>The central controller that drives every measurement. Called as:</p>
+          <code class="ac-code">python3 orchestrate.py <b>--scenario S1</b> <b>--client curl</b> <b>--reps 20</b></code>
+          <p><span class="ac-label">Per-run flow (repeated 20× per scenario×client)</span></p>
+          <ol style="padding-left:18px;margin:6px 0 12px">
+            <li><span class="hl">apply_scenario()</span> — calls the impairment engine to set up the correct tc/netem rules and/or blackhole entries for this scenario.</li>
+            <li><span class="hl">verify_fault()</span> — runs <code>verify.sh</code> to confirm the impairment is active (RTT within tolerance, blackhole unreachable), aborting the run if the lab is not in the expected state.</li>
+            <li><span class="hl">start_capture()</span> — launches <code>tcpdump</code> in <code>hl-client</code> writing to a per-run pcap file: <code>data/captures/&lt;timestamp&gt;_&lt;scenario&gt;_&lt;client&gt;_r&lt;N&gt;.pcap</code></li>
+            <li><span class="hl">run_client()</span> — executes <code>curl -so /dev/null http://www.hl.test/</code> or launches Chromium via <span class="hl">Playwright</span> to navigate to <code>http://www.hl.test/</code>.</li>
+            <li><span class="hl">stop_capture()</span> — terminates tcpdump, waits for the pcap file to flush.</li>
+            <li><span class="hl">restore_baseline()</span> — resets all netem rules and neighbour entries to the clean C0 state.</li>
+            <li><span class="hl">verify_clean()</span> — runs <code>verify.sh</code> again to confirm the baseline is restored before the next run.</li>
+            <li><span class="hl">parse_capture()</span> — the pcap parser extracts timing metrics and writes the run record.</li>
+          </ol>
+          <p>If any verify step fails, the orchestrator aborts that run, re-runs teardown/setup, and retries. This has never triggered in the 280-run dataset — every pre- and post-verify passed.</p>
+        </div>
+      </details>
+
+      <!-- 5. Pcap Parser -->
+      <details class="arch-card ac-runner">
+        <summary>
+          <span class="ac-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+          Pcap parser
+          <span class="ac-tag">scapy · Python</span>
+        </summary>
+        <div class="arch-body">
+          <p>After each run, the parser opens the pcap and extracts timestamps from the TCP handshake packets.</p>
+          <p><span class="ac-label">What it extracts</span></p>
+          <code class="ac-code">for pkt in rdpcap(pcap_path):
+  if TCP in pkt and pkt[TCP].flags == <b>'S'</b>:     <em># SYN</em>
+    record syn_time, dst_addr, dst_port
+  if TCP in pkt and pkt[TCP].flags == <b>'SA'</b>:    <em># SYN-ACK</em>
+    record synack_time, src_addr
+  if TCP in pkt and pkt[TCP].flags == <b>'A'</b>:     <em># ACK (handshake done)</em>
+    record ack_time → this family's setup is complete</code>
+          <p><span class="ac-label">Computed metrics</span></p>
+          <ul>
+            <li><span class="hl">tcp_setup_time_ms</span> — time from the first SYN (of any family) to the completing ACK of the winning family. This is the user-visible connection delay.</li>
+            <li><span class="hl">inter_family_attempt_delay_ms</span> — time between the first SYN (preferred family) and the second SYN (fallback family). Measures how long the client waited before trying the backup path. Set to <code>not_observed</code> when only one family was attempted.</li>
+            <li><span class="hl">dns_time_ms</span> — time from the first DNS query packet to the last DNS answer, measuring total resolution time including any AAAA delay.</li>
+            <li><span class="hl">winning_family</span> — which address family completed the handshake: <code>ipv6</code> or <code>ipv4</code>.</li>
+          </ul>
+          <p>Every timestamp comes from the pcap's packet headers (kernel-level precision), not from the client's own reporting.</p>
+        </div>
+      </details>
+
+      <!-- 6. Run Record Schema -->
+      <details class="arch-card ac-data">
+        <summary>
+          <span class="ac-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
+          Run record schema v0.2
+          <span class="ac-tag">{value, status}</span>
+        </summary>
+        <div class="arch-body">
+          <p>Every metric is stored as a <code>{value, status}</code> pair — the number alone is not enough. The status field records <em>how</em> the number was obtained.</p>
+          <code class="ac-code">{
+  <b>"schema_version"</b>: "0.2",
+  <b>"run_id"</b>: "20261026T193106Z_S1_curl_r08",
+  <b>"scenario"</b>: { "id": "S1", "repetition": 8 },
+  <b>"client"</b>:   { "name": "curl" },
+  <b>"metrics"</b>: {
+    "tcp_setup_time_ms":
+      { "value": 222.254, "status": <em>"computed"</em> },
+    "inter_family_attempt_delay_ms":
+      { "value": 200.976, "status": <em>"computed"</em> },
+    "dns_time_ms":
+      { "value": 1.069,   "status": <em>"computed"</em> }
+  },
+  <b>"outcome"</b>: { "success": true, "http_status": 200 },
+  <b>"cross_checks"</b>: {
+    "status": "agree",
+    "conflicts": []
+  }
+}</code>
+          <p><span class="ac-label">Status values</span></p>
+          <ul>
+            <li><code>computed</code> — derived from pcap timestamps</li>
+            <li><code>not_observed</code> — the event didn't happen (e.g., no fallback attempted → no inter-family delay)</li>
+            <li><code>conflict</code> — parser found a discrepancy (triggers investigation)</li>
+          </ul>
+          <p><span class="ac-label">Cross-checks block</span></p>
+          <p>Each run record includes automated checks that compare the client's own report against what the pcap shows: did the client claim success? Does its reported remote IP match the SYN-ACK source? Were there unexpected TCP streams? Were any kernel-dropped packets flagged by tcpdump? If any check disagrees, the run is flagged. Across 280 runs: <span class="hl">0 conflicts</span>.</p>
+        </div>
+      </details>
+
+      <!-- 7. Chromium via Playwright -->
+      <details class="arch-card ac-runner">
+        <summary>
+          <span class="ac-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>
+          Chromium runner
+          <span class="ac-tag">Playwright</span>
+        </summary>
+        <div class="arch-body">
+          <p>Chromium doesn't use the system's TCP stack preferences or gai.conf — it has its own <span class="hl">built-in DNS client</span> and <span class="hl">Happy Eyeballs implementation</span>. This is why it's tested separately from curl.</p>
+          <p><span class="ac-label">How it runs</span></p>
+          <code class="ac-code">browser = playwright.chromium.launch(
+    args=[<b>'--no-sandbox'</b>])
+page = browser.new_page()
+page.goto(<b>'http://www.hl.test/'</b>, wait_until='networkidle')</code>
+          <p>Chromium's built-in DNS client takes its nameserver from <code>/etc/resolv.conf</code> inside <code>hl-client</code>, so it queries the same responder at <code>198.51.100.53</code> that curl does. What differs is everything after the answer: Chromium sorts the addresses itself and runs its own connection race instead of deferring to glibc.</p>
+          <p><span class="ac-label">Key difference from curl</span></p>
+          <p>The captures show Chromium opening a <span class="hl">second IPv6 attempt at around 250 ms</span> before it tries IPv4 at all — two abandoned IPv6 sockets per S1 run, against curl's one. Its median fallback to IPv4 lands at <span class="hl">301.067 ms</span> against curl's <span class="hl">200.956 ms</span>, which leaves Chromium about <span class="hl">100 ms slower to reach the working path</span> in blackhole conditions. We report the timings we measured and do not infer the internal timer that produces them.</p>
+          <div class="arch-stat-row">
+            <div class="arch-stat"><div class="as-v">140</div><div class="as-k">Chromium runs</div></div>
+            <div class="arch-stat"><div class="as-v">140/140</div><div class="as-k">IPv6 tried first</div></div>
+            <div class="arch-stat"><div class="as-v">~301 ms</div><div class="as-k">S1 fallback delay</div></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- 8. Data Pipeline -->
+      <details class="arch-card ac-data">
+        <summary>
+          <span class="ac-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
+          Data pipeline
+          <span class="ac-tag">summarise → export</span>
+        </summary>
+        <div class="arch-body">
+          <p>Two scripts turn 280 individual run records into the figures on this site.</p>
+          <p><span class="ac-label">summarise.py</span></p>
+          <ul>
+            <li>Reads every <code>data/generated/runs/*.json</code> file</li>
+            <li>Groups by (scenario, client), computes <span class="hl">median</span> TCP setup time, median inter-family delay, winner distribution</li>
+            <li>Validates that all cross-checks pass (0 conflicts required)</li>
+            <li>Outputs <code>data/generated/summary.json</code></li>
+          </ul>
+          <p><span class="ac-label">export_web.py</span></p>
+          <ul>
+            <li>Reads summary.json and the individual run records</li>
+            <li>Generates JavaScript data objects (D, WIN, IFDV, RUNS, CAPS) baked between markers in the static HTML</li>
+            <li>Every inter-family dot on the charts is a <span class="hl">real per-run value</span> with its run ID — no jitter, no synthetic points</li>
+            <li>284 automated tests verify the export against the source data</li>
+          </ul>
+          <div class="arch-stat-row">
+            <div class="arch-stat"><div class="as-v">280</div><div class="as-k">runs total</div></div>
+            <div class="arch-stat"><div class="as-v">14</div><div class="as-k">sessions</div></div>
+            <div class="arch-stat"><div class="as-v">0</div><div class="as-k">conflicts</div></div>
+            <div class="arch-stat"><div class="as-v">284</div><div class="as-k">tests pass</div></div>
+          </div>
+        </div>
+      </details>
+
+    </div>
+    <!-- end arch-grid -->
 
     <hr>
 
     <div class="stack g22">
-      <div class="sectitle">
-        <div class="eyebrow">Our work</div>
-        <h2>What we built</h2>
-        <p class="lead">A measurement harness that can state a number and then prove it. Four pieces, all reproducible from the repository.</p>
-      </div>
+      <div class="sectitle"><div class="eyebrow">Our work</div><h2>What we built</h2><p class="lead">A measurement harness that can state a number and then prove it.</p></div>
       <div class="grid g2">
-        <div class="card stack g8"><span class="chip info"><span class="dt"></span>Lab</span><h3>An isolated two-stack network</h3><p class="small">Linux network namespaces give a client and a server their own IPv4 and IPv6 addresses, plus a separate control link for DNS that is never impaired. Nothing touches the host's own networking.</p></div>
-        <div class="card stack g8"><span class="chip info"><span class="dt"></span>Impairment</span><h3>Faults we can switch on and off</h3><p class="small">Blackholes are enforced with static neighbour entries and verified at 100% loss with no ICMP errors. Latency is applied with netem on the server side in both directions, so the client's own capture stays truthful.</p></div>
-        <div class="card stack g8"><span class="chip info"><span class="dt"></span>Harness</span><h3>A runner that refuses to guess</h3><p class="small">Each run applies a scenario, verifies it, captures packets, runs the client, restores the baseline, verifies again, then parses the capture. It stops on a failed check and restores the lab on any error or interrupt.</p></div>
-        <div class="card stack g8"><span class="chip info"><span class="dt"></span>Evidence</span><h3>Every value carries its status</h3><p class="small">Results are stored as a value with a status rather than a bare number, alongside a cross-check block. Where the client's log and the packet capture disagree, the run is flagged instead of quietly resolved.</p></div>
+        <div class="card stack g8"><span class="chip info"><span class="dt"></span>Lab</span><h3>An isolated two-stack network</h3><p class="small">Linux network namespaces give a client and a server their own IPv4 and IPv6 addresses, plus a separate control link for DNS that is never impaired.</p></div>
+        <div class="card stack g8"><span class="chip info"><span class="dt"></span>Impairment</span><h3>Faults we can switch on and off</h3><p class="small">Blackholes are enforced with static neighbour entries and verified at 100% loss. Latency is applied with netem on the server side.</p></div>
+        <div class="card stack g8"><span class="chip info"><span class="dt"></span>Harness</span><h3>A runner that refuses to guess</h3><p class="small">Each run applies a scenario, verifies it, captures packets, runs the client, restores the baseline, verifies again, then parses the capture.</p></div>
+        <div class="card stack g8"><span class="chip info"><span class="dt"></span>Evidence</span><h3>Every value carries its status</h3><p class="small">Results are stored as a value with a status rather than a bare number, alongside a cross-check block.</p></div>
       </div>
     </div>
 
     <div class="stack g22">
       <div class="sectitle"><div class="eyebrow">Early results</div><h2>What we have found so far</h2></div>
       <div class="grid g2" id="findings"></div>
-    </div>
-
-    <hr>
-
-    <div class="stack g22">
-      <div class="sectitle"><div class="eyebrow">Who</div><h2>Team NetDefenders</h2></div>
-      <div class="grid g3">
-        <div class="card stack g8"><h3>Sam Rajeev</h3><p class="small">Backend and measurement — lab topology, impairment scripts, the run orchestrator, packet parsing and metrics.</p></div>
-        <div class="card stack g8"><h3>Pranav Murali</h3><p class="small">Frontend and testing — this site, the scenario player, the results dashboard and test coverage.</p></div>
-        <div class="card stack g8"><h3>Dr. Monika Puttaramaiah</h3><p class="small">Mentor — methodology review and guidance on validity and reporting.</p></div>
-      </div>
-      <div class="card">
-        <div class="kv"><span>Problem statement</span><b>PS-028 · Happy Eyeballs IPv4/IPv6 fallback measurement</b></div>
-        <div class="kv"><span>Team code</span><b>A3-PS028-TC278</b></div>
-        <div class="kv"><span>Platform</span><b>Ubuntu 24.04 · Linux network namespaces · nginx · dnslib</b></div>
-        <div class="kv"><span>Clients under test</span><b>curl · Chromium via Playwright</b></div>
-      </div>
     </div>
 
   </div>
@@ -342,33 +1016,27 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
     <div class="stack g22">
       <h3 style="font-size:19px">Topology</h3>
       <div class="diagram">
-        <svg viewBox="0 0 900 330" role="img" aria-labelledby="tpT tpD">
-          <title id="tpT">Lab topology</title>
-          <desc id="tpD">A client namespace and a server namespace joined by an IPv6 link and an IPv4 link, each shaped by netem on the server side, plus an unimpaired control link carrying DNS.</desc>
+        <svg viewBox="0 0 900 330" role="img" aria-label="Lab topology diagram">
           <g font-family="IBM Plex Mono, monospace" font-size="12">
             <rect x="40" y="110" width="170" height="120" rx="11" fill="#161821" stroke="#31323b"/>
             <text x="125" y="150" text-anchor="middle" fill="#e5edf7" font-family="IBM Plex Sans, sans-serif" font-size="15" font-weight="600">Client</text>
             <text x="125" y="172" text-anchor="middle" fill="#90a1b9">netns hl-client</text>
-            <text x="125" y="192" text-anchor="middle" fill="#7183a0">curl · Chromium</text>
+            <text x="125" y="192" text-anchor="middle" fill="#7183a0">curl / Chromium</text>
             <text x="125" y="212" text-anchor="middle" fill="#7183a0">tcpdump · no qdisc</text>
-
             <rect x="690" y="110" width="170" height="120" rx="11" fill="#161821" stroke="#31323b"/>
             <text x="775" y="150" text-anchor="middle" fill="#e5edf7" font-family="IBM Plex Sans, sans-serif" font-size="15" font-weight="600">Server</text>
             <text x="775" y="172" text-anchor="middle" fill="#90a1b9">netns hl-server</text>
-            <text x="775" y="192" text-anchor="middle" fill="#7183a0">nginx :80 · fixed tiny reply</text>
+            <text x="775" y="192" text-anchor="middle" fill="#7183a0">nginx :80</text>
             <text x="775" y="212" text-anchor="middle" fill="#7183a0">netem + ifb here</text>
-
             <line x1="210" y1="146" x2="690" y2="146" stroke="#3987e5" stroke-width="7" stroke-linecap="round"/>
             <text x="450" y="134" text-anchor="middle" fill="#3987e5">IPv6 · 2001:db8:28:6::2</text>
             <line x1="210" y1="200" x2="690" y2="200" stroke="#d95926" stroke-width="7" stroke-linecap="round"/>
             <text x="450" y="224" text-anchor="middle" fill="#d95926">IPv4 · 192.0.2.2</text>
-
             <rect x="365" y="20" width="170" height="60" rx="10" fill="#161821" stroke="#31323b"/>
             <text x="450" y="45" text-anchor="middle" fill="#e5edf7" font-family="IBM Plex Sans, sans-serif" font-size="14" font-weight="600">DNS</text>
             <text x="450" y="65" text-anchor="middle" fill="#90a1b9">198.51.100.53 · never impaired</text>
             <path d="M 140 110 L 370 80" stroke="#43454c" stroke-width="2" stroke-dasharray="6 7" fill="none"/>
             <text x="212" y="88" fill="#7183a0">control link</text>
-
             <rect x="596" y="256" width="200" height="44" rx="8" fill="#1a1208" stroke="#4a3415"/>
             <text x="696" y="283" text-anchor="middle" fill="#d29922">impairment applied here</text>
             <path d="M 700 256 L 740 230" stroke="#4a3415" stroke-width="2" fill="none"/>
@@ -377,7 +1045,7 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
       </div>
       <div class="card stack g8">
         <h3>Why the impairment sits on the server side</h3>
-        <p class="small">Client-side netem shapes packets after tcpdump has already seen them, so the capture records a send time that never happened and drops disappear entirely. We apply netem to the server's egress for the server-to-client direction, and redirect the client-to-server direction through an IFB device inside the server namespace carrying the same rule. The client's interfaces carry no qdisc at all, so its capture shows true send and receive times.</p>
+        <p class="small">Client-side netem shapes packets after tcpdump has already seen them, so the capture records a send time that never happened. We apply netem to the server's egress for the server-to-client direction, and redirect the client-to-server direction through an IFB device.</p>
       </div>
     </div>
 
@@ -387,41 +1055,31 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
         <thead><tr><th>ID</th><th>IPv6 path</th><th>IPv4 path</th><th>DNS</th><th>What it answers</th></tr></thead>
         <tbody id="condTable"></tbody>
       </table></div>
-      <p class="small">Added RTT stacks on a 20 ms baseline (10 ms each way), so “+600 ms” means a 620 ms target round-trip time and “+150 ms” means 170 ms. The real round-trip time is measured before every scenario rather than assumed. S2, S3 and S5 are mobile-inspired latency conditions.</p>
+      <p class="small">Added RTT stacks on a 20 ms baseline (10 ms each way). S2, S3 and S5 are mobile-inspired latency conditions.</p>
     </div>
 
     <div class="stack g22">
       <h3 style="font-size:19px">Metrics</h3>
       <div class="grid g3">
-        <div class="card stack g8"><span class="chip">metric 1</span><h3>TCP setup time</h3><p class="small">From the first SYN of the run to the ACK that completes the winning handshake. DNS is deliberately excluded, so a delayed record does not inflate it.</p></div>
-        <div class="card stack g8"><span class="chip">metric 2</span><h3>Inter-family attempt delay</h3><p class="small">The second family's first SYN minus the first family's first SYN. Recorded as <span class="mono">not_observed</span> when only one family was ever tried.</p></div>
-        <div class="card stack g8"><span class="chip">metric 3</span><h3>Scenario penalty</h3><p class="small">A client's median setup time in a scenario minus its own median in the healthy control. Computed across runs, never per run, so each client is its own baseline.</p></div>
-      </div>
-      <div class="card stack g12">
-        <h3>Also recorded for every run</h3>
-        <div class="grid g2">
-          <div><div class="kv"><span>Winning address family</span><b>ipv4 · ipv6 · none</b></div>
-          <div class="kv"><span>Outcome</span><b>success · failure</b></div></div>
-          <div><div class="kv"><span>Failed and abandoned attempts</span><b>count</b></div>
-          <div class="kv"><span>DNS time</span><b>first query → last answer</b></div></div>
-        </div>
+        <div class="card stack g8"><span class="chip">metric 1</span><h3>TCP setup time</h3><p class="small">From the first SYN to the ACK that completes the winning handshake. DNS is deliberately excluded.</p></div>
+        <div class="card stack g8"><span class="chip">metric 2</span><h3>Inter-family attempt delay</h3><p class="small">The second family's first SYN minus the first family's first SYN. Recorded as not_observed when only one family was tried.</p></div>
+        <div class="card stack g8"><span class="chip">metric 3</span><h3>Scenario penalty</h3><p class="small">A client's median setup time in a scenario minus its own median in the healthy control.</p></div>
       </div>
     </div>
 
     <div class="stack g22">
       <h3 style="font-size:19px">What has to pass before a run counts</h3>
       <div class="grid g2">
-        <div class="card stack g8"><h3>Cross-checks</h3><p class="small">Every record carries a cross-check block covering six checks: the client's success claim against the capture, the HTTP status, the address the client says it used against the destination of the winning handshake, whether the capture was ambiguous, any port-443, QUIC or other-port traffic, and whether tcpdump dropped or failed to write any packet. A dropped or unwritten packet is recorded as a capture conflict and stops the session. Any disagreement flags the run and exits with an error rather than being resolved silently.</p></div>
-        <div class="card stack g8"><h3>Fault verification</h3><p class="small">A blackhole is only accepted at 100% loss with zero ICMP errors, using static neighbour entries so no address resolution is needed. Latency targets are measured before each scenario, and the lab is restored and re-verified after every run.</p></div>
-        <div class="card stack g8"><h3>Pinned fixtures</h3><p class="small">Two small captures are stored as test fixtures with pinned checksums, listed on the Evidence page. The parser tests must keep reproducing their known values before any change is accepted.</p></div>
-        <div class="card stack g8"><h3>Known limits</h3><p class="small">Where the parser had to define a rule that the metric description leaves open — what counts as abandoned, where DNS time ends — the rule is written down and marked for sign-off rather than buried in the code.</p></div>
+        <div class="card stack g8"><h3>Cross-checks</h3><p class="small">Every record carries a cross-check block covering six checks: the client's success claim, HTTP status, address used, capture ambiguity, unexpected traffic, and capture completeness. Any disagreement flags the run.</p></div>
+        <div class="card stack g8"><h3>Fault verification</h3><p class="small">A blackhole is only accepted at 100% loss with zero ICMP errors. Latency targets are measured before each scenario, and the lab is restored and re-verified after every run.</p></div>
+        <div class="card stack g8"><h3>Pinned fixtures</h3><p class="small">Two small captures are stored as test fixtures with pinned checksums. The parser tests must keep reproducing their known values.</p></div>
+        <div class="card stack g8"><h3>Known limits</h3><p class="small">Where the parser had to define a rule that the metric description leaves open, the rule is written down and marked for sign-off.</p></div>
       </div>
     </div>
 
     <div class="stack g22">
       <h3 style="font-size:19px">Reproducing a run</h3>
       <div class="card"><div class="log" style="max-height:none"><div>sudo ./scripts/setup.sh                  <b># build both namespaces and the links</b></div><div>./scripts/verify.sh                      <b># assert addresses, routes and RTTs</b></div><div>python -m src.runner.orchestrate \</div><div>    --scenario S1 --client curl --reps 20 <b># apply, capture, run, restore, parse</b></div><div>sudo ./scripts/teardown.sh               <b># leave the host exactly as it was</b></div></div></div>
-      <p class="small">Each run writes a packet capture and a JSON record. Files created under sudo are handed back to the operator automatically.</p>
     </div>
   </div>
 </section>
@@ -432,17 +1090,12 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
     <div class="sectitle">
       <div class="eyebrow">Results</div>
       <h2>What the clients actually did</h2>
-      <p class="lead">Medians across repetitions, with each figure labelled by where it came from. Hover any mark for its exact value.</p>
+      <p class="lead">Medians across repetitions, with each figure labelled by where it came from. Hover a mark for its exact value, or switch to Table to read every figure at once.</p>
     </div>
 
     <div class="card stack g12">
       <div class="row" style="gap:10px"><span class="chip ok"><span class="dt"></span>Measured data</span>
-      <span class="small">280 runs across 14 sessions: 2 clients × 7 conditions × 20 repetitions, with every cross-check agreeing. X1 (both paths degraded) is the only condition not yet measured; it is shown as not measured, with no figures.</span></div>
-      <div class="legend">
-        <span><span class="chip ok" style="padding:2px 6px">complete</span> 20 of 20 runs, every cross-check agrees</span>
-        <span><span class="chip info" style="padding:2px 6px">pilot</span> 1 to 19 runs</span>
-        <span><span class="chip" style="padding:2px 6px">not measured</span> no runs yet, so no figure is drawn</span>
-      </div>
+      <span class="small">280 runs across 14 sessions: 2 clients × 7 conditions × 20 repetitions. X1 (both paths degraded) is not yet measured. Some medians repeat to three decimals across conditions because netem reproduces the same delay on every run.</span></div>
     </div>
 
     <div class="row" style="justify-content:space-between">
@@ -458,37 +1111,11 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
     </div>
 
     <div id="chartsView" class="stack g52">
-      <div class="card figure">
-        <div class="fighead"><div><h3>Median TCP setup time by condition</h3><p class="figsub">Lower is better. The bar is coloured by the address family that won the race.</p></div><span class="chip mono">ms</span></div>
-        <div class="legend" id="leg1"></div>
-        <div class="bars" id="chart1"></div>
-        <div class="axis" id="axis1"></div>
-      </div>
-
-      <div class="card figure">
-        <div class="fighead"><div><h3>Scenario penalty</h3><p class="figsub">Median setup time minus that client's own healthy-control median. A condition that costs nothing sits at zero.</p></div><span class="chip mono">ms vs C0</span></div>
-        <div class="legend" id="leg2"></div>
-        <div class="bars" id="chart2"></div>
-        <div class="axis" id="axis2"></div>
-      </div>
-
-      <div class="card figure">
-        <div class="fighead"><div><h3>Which family won</h3><p class="figsub">Share of repetitions won by each family. Where one family is never attempted, the other takes the whole bar.</p></div><span class="chip mono">share of runs</span></div>
-        <div class="legend" id="leg3"></div>
-        <div class="stack g12" id="chart3"></div>
-      </div>
-
-      <div class="card figure">
-        <div class="fighead"><div><h3>Inter-family attempt delay</h3><p class="figsub">Every repetition as one point, with the median marked. Conditions where only one family was tried have no points to show.</p></div><span class="chip mono">ms</span></div>
-        <div class="stack g12" id="chart4"></div>
-        <div class="axis" id="axis4"></div>
-      </div>
-
-      <div class="card figure">
-        <div class="fighead"><div><h3>Run completion</h3><p class="figsub">Progress through the 280-run matrix, and whether any run disagreed with its own capture.</p></div><span class="chip mono">runs complete</span></div>
-        <div class="scroll"><div class="matrix" id="chart5"></div></div>
-        <p class="small">A cell turns red if the runner log and the packet capture disagree on any run in it. None have so far.</p>
-      </div>
+      <div class="card figure"><div class="fighead"><div><h3>Median TCP setup time by condition</h3><p class="figsub">Lower is better. The bar is coloured by the address family that won the race.</p></div><span class="chip mono">ms</span></div><div class="legend" id="leg1"></div><div class="bars" id="chart1"></div><div class="axis" id="axis1"></div></div>
+      <div class="card figure"><div class="fighead"><div><h3>Scenario penalty</h3><p class="figsub">Median setup time minus that client's own healthy-control median.</p></div><span class="chip mono">ms vs C0</span></div><div class="legend" id="leg2"></div><div class="bars" id="chart2"></div><div class="axis" id="axis2"></div></div>
+      <div class="card figure"><div class="fighead"><div><h3>Which family won</h3><p class="figsub">Share of repetitions won by each family.</p></div><span class="chip mono">share of runs</span></div><div class="legend" id="leg3"></div><div class="stack g12" id="chart3"></div></div>
+      <div class="card figure"><div class="fighead"><div><h3>Inter-family attempt delay</h3><p class="figsub">Every repetition as one point, with the median marked.</p></div><span class="chip mono">ms</span></div><div class="stack g12" id="chart4"></div><div class="axis" id="axis4"></div></div>
+      <div class="card figure"><div class="fighead"><div><h3>Run completion</h3><p class="figsub">Progress through the 280-run matrix.</p></div><span class="chip mono">runs complete</span></div><div class="scroll"><div class="matrix" id="chart5"></div></div></div>
     </div>
 
     <div id="tableView" hidden class="card scroll">
@@ -513,15 +1140,13 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
       <div class="stack g22" style="flex:999 1 520px;min-width:0">
         <div class="stage">
           <div class="clockbar mono" id="pgClock">t = 0.000 ms</div>
-          <svg viewBox="0 0 900 440" role="img" aria-labelledby="pgT pgD">
-            <title id="pgT">Lab topology</title>
-            <desc id="pgD">A client joined to a web server by an IPv6 cable and an IPv4 cable, with a DNS server on a separate control link.</desc>
+          <svg viewBox="0 0 900 440" role="img" aria-label="Lab topology interactive diagram">
             <defs><filter id="pgGlow" x="-80%" y="-80%" width="260%" height="260%">
               <feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
             <path id="pgDns" d="M 120 250 L 400 118" fill="none" stroke="#43454c" stroke-width="2" stroke-dasharray="6 7"/>
             <text x="196" y="178" fill="#7183a0" font-family="IBM Plex Mono, monospace" font-size="12">control link</text>
             <path id="pgP6" d="M 205 290 C 400 248 560 248 735 290" fill="none" stroke="#1d3a52" stroke-width="9" stroke-linecap="round"/>
-            <path id="pgP4" d="M 205 345 C 400 392 560 392 735 345" fill="none" stroke="#38291a" stroke-width="9" stroke-linecap="round"/>
+            <path id="pgP4" d="M 205 345 C 400 392 560 392 735 345" fill="none" stroke="#1a3d22" stroke-width="9" stroke-linecap="round"/>
             <g>
               <rect x="34" y="252" width="148" height="118" rx="11" fill="#171922" stroke="#31323b"/>
               <rect x="50" y="268" width="116" height="62" rx="5" fill="#0b0d17" stroke="#2f3039"/>
@@ -545,33 +1170,47 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
               <text x="832" y="408" text-anchor="middle" fill="#7183a0" font-family="IBM Plex Mono, monospace" font-size="11">netns hl-server</text>
             </g>
             <text id="pgLab6" x="214" y="262" fill="#3987e5" font-family="IBM Plex Mono, monospace" font-size="12.5">IPv6 · 20 ms RTT</text>
-            <text id="pgLab4" x="214" y="386" fill="#d95926" font-family="IBM Plex Mono, monospace" font-size="12.5">IPv4 · 20 ms RTT</text>
+            <text id="pgLab4" x="214" y="386" fill="#3fb950" font-family="IBM Plex Mono, monospace" font-size="12.5">IPv4 · 20 ms RTT</text>
             <g id="pgFx"></g><g id="pgDots"></g>
           </svg>
-          <button class="plug v6" id="pgPlug6" style="left:52%;top:59.5%" data-cut="false" aria-pressed="false"><span aria-hidden="true">⏻</span> IPv6 <small id="pgPlug6s">connected</small></button>
-          <button class="plug v4" id="pgPlug4" style="left:52%;top:84.5%" data-cut="false" aria-pressed="false"><span aria-hidden="true">⏻</span> IPv4 <small id="pgPlug4s">connected</small></button>
+          <button class="plug v6" id="pgPlug6" style="left:52%;top:59.5%" data-cut="false" aria-pressed="false"><span aria-hidden="true">&#x23FB;</span> IPv6 <small id="pgPlug6s">connected</small></button>
+          <button class="plug v4" id="pgPlug4" style="left:52%;top:84.5%" data-cut="false" aria-pressed="false"><span aria-hidden="true">&#x23FB;</span> IPv4 <small id="pgPlug4s">connected</small></button>
         </div>
 
-        <div class="card tl">
-          <h3 style="font-size:16px;margin-bottom:14px">Attempt timeline</h3>
-          <div id="pgTl"></div>
-          <div class="axis" id="pgAxis" style="margin-left:68px"></div>
-          <p class="small" style="margin-top:12px">Times run from the start of the attempt and include DNS. TCP setup time starts at the first SYN, which is why it reads lower than the final marker.</p>
+        <div class="cutrow" id="pgCutRow" role="group" aria-label="Cable state">
+          <button class="cutbtn v6" id="pgCut6" data-fam="v6" data-cut="false" aria-pressed="false" type="button"><span aria-hidden="true">&#x23FB;</span> IPv6 <small id="pgCut6s">connected</small></button>
+          <button class="cutbtn v4" id="pgCut4" data-fam="v4" data-cut="false" aria-pressed="false" type="button"><span aria-hidden="true">&#x23FB;</span> IPv4 <small id="pgCut4s">connected</small></button>
         </div>
 
-        <div class="card">
-          <h3 style="font-size:16px;margin-bottom:14px">Packet log</h3>
-          <div class="log mono" id="pgLog" aria-live="polite" aria-label="Packet log"></div>
+        <div class="card tl stack g16">
+          <div class="fighead">
+            <h3 style="font-size:16px">Attempt timeline</h3>
+            <div class="tlkey">
+              <span><i style="background:var(--ok)"></i>won</span>
+              <span><i style="background:var(--ink2);opacity:.45"></i>abandoned</span>
+              <span><i style="background:var(--bad);opacity:.45"></i>no reply</span>
+            </div>
+          </div>
+          <div>
+            <div id="pgTl"></div>
+            <div class="axis" id="pgAxis" style="margin-left:68px"></div>
+          </div>
+          <p class="small">Each bar runs from the SYN to the moment the client stops caring: the winner ends at its ACK, every other socket is cut the instant the winner completes. TCP setup time is measured from the first SYN, so it reads lower than the final marker.</p>
+        </div>
+
+        <div class="card stack g12">
+          <h3 style="font-size:16px">Packet log</h3>
+          <div class="log mono" id="pgLog" aria-live="off" aria-label="Packet log" tabindex="0"></div>
         </div>
       </div>
 
       <div class="stack g22" style="flex:1 1 340px;min-width:0">
-        <div class="card stack g12">
+        <div class="card stack g16">
           <h3 style="font-size:16px">Result</h3>
-          <div class="row mono" style="gap:9px;font-size:13.5px"><span class="swatch" id="pgDot" style="border-radius:50%"></span><span id="pgVerdict">—</span></div>
-          <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px" id="pgKpis"></div>
-          <div class="row" style="gap:10px;margin-top:4px">
-            <button class="btn pri" id="pgRun" style="flex:1">Run attempt</button>
+          <div class="verdict" id="pgVerdict" role="status"><span class="vdot"></span><span id="pgVerdictT">--</span></div>
+          <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px" id="pgKpis"></div>
+          <div class="row" style="gap:10px">
+            <button class="btn pri" id="pgRun" style="flex:1 1 140px">Run attempt</button>
             <button class="btn" id="pgReset">Reset</button>
           </div>
         </div>
@@ -582,27 +1221,27 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
             <button data-c="chromium" aria-pressed="false" style="flex:1">Chromium</button>
           </div>
           <div class="ctl"><label for="pgPref">Address preference<span class="hint">glibc gai.conf inside the namespace</span></label>
-            <select id="pgPref"><option value="v6">IPv6-preferred</option><option value="v4">IPv4-first</option></select></div>
+            <span class="rngrow"><select id="pgPref"><option value="v6">IPv6-preferred</option><option value="v4">IPv4-first</option></select></span></div>
           <div class="ctl"><label for="pgHe">Fallback timeout<span class="hint">wait before trying the other family</span></label>
-            <span class="row" style="gap:8px"><input type="range" id="pgHe" min="0" max="600" step="10" value="200"><span class="val" id="pgHeV">200 ms</span></span></div>
+            <span class="rngrow"><input type="range" id="pgHe" min="0" max="600" step="10" value="200"><span class="val" id="pgHeV">200 ms</span></span></div>
         </div>
         <div class="card">
           <h3 style="font-size:16px;margin-bottom:10px">Impairments</h3>
           <div class="ctl"><label for="pgA6">IPv6 added RTT<span class="hint">on top of the 20 ms baseline</span></label>
-            <span class="row" style="gap:8px"><input type="range" id="pgA6" min="0" max="800" step="10" value="0"><span class="val" id="pgA6V">0 ms</span></span></div>
+            <span class="rngrow"><input type="range" id="pgA6" min="0" max="800" step="10" value="0"><span class="val" id="pgA6V">0 ms</span></span></div>
           <div class="ctl"><label for="pgA4">IPv4 added RTT<span class="hint">on top of the 20 ms baseline</span></label>
-            <span class="row" style="gap:8px"><input type="range" id="pgA4" min="0" max="800" step="10" value="0"><span class="val" id="pgA4V">0 ms</span></span></div>
+            <span class="rngrow"><input type="range" id="pgA4" min="0" max="800" step="10" value="0"><span class="val" id="pgA4V">0 ms</span></span></div>
           <div class="ctl"><label for="pgAaaa">AAAA answer delay<span class="hint">responder holds the AAAA record</span></label>
-            <span class="row" style="gap:8px"><input type="range" id="pgAaaa" min="0" max="600" step="10" value="0"><span class="val" id="pgAaaaV">0 ms</span></span></div>
-          <div class="ctl"><label for="pgSpeed">Playback speed</label>
-            <select id="pgSpeed"><option value="8">0.5×</option><option value="4" selected>1×</option><option value="2">2×</option><option value="0">Instant</option></select></div>
+            <span class="rngrow"><input type="range" id="pgAaaa" min="0" max="600" step="10" value="0"><span class="val" id="pgAaaaV">0 ms</span></span></div>
+          <div class="ctl"><label for="pgSpeed">Playback speed<span class="hint">model time is slowed so you can watch it</span></label>
+            <span class="rngrow"><select id="pgSpeed"><option value="8">0.5x</option><option value="4" selected>1x</option><option value="2">2x</option><option value="0">Instant</option></select></span></div>
         </div>
         <div class="card"><details><summary>What this model assumes</summary>
           <ul>
             <li>Baseline 20 ms round-trip time; added latency stacks on top.</li>
             <li>Resolution takes 4 ms plus any record delay, and the client waits for both answers.</li>
             <li>Setup time runs from the first SYN to the completing ACK and excludes DNS.</li>
-            <li>The fallback timer and Chromium's backup attempt are model settings, not measurements. In the dataset's S1 and S2 runs, curl started IPv4 a median 201 ms after its first IPv6 SYN; Chromium sent a second IPv6 attempt at a median 251 ms and started IPv4 at 301 ms.</li>
+            <li>The fallback timer and Chromium's backup attempt are model settings, not measurements.</li>
           </ul></details></div>
       </div>
     </div>
@@ -625,7 +1264,7 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
       </div>
       <div class="stack g22" style="flex:999 1 420px;min-width:0">
         <div class="card stack g12">
-          <div class="row" style="justify-content:space-between"><h3 id="runTitle" style="font-size:17px">—</h3><span id="runChip"></span></div>
+          <div class="row" style="justify-content:space-between"><h3 id="runTitle" style="font-size:17px">--</h3><span id="runChip"></span></div>
           <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px" id="runStats"></div>
         </div>
         <div class="card"><h3 style="font-size:16px;margin-bottom:12px">Stored record</h3>
@@ -641,15 +1280,15 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
         <thead><tr><th>File</th><th>Condition</th><th>Client</th><th>Size</th><th>SHA-256</th><th>Role</th></tr></thead>
         <tbody id="capTable"></tbody>
       </table></div>
-      <p class="small">Captures are the only packet-level evidence; client logs record outcomes. Where the two disagree the run is flagged. Two captures are pinned as test fixtures so the parser cannot drift.</p>
+      <p class="small">Digests are shown truncated. For the five dataset rows the digest pins the stored JSON record, which is what fixes the parsed values; for the two fixtures it pins the capture file itself.</p>
     </div>
 
     <div class="stack g22">
       <h3 style="font-size:19px">Open items</h3>
       <div class="grid g2">
-        <div class="card stack g8"><span class="chip warn"><span class="dt"></span>needs sign-off</span><h3>Parser rules not in the brief</h3><p class="small">The definitions of an abandoned attempt, a no-reply attempt and the end of DNS time were written by us because the metric description does not fix them. They are documented and awaiting explicit approval.</p></div>
-        <div class="card stack g8"><span class="chip ok"><span class="dt"></span>resolved</span><h3>A misleading capture name</h3><p class="small">An early capture named as a control run held two concatenated loopback runs. It has been renamed <span class="mono">loopback_two_harness_runs.pcap</span> and kept as a parser test fixture.</p></div>
-        <div class="card stack g8"><span class="chip ok"><span class="dt"></span>done</span><h3>Chromium timings</h3><p class="small">The Chromium runner shares the orchestrator with curl. All Chromium figures for C0 and S1 to S6 are measured: 140 runs, 20 per condition.</p></div>
+        <div class="card stack g8"><span class="chip warn"><span class="dt"></span>needs sign-off</span><h3>Parser rules not in the brief</h3><p class="small">The definitions of an abandoned attempt, a no-reply attempt and the end of DNS time were written by us because the metric description does not fix them.</p></div>
+        <div class="card stack g8"><span class="chip ok"><span class="dt"></span>resolved</span><h3>A misleading capture name</h3><p class="small">An early capture named as a control run held two concatenated loopback runs. It has been renamed loopback_two_harness_runs.pcap.</p></div>
+        <div class="card stack g8"><span class="chip ok"><span class="dt"></span>done</span><h3>Chromium timings</h3><p class="small">The Chromium runner shares the orchestrator with curl. All Chromium figures for C0 and S1 to S6 are measured: 140 runs.</p></div>
         <div class="card stack g8"><span class="chip info"><span class="dt"></span>optional</span><h3>Sensitivity sweep</h3><p class="small">Varying the client's fallback timeout would show how sharply the penalty tracks it. Planned only if the core matrix finishes early.</p></div>
       </div>
     </div>
@@ -657,6 +1296,7 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
 </section>
 
 <p class="foot">HappyLab · Team NetDefenders · AIORI-3 PS-028. Conditions without runs are shown as not measured, with no figures. RFC 8305 is referenced as a design, not as a predictor of exact client timings.</p>
+
 </div>
 
 <script>
@@ -664,7 +1304,6 @@ details ul{margin:0;padding-left:19px;color:var(--ink2);font-size:13.5px}
 "use strict";
 var $=function(id){return document.getElementById(id)};
 var C={v6:"#3987e5",v4:"#d95926",curl:"#199e70",chromium:"#9085e9"};
-var PAGES=["overview","method","results","playground","evidence"];
 
 /* ===================== data ===================== */
 var SRC={val:["complete","ok"],pil:["pilot","info"],ph:["not measured",""]};
@@ -679,80 +1318,33 @@ var SCEN=[
   {id:"X1",nm:"Both degraded",v6:"+300 ms RTT",v4:"+300 ms RTT",dns:"Immediate",q:"What happens when neither path is good?",cut6:0,cut4:0,a6:300,a4:300,aaaa:0,opt:1}
 ];
 var FIND=[
-  {chip:["S1 · IPv6 blackhole","ok"],t:"curl falls back after about 200 ms",b:"The IPv6 SYN goes unanswered. Across 20 runs curl opens IPv4 a median 200.956 ms later and completes the handshake at 222.221 ms, abandoning the IPv6 attempt. Chromium falls back later: IPv4 at a median 301.067 ms, setup 322.392 ms."},
-  {chip:["S3 · IPv6 +150 ms","ok"],t:"A slower IPv6 path still wins",b:"At a 170 ms target round-trip time, IPv6 completes before the fallback timer fires, so IPv4 is never attempted. The user pays the latency but never leaves IPv6."},
-  {chip:["S4 and S5 · IPv4 impaired","ok"],t:"IPv4 faults stay invisible while IPv6 is healthy",b:"Because the resolver sorts IPv6 first, the client succeeds before it ever needs IPv4. A broken IPv4 path is never exercised. This is resilience working as designed, not a gap in the measurement."},
-  {chip:["S6 · AAAA delayed","ok"],t:"Both clients wait for the slow AAAA answer",b:"DNS time rises to a median 302.07 ms for curl and 301.851 ms for Chromium, and in every run both send their first SYN only after the AAAA answer, not on the A record that arrived about 1 ms in. Setup time, which excludes DNS, stays near 20 ms (20.812 and 21.317 ms)."}
+  {chip:["S1 · IPv6 blackhole","ok"],t:"curl falls back after about 200 ms",b:"The IPv6 SYN goes unanswered. Across 20 runs curl opens IPv4 a median 200.956 ms later and completes the handshake at 222.221 ms. Chromium falls back later: IPv4 at a median 301.067 ms, setup 322.392 ms."},
+  {chip:["S3 · IPv6 +150 ms","ok"],t:"A slower IPv6 path still wins",b:"At a 170 ms target round-trip time, IPv6 completes before the fallback timer fires, so IPv4 is never attempted."},
+  {chip:["S4 and S5 · IPv4 impaired","ok"],t:"IPv4 faults stay invisible while IPv6 is healthy",b:"Because the resolver sorts IPv6 first, the client succeeds before it ever needs IPv4. A broken IPv4 path is never exercised."},
+  {chip:["S6 · AAAA delayed","ok"],t:"Both clients wait for the slow AAAA answer",b:"DNS time rises to a median 302.07 ms for curl and 301.851 ms for Chromium. Setup time, which excludes DNS, stays near 20 ms."}
 ];
-/* === HAPPYLAB DATA START — generated by export_web.py, do not edit by hand === */
-/* 280 runs from the 14 sessions in docs/dataset.md; runs dated 2026-10-26; code ecba28c */
-/* med = median setup ms · win = winning family · ifd = inter-family delay median (null = not observed)
-   runs = completed/target · src = provenance key */
 var D={
-  curl:{
-    C0:{med:20.697,win:"v6",ifd:null,runs:[20,20],src:"val"},
-    S1:{med:222.221,win:"v4",ifd:200.956,runs:[20,20],src:"val"},
-    S2:{med:222.188,win:"v4",ifd:200.956,runs:[20,20],src:"val"},
-    S3:{med:171.171,win:"v6",ifd:null,runs:[20,20],src:"val"},
-    S4:{med:20.715,win:"v6",ifd:null,runs:[20,20],src:"val"},
-    S5:{med:20.697,win:"v6",ifd:null,runs:[20,20],src:"val"},
-    S6:{med:20.812,win:"v6",ifd:null,runs:[20,20],src:"val"},
-    X1:{med:320.6,win:"v6",ifd:200.1,runs:[0,20],src:"ph"}
-  },
-  chromium:{
-    C0:{med:20.135,win:"v6",ifd:null,runs:[20,20],src:"val"},
-    S1:{med:322.392,win:"v4",ifd:301.067,runs:[20,20],src:"val"},
-    S2:{med:321.986,win:"v4",ifd:301.12,runs:[20,20],src:"val"},
-    S3:{med:171.109,win:"v6",ifd:null,runs:[20,20],src:"val"},
-    S4:{med:20.139,win:"v6",ifd:null,runs:[20,20],src:"val"},
-    S5:{med:20.139,win:"v6",ifd:null,runs:[20,20],src:"val"},
-    S6:{med:21.317,win:"v6",ifd:null,runs:[20,20],src:"val"},
-    X1:{med:322.4,win:"v6",ifd:300.4,runs:[0,20],src:"ph"}
-  }
+  curl:{C0:{med:20.697,win:"v6",ifd:null,runs:[20,20],src:"val"},S1:{med:222.221,win:"v4",ifd:200.956,runs:[20,20],src:"val"},S2:{med:222.188,win:"v4",ifd:200.956,runs:[20,20],src:"val"},S3:{med:171.171,win:"v6",ifd:null,runs:[20,20],src:"val"},S4:{med:20.715,win:"v6",ifd:null,runs:[20,20],src:"val"},S5:{med:20.697,win:"v6",ifd:null,runs:[20,20],src:"val"},S6:{med:20.812,win:"v6",ifd:null,runs:[20,20],src:"val"},X1:{med:null,win:null,ifd:null,runs:[0,20],src:"ph"}},
+  chromium:{C0:{med:20.135,win:"v6",ifd:null,runs:[20,20],src:"val"},S1:{med:322.392,win:"v4",ifd:301.067,runs:[20,20],src:"val"},S2:{med:321.986,win:"v4",ifd:301.12,runs:[20,20],src:"val"},S3:{med:171.109,win:"v6",ifd:null,runs:[20,20],src:"val"},S4:{med:20.139,win:"v6",ifd:null,runs:[20,20],src:"val"},S5:{med:20.139,win:"v6",ifd:null,runs:[20,20],src:"val"},S6:{med:21.317,win:"v6",ifd:null,runs:[20,20],src:"val"},X1:{med:null,win:null,ifd:null,runs:[0,20],src:"ph"}}
 };
-var WIN={ /* repetitions won by each family: [IPv6, IPv4, no winner] */
-  curl:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[0,0,0]},
-  chromium:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[0,0,0]}
-};
-var IFDV={ /* observed inter-family delays per run: [run_id, ms]; [] = none observed or no runs */
-  curl:{
-    C0:[],
-    S1:[["20261026T192924Z_S1_curl_r01",200.405],["20261026T192939Z_S1_curl_r02",200.722],["20261026T192953Z_S1_curl_r03",200.933],["20261026T193008Z_S1_curl_r04",200.433],["20261026T193022Z_S1_curl_r05",200.956],["20261026T193037Z_S1_curl_r06",200.772],["20261026T193051Z_S1_curl_r07",200.956],["20261026T193106Z_S1_curl_r08",200.976],["20261026T193120Z_S1_curl_r09",201.336],["20261026T193135Z_S1_curl_r10",201.542],["20261026T193149Z_S1_curl_r11",200.942],["20261026T193204Z_S1_curl_r12",201.07],["20261026T193219Z_S1_curl_r13",201.954],["20261026T193233Z_S1_curl_r14",201.399],["20261026T193248Z_S1_curl_r15",201.92],["20261026T193302Z_S1_curl_r16",200.924],["20261026T193317Z_S1_curl_r17",201.972],["20261026T193331Z_S1_curl_r18",200.956],["20261026T193346Z_S1_curl_r19",201.081],["20261026T193400Z_S1_curl_r20",200.942]],
-    S2:[["20261026T193931Z_S2_curl_r01",201.98],["20261026T193944Z_S2_curl_r02",200.469],["20261026T193957Z_S2_curl_r03",200.956],["20261026T194010Z_S2_curl_r04",200.953],["20261026T194024Z_S2_curl_r05",200.984],["20261026T194037Z_S2_curl_r06",200.948],["20261026T194050Z_S2_curl_r07",200.974],["20261026T194103Z_S2_curl_r08",202.046],["20261026T194116Z_S2_curl_r09",201.975],["20261026T194129Z_S2_curl_r10",200.412],["20261026T194142Z_S2_curl_r11",200.968],["20261026T194155Z_S2_curl_r12",200.948],["20261026T194208Z_S2_curl_r13",200.925],["20261026T194222Z_S2_curl_r14",200.956],["20261026T194235Z_S2_curl_r15",200.81],["20261026T194248Z_S2_curl_r16",200.925],["20261026T194301Z_S2_curl_r17",201.975],["20261026T194314Z_S2_curl_r18",201.939],["20261026T194327Z_S2_curl_r19",201.069],["20261026T194340Z_S2_curl_r20",200.926]],
-    S3:[],
-    S4:[],
-    S5:[],
-    S6:[],
-    X1:[]
-  },
-  chromium:{
-    C0:[],
-    S1:[["20261026T193420Z_S1_chromium_r01",301.266],["20261026T193435Z_S1_chromium_r02",301.421],["20261026T193450Z_S1_chromium_r03",300.23],["20261026T193506Z_S1_chromium_r04",301.059],["20261026T193521Z_S1_chromium_r05",301.081],["20261026T193537Z_S1_chromium_r06",301.042],["20261026T193552Z_S1_chromium_r07",300.287],["20261026T193607Z_S1_chromium_r08",301.199],["20261026T193622Z_S1_chromium_r09",300.841],["20261026T193638Z_S1_chromium_r10",302.905],["20261026T193653Z_S1_chromium_r11",301.101],["20261026T193709Z_S1_chromium_r12",300.775],["20261026T193724Z_S1_chromium_r13",301.076],["20261026T193739Z_S1_chromium_r14",300.421],["20261026T193754Z_S1_chromium_r15",300.968],["20261026T193810Z_S1_chromium_r16",300.353],["20261026T193825Z_S1_chromium_r17",301.705],["20261026T193841Z_S1_chromium_r18",301.587],["20261026T193856Z_S1_chromium_r19",300.436],["20261026T193911Z_S1_chromium_r20",301.69]],
-    S2:[["20261026T194358Z_S2_chromium_r01",301.076],["20261026T194412Z_S2_chromium_r02",300.362],["20261026T194426Z_S2_chromium_r03",300.396],["20261026T194440Z_S2_chromium_r04",301.542],["20261026T194454Z_S2_chromium_r05",301.746],["20261026T194508Z_S2_chromium_r06",301.54],["20261026T194522Z_S2_chromium_r07",300.505],["20261026T194536Z_S2_chromium_r08",301.251],["20261026T194550Z_S2_chromium_r09",301.103],["20261026T194603Z_S2_chromium_r10",301.509],["20261026T194617Z_S2_chromium_r11",301.351],["20261026T194631Z_S2_chromium_r12",301.227],["20261026T194645Z_S2_chromium_r13",300.975],["20261026T194659Z_S2_chromium_r14",301.136],["20261026T194713Z_S2_chromium_r15",300.43],["20261026T194726Z_S2_chromium_r16",300.333],["20261026T194740Z_S2_chromium_r17",300.6],["20261026T194754Z_S2_chromium_r18",302.543],["20261026T194808Z_S2_chromium_r19",301.685],["20261026T194822Z_S2_chromium_r20",300.906]],
-    S3:[],
-    S4:[],
-    S5:[],
-    S6:[],
-    X1:[]
-  }
-};
+var WIN={curl:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[0,0,0]},chromium:{C0:[20,0,0],S1:[0,20,0],S2:[0,20,0],S3:[20,0,0],S4:[20,0,0],S5:[20,0,0],S6:[20,0,0],X1:[0,0,0]}};
+var IFDV={curl:{C0:[],S1:[["20261026T192924Z_S1_curl_r01",200.405],["20261026T192939Z_S1_curl_r02",200.722],["20261026T192953Z_S1_curl_r03",200.933],["20261026T193008Z_S1_curl_r04",200.433],["20261026T193022Z_S1_curl_r05",200.956],["20261026T193037Z_S1_curl_r06",200.772],["20261026T193051Z_S1_curl_r07",200.956],["20261026T193106Z_S1_curl_r08",200.976],["20261026T193120Z_S1_curl_r09",201.336],["20261026T193135Z_S1_curl_r10",201.542],["20261026T193149Z_S1_curl_r11",200.942],["20261026T193204Z_S1_curl_r12",201.07],["20261026T193219Z_S1_curl_r13",201.954],["20261026T193233Z_S1_curl_r14",201.399],["20261026T193248Z_S1_curl_r15",201.92],["20261026T193302Z_S1_curl_r16",200.924],["20261026T193317Z_S1_curl_r17",201.972],["20261026T193331Z_S1_curl_r18",200.956],["20261026T193346Z_S1_curl_r19",201.081],["20261026T193400Z_S1_curl_r20",200.942]],S2:[["20261026T193931Z_S2_curl_r01",201.98],["20261026T193944Z_S2_curl_r02",200.469],["20261026T193957Z_S2_curl_r03",200.956],["20261026T194010Z_S2_curl_r04",200.953],["20261026T194024Z_S2_curl_r05",200.984],["20261026T194037Z_S2_curl_r06",200.948],["20261026T194050Z_S2_curl_r07",200.974],["20261026T194103Z_S2_curl_r08",202.046],["20261026T194116Z_S2_curl_r09",201.975],["20261026T194129Z_S2_curl_r10",200.412],["20261026T194142Z_S2_curl_r11",200.968],["20261026T194155Z_S2_curl_r12",200.948],["20261026T194208Z_S2_curl_r13",200.925],["20261026T194222Z_S2_curl_r14",200.956],["20261026T194235Z_S2_curl_r15",200.81],["20261026T194248Z_S2_curl_r16",200.925],["20261026T194301Z_S2_curl_r17",201.975],["20261026T194314Z_S2_curl_r18",201.939],["20261026T194327Z_S2_curl_r19",201.069],["20261026T194340Z_S2_curl_r20",200.926]],S3:[],S4:[],S5:[],S6:[],X1:[]},chromium:{C0:[],S1:[["20261026T193420Z_S1_chromium_r01",301.266],["20261026T193435Z_S1_chromium_r02",301.421],["20261026T193450Z_S1_chromium_r03",300.23],["20261026T193506Z_S1_chromium_r04",301.059],["20261026T193521Z_S1_chromium_r05",301.081],["20261026T193537Z_S1_chromium_r06",301.042],["20261026T193552Z_S1_chromium_r07",300.287],["20261026T193607Z_S1_chromium_r08",301.199],["20261026T193622Z_S1_chromium_r09",300.841],["20261026T193638Z_S1_chromium_r10",302.905],["20261026T193653Z_S1_chromium_r11",301.101],["20261026T193709Z_S1_chromium_r12",300.775],["20261026T193724Z_S1_chromium_r13",301.076],["20261026T193739Z_S1_chromium_r14",300.421],["20261026T193754Z_S1_chromium_r15",300.968],["20261026T193810Z_S1_chromium_r16",300.353],["20261026T193825Z_S1_chromium_r17",301.705],["20261026T193841Z_S1_chromium_r18",301.587],["20261026T193856Z_S1_chromium_r19",300.436],["20261026T193911Z_S1_chromium_r20",301.69]],S2:[["20261026T194358Z_S2_chromium_r01",301.076],["20261026T194412Z_S2_chromium_r02",300.362],["20261026T194426Z_S2_chromium_r03",300.396],["20261026T194440Z_S2_chromium_r04",301.542],["20261026T194454Z_S2_chromium_r05",301.746],["20261026T194508Z_S2_chromium_r06",301.54],["20261026T194522Z_S2_chromium_r07",300.505],["20261026T194536Z_S2_chromium_r08",301.251],["20261026T194550Z_S2_chromium_r09",301.103],["20261026T194603Z_S2_chromium_r10",301.509],["20261026T194617Z_S2_chromium_r11",301.351],["20261026T194631Z_S2_chromium_r12",301.227],["20261026T194645Z_S2_chromium_r13",300.975],["20261026T194659Z_S2_chromium_r14",301.136],["20261026T194713Z_S2_chromium_r15",300.43],["20261026T194726Z_S2_chromium_r16",300.333],["20261026T194740Z_S2_chromium_r17",300.6],["20261026T194754Z_S2_chromium_r18",302.543],["20261026T194808Z_S2_chromium_r19",301.685],["20261026T194822Z_S2_chromium_r20",300.906]],S3:[],S4:[],S5:[],S6:[],X1:[]}};
 var RUNS=[
-  {id:"20261026T192159Z_C0_curl_r07",sc:"C0",cl:"curl",src:"val",setup:20.695,ifd:null,win:"ipv6",ab:0,dns:1.092,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T192159Z_C0_curl_r07\",\n  \"scenario\": {\n    \"id\": \"C0\",\n    \"repetition\": 7\n  },\n  \"client\": {\n    \"name\": \"curl\",\n    \"version\": \"curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v6\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 38392,\n          \"first_syn_ns\": 1793042525932326000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 0,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 1.092,\n      \"status\": \"computed\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 20.695,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": null,\n      \"status\": \"not_observed\",\n      \"note\": \"only one family tried (v6)\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T192159Z_C0_curl_r07.pcap\",\n    \"pcap_sha256\": \"1f18fce7f0f9e333128b3d7bc6d1addc6dd80d7d9485abc189f59b6d81e68eb8\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "1f18fce7f0f9e333128b3d7bc6d1addc6dd80d7d9485abc189f59b6d81e68eb8", "path": "data/generated/runs/20261026T192159Z_C0_curl_r07.json"}},
-  {id:"20261026T193106Z_S1_curl_r08",sc:"S1",cl:"curl",src:"val",setup:222.254,ifd:200.976,win:"ipv4",ab:1,dns:1.069,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T193106Z_S1_curl_r08\",\n  \"scenario\": {\n    \"id\": \"S1\",\n    \"repetition\": 8\n  },\n  \"client\": {\n    \"name\": \"curl\",\n    \"version\": \"curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v4\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 44938,\n          \"first_syn_ns\": 1793043074281925000,\n          \"syn_retransmits\": 0,\n          \"result\": \"abandoned\"\n        },\n        {\n          \"family\": \"v4\",\n          \"dst\": \"192.0.2.2\",\n          \"src_port\": 54608,\n          \"first_syn_ns\": 1793043074482901000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 1,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 1.069,\n      \"status\": \"computed\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 222.254,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": 200.976,\n      \"status\": \"computed\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T193106Z_S1_curl_r08.pcap\",\n    \"pcap_sha256\": \"9baf0f1220ac8521e62a4a0139507d018e8e2a9b93a007c2aed1eb51c0aa13b1\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "9baf0f1220ac8521e62a4a0139507d018e8e2a9b93a007c2aed1eb51c0aa13b1", "path": "data/generated/runs/20261026T193106Z_S1_curl_r08.json"}},
-  {id:"20261026T193622Z_S1_chromium_r09",sc:"S1",cl:"chromium",src:"val",setup:322.275,ifd:300.841,win:"ipv4",ab:2,dns:1.098,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T193622Z_S1_chromium_r09\",\n  \"scenario\": {\n    \"id\": \"S1\",\n    \"repetition\": 9\n  },\n  \"client\": {\n    \"name\": \"chromium\",\n    \"version\": \"Chromium 156.0.8078.4\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v4\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 59426,\n          \"first_syn_ns\": 1793043391591250000,\n          \"syn_retransmits\": 0,\n          \"result\": \"abandoned\"\n        },\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 59430,\n          \"first_syn_ns\": 1793043391841818000,\n          \"syn_retransmits\": 0,\n          \"result\": \"abandoned\"\n        },\n        {\n          \"family\": \"v4\",\n          \"dst\": \"192.0.2.2\",\n          \"src_port\": 33540,\n          \"first_syn_ns\": 1793043391892091000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 2,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 1.098,\n      \"status\": \"computed\",\n      \"note\": \"only www.hl.test queries counted; 50 queries for other names before the first SYN not counted: accounts.google.com, update.googleapis.com, www.google.com\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 322.275,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": 300.841,\n      \"status\": \"computed\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log (Playwright)\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T193622Z_S1_chromium_r09.pcap\",\n    \"pcap_sha256\": \"7541a5c4557210c16e1d95b9df3274cb4a8b787a61ca544e210167d7aa499adc\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "7541a5c4557210c16e1d95b9df3274cb4a8b787a61ca544e210167d7aa499adc", "path": "data/generated/runs/20261026T193622Z_S1_chromium_r09.json"}},
-  {id:"20261026T200225Z_S4_chromium_r01",sc:"S4",cl:"chromium",src:"val",setup:20.139,ifd:null,win:"ipv6",ab:0,dns:0.961,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T200225Z_S4_chromium_r01\",\n  \"scenario\": {\n    \"id\": \"S4\",\n    \"repetition\": 1\n  },\n  \"client\": {\n    \"name\": \"chromium\",\n    \"version\": \"Chromium 156.0.8078.4\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v6\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 38094,\n          \"first_syn_ns\": 1793044954102304000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 0,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 0.961,\n      \"status\": \"computed\",\n      \"note\": \"only www.hl.test queries counted; 50 queries for other names before the first SYN not counted: accounts.google.com, update.googleapis.com, www.google.com\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 20.139,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": null,\n      \"status\": \"not_observed\",\n      \"note\": \"only one family tried (v6)\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log (Playwright)\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T200225Z_S4_chromium_r01.pcap\",\n    \"pcap_sha256\": \"607fc714b10d84dc98617dd11ba7441642475b324ed435979b2d60335fc1cfa7\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "607fc714b10d84dc98617dd11ba7441642475b324ed435979b2d60335fc1cfa7", "path": "data/generated/runs/20261026T200225Z_S4_chromium_r01.json"}},
-  {id:"20261026T201814Z_S6_curl_r09",sc:"S6",cl:"curl",src:"val",setup:20.812,ifd:null,win:"ipv6",ab:0,dns:302.088,out:"success",rec:"{\n  \"schema_version\": \"0.2\",\n  \"run_id\": \"20261026T201814Z_S6_curl_r09\",\n  \"scenario\": {\n    \"id\": \"S6\",\n    \"repetition\": 9\n  },\n  \"client\": {\n    \"name\": \"curl\",\n    \"version\": \"curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10\"\n  },\n  \"packet_observations\": {\n    \"winning_family\": {\n      \"value\": \"v6\",\n      \"status\": \"computed\"\n    },\n    \"attempts\": {\n      \"value\": [\n        {\n          \"family\": \"v6\",\n          \"dst\": \"2001:db8:28:6::2\",\n          \"src_port\": 56116,\n          \"first_syn_ns\": 1793045900625222000,\n          \"syn_retransmits\": 0,\n          \"result\": \"won\"\n        }\n      ],\n      \"status\": \"computed\"\n    },\n    \"failed_or_abandoned_attempts\": {\n      \"value\": 0,\n      \"status\": \"computed\"\n    }\n  },\n  \"metrics\": {\n    \"dns_time_ms\": {\n      \"value\": 302.088,\n      \"status\": \"computed\"\n    },\n    \"tcp_setup_time_ms\": {\n      \"value\": 20.812,\n      \"status\": \"computed\"\n    },\n    \"inter_family_attempt_delay_ms\": {\n      \"value\": null,\n      \"status\": \"not_observed\",\n      \"note\": \"only one family tried (v6)\"\n    },\n    \"scenario_penalty_ms\": {\n      \"value\": null,\n      \"status\": \"not_applicable\",\n      \"note\": \"per-scenario aggregate; see scenario summary\"\n    }\n  },\n  \"outcome\": {\n    \"success\": true,\n    \"http_status\": 200,\n    \"exit_code\": 0,\n    \"source\": \"client/runner log\"\n  },\n  \"evidence\": {\n    \"pcap_path\": \"captures/20261026T201814Z_S6_curl_r09.pcap\",\n    \"pcap_sha256\": \"394816daeee03c5a9ae5b1db943eae252939b53423f93dbae860058577a92289\",\n    \"pre_verify_ok\": true,\n    \"post_restore_verify_ok\": true\n  },\n  \"cross_checks\": {\n    \"status\": \"agree\",\n    \"conflicts\": []\n  }\n}",chk:{"status": "agree", "conflicts": [], "pre": true, "post": true, "sha": "394816daeee03c5a9ae5b1db943eae252939b53423f93dbae860058577a92289", "path": "data/generated/runs/20261026T201814Z_S6_curl_r09.json"}}
+  {id:"20261026T192159Z_C0_curl_r07",sc:"C0",cl:"curl",src:"val",setup:20.695,ifd:null,win:"ipv6",ab:0,dns:1.092,out:"success",rec:'{\n  "schema_version": "0.2",\n  "run_id": "20261026T192159Z_C0_curl_r07",\n  "scenario": { "id": "C0", "repetition": 7 },\n  "client": { "name": "curl" },\n  "metrics": {\n    "tcp_setup_time_ms": { "value": 20.695, "status": "computed" },\n    "inter_family_attempt_delay_ms": { "value": null, "status": "not_observed" },\n    "dns_time_ms": { "value": 1.092, "status": "computed" }\n  },\n  "outcome": { "success": true, "http_status": 200 },\n  "cross_checks": { "status": "agree", "conflicts": [] }\n}',chk:{status:"agree",conflicts:[],pre:true,post:true,sha:"1f18fce7f0f9e333128b3d7bc6d1addc6dd80d7d9485abc189f59b6d81e68eb8",path:"data/generated/runs/20261026T192159Z_C0_curl_r07.json"}},
+  {id:"20261026T193106Z_S1_curl_r08",sc:"S1",cl:"curl",src:"val",setup:222.254,ifd:200.976,win:"ipv4",ab:1,dns:1.069,out:"success",rec:'{\n  "schema_version": "0.2",\n  "run_id": "20261026T193106Z_S1_curl_r08",\n  "scenario": { "id": "S1", "repetition": 8 },\n  "client": { "name": "curl" },\n  "metrics": {\n    "tcp_setup_time_ms": { "value": 222.254, "status": "computed" },\n    "inter_family_attempt_delay_ms": { "value": 200.976, "status": "computed" },\n    "dns_time_ms": { "value": 1.069, "status": "computed" }\n  },\n  "outcome": { "success": true, "http_status": 200 },\n  "cross_checks": { "status": "agree", "conflicts": [] }\n}',chk:{status:"agree",conflicts:[],pre:true,post:true,sha:"9baf0f1220ac8521e62a4a0139507d018e8e2a9b93a007c2aed1eb51c0aa13b1",path:"data/generated/runs/20261026T193106Z_S1_curl_r08.json"}},
+  {id:"20261026T193622Z_S1_chromium_r09",sc:"S1",cl:"chromium",src:"val",setup:322.275,ifd:300.841,win:"ipv4",ab:2,dns:1.098,out:"success",rec:'{\n  "schema_version": "0.2",\n  "run_id": "20261026T193622Z_S1_chromium_r09",\n  "scenario": { "id": "S1", "repetition": 9 },\n  "client": { "name": "chromium" },\n  "metrics": {\n    "tcp_setup_time_ms": { "value": 322.275, "status": "computed" },\n    "inter_family_attempt_delay_ms": { "value": 300.841, "status": "computed" },\n    "dns_time_ms": { "value": 1.098, "status": "computed" }\n  },\n  "outcome": { "success": true, "http_status": 200 },\n  "cross_checks": { "status": "agree", "conflicts": [] }\n}',chk:{status:"agree",conflicts:[],pre:true,post:true,sha:"7541a5c4557210c16e1d95b9df3274cb4a8b787a61ca544e210167d7aa499adc",path:"data/generated/runs/20261026T193622Z_S1_chromium_r09.json"}},
+  {id:"20261026T200225Z_S4_chromium_r01",sc:"S4",cl:"chromium",src:"val",setup:20.139,ifd:null,win:"ipv6",ab:0,dns:0.961,out:"success",rec:'{\n  "schema_version": "0.2",\n  "run_id": "20261026T200225Z_S4_chromium_r01",\n  "scenario": { "id": "S4", "repetition": 1 },\n  "client": { "name": "chromium" },\n  "metrics": {\n    "tcp_setup_time_ms": { "value": 20.139, "status": "computed" },\n    "inter_family_attempt_delay_ms": { "value": null, "status": "not_observed" },\n    "dns_time_ms": { "value": 0.961, "status": "computed" }\n  },\n  "outcome": { "success": true, "http_status": 200 },\n  "cross_checks": { "status": "agree", "conflicts": [] }\n}',chk:{status:"agree",conflicts:[],pre:true,post:true,sha:"607fc714b10d84dc98617dd11ba7441642475b324ed435979b2d60335fc1cfa7",path:"data/generated/runs/20261026T200225Z_S4_chromium_r01.json"}},
+  {id:"20261026T201814Z_S6_curl_r09",sc:"S6",cl:"curl",src:"val",setup:20.812,ifd:null,win:"ipv6",ab:0,dns:302.088,out:"success",rec:'{\n  "schema_version": "0.2",\n  "run_id": "20261026T201814Z_S6_curl_r09",\n  "scenario": { "id": "S6", "repetition": 9 },\n  "client": { "name": "curl" },\n  "metrics": {\n    "tcp_setup_time_ms": { "value": 20.812, "status": "computed" },\n    "inter_family_attempt_delay_ms": { "value": null, "status": "not_observed" },\n    "dns_time_ms": { "value": 302.088, "status": "computed" }\n  },\n  "outcome": { "success": true, "http_status": 200 },\n  "cross_checks": { "status": "agree", "conflicts": [] }\n}',chk:{status:"agree",conflicts:[],pre:true,post:true,sha:"394816daeee03c5a9ae5b1db943eae252939b53423f93dbae860058577a92289",path:"data/generated/runs/20261026T201814Z_S6_curl_r09.json"}}
 ];
 var CAPS=[
-  ["20261026T192159Z_C0_curl_r07.pcap", "C0", "curl", "2 KB", "1f18…8eb8", "dataset run"],
-  ["20261026T193106Z_S1_curl_r08.pcap", "S1", "curl", "2 KB", "9baf…13b1", "dataset run"],
-  ["20261026T193622Z_S1_chromium_r09.pcap", "S1", "chromium", "20 KB", "7541…9adc", "dataset run"],
-  ["20261026T200225Z_S4_chromium_r01.pcap", "S4", "chromium", "16 KB", "607f…cfa7", "dataset run"],
-  ["20261026T201814Z_S6_curl_r09.pcap", "S6", "curl", "2 KB", "3948…2289", "dataset run"],
-  ["s1_manual_curl.pcap", "S1", "curl", "2 KB", "2e74…a476", "pinned fixture · hand-checked"],
-  ["loopback_two_harness_runs.pcap", "—", "curl", "3 KB", "0a67…421c", "pinned fixture · loopback harness, not lab data"]
+  ["20261026T192159Z_C0_curl_r07.pcap","C0","curl","2 KB","1f18...8eb8","dataset run"],
+  ["20261026T193106Z_S1_curl_r08.pcap","S1","curl","2 KB","9baf...13b1","dataset run"],
+  ["20261026T193622Z_S1_chromium_r09.pcap","S1","chromium","20 KB","7541...9adc","dataset run"],
+  ["20261026T200225Z_S4_chromium_r01.pcap","S4","chromium","16 KB","607f...cfa7","dataset run"],
+  ["20261026T201814Z_S6_curl_r09.pcap","S6","curl","2 KB","3948...2289","dataset run"],
+  ["s1_manual_curl.pcap","S1","curl","2 KB","2e74...a476","pinned fixture"],
+  ["loopback_two_harness_runs.pcap","--","curl","3 KB","0a67...421c","pinned fixture · loopback"]
 ];
-/* === HAPPYLAB DATA END === */
 
 /* ===================== helpers ===================== */
 function chip(key){var s=SRC[key];return '<span class="chip '+s[1]+'"><span class="dt"></span>'+s[0]+'</span>'}
@@ -770,14 +1362,79 @@ function bindTips(root){
     el.addEventListener("mouseleave",function(){tip.style.opacity="0"});
   });
 }
-function nice(max){ /* round up to a value that divides into four clean ticks */
-  var step=max>400?125:max>200?50:max>80?25:10;
-  return Math.max(Math.ceil(max/(step*4))*step*4,step*4);
+function nice(max){var step=max>400?125:max>200?50:max>80?25:10;return Math.max(Math.ceil(max/(step*4))*step*4,step*4)}
+function axis(el,max,unit){var out=[];for(var i=0;i<=4;i++)out.push("<span>"+Math.round(max*i/4)+(i===4?" "+unit:"")+"</span>");el.innerHTML=out.join("")}
+
+/* ===================== research map (replaced by static architecture section) ===================== */
+
+/* ===================== packet trace (one stored run, not live) =====================
+   Times are milliseconds from the first DNS query, derived from the recorded metrics of
+   run 20261026T193106Z_S1_curl_r08: dns_time 1.069, inter_family 200.976, setup 222.254. */
+var TLINES=[
+  {t:"  0.000",m:"client -> 198.51.100.53           <b>query</b>    A + AAAA www.hl.test",cls:""},
+  {t:"  1.069",m:"198.51.100.53 -> client           <b>answer</b>   A 192.0.2.2 · AAAA 2001:db8:28:6::2",cls:""},
+  {t:"  1.069",m:"client -> [2001:db8:28:6::2]:80   <b>SYN</b>      IPv6 attempt 1",cls:"tl-probe"},
+  {t:"202.045",m:"client -> 192.0.2.2:80            <b>SYN</b>      IPv4 fallback · 200.976 ms after the first SYN",cls:"tl-probe"},
+  {t:"223.280",m:"192.0.2.2 -> client               <b>SYN-ACK</b>  IPv4",cls:"tl-ok"},
+  {t:"223.323",m:"client -> 192.0.2.2:80            <b>ACK</b>      handshake complete · TCP setup 222.254 ms",cls:"tl-ok"},
+  {t:"223.4  ",m:"IPv6 attempt abandoned — no SYN-ACK ever arrived on the blackholed path",cls:""},
+  {t:"224.6  ",m:"client -> 192.0.2.2:80            <b>GET</b>      / HTTP/1.1 -> 200 OK",cls:"tl-ok"}
+];
+function renderTerminal(){
+  $("termBody").innerHTML=TLINES.map(function(l){
+    return '<div><span class="tl-time">'+l.t+'</span>  <span class="'+(l.cls||'')+'">'+l.m+'</span></div>'
+  }).join("");
 }
-function axis(el,max,unit){
-  var out=[];for(var i=0;i<=4;i++)out.push("<span>"+Math.round(max*i/4)+(i===4?" "+unit:"")+"</span>");
-  el.innerHTML=out.join("");
+renderTerminal();
+
+/* ===================== tab navigation ===================== */
+var TABS=["overview","method","results","playground","evidence"];
+var activeTab="home";
+function switchTab(tab){
+  if(tab==="home"){
+    activeTab="home";
+    $("homePage").hidden=false;
+    TABS.forEach(function(t){var sec=$("p-"+t);if(sec)sec.hidden=true});
+    pgStop();
+    updateNavButtons("home");
+    window.scrollTo({top:0,behavior:"smooth"});
+    return;
+  }
+  if(TABS.indexOf(tab)<0)return;
+  activeTab=tab;
+  $("homePage").hidden=true;
+  TABS.forEach(function(t){
+    var sec=$("p-"+t);if(sec)sec.hidden=(t!==tab);
+  });
+  if(tab!=="playground")pgStop();else pgFitMarks();
+  updateNavButtons(tab);
+  window.scrollTo({top:0,behavior:"smooth"});
 }
+function updateNavButtons(tab){
+  var sets=[document.getElementById("topbarNav"),document.getElementById("mobileMenu")];
+  sets.forEach(function(nav){
+    if(!nav)return;
+    Array.prototype.forEach.call(nav.children,function(b){
+      b.setAttribute("aria-pressed",String(b.dataset.tab===tab));
+    });
+  });
+  /* close mobile menu */
+  var mm=document.getElementById("mobileMenu");
+  if(mm)mm.classList.remove("open");
+}
+window.switchTab=switchTab;
+["topbarNav","mobileMenu"].forEach(function(id){
+  var nav=document.getElementById(id);
+  if(!nav)return;
+  Array.prototype.forEach.call(nav.children,function(b){
+    b.onclick=function(){switchTab(b.dataset.tab)};
+  });
+});
+/* hamburger toggle */
+(function(){
+  var btn=document.getElementById("hamburgerBtn"),mm=document.getElementById("mobileMenu");
+  if(btn&&mm)btn.onclick=function(){mm.classList.toggle("open")};
+})();
 
 /* ===================== overview ===================== */
 $("findings").innerHTML=FIND.map(function(f){
@@ -786,94 +1443,59 @@ $("findings").innerHTML=FIND.map(function(f){
 
 /* ===================== method ===================== */
 $("condTable").innerHTML=SCEN.map(function(s){
-  return "<tr><td class='mono'>"+s.id+(s.opt?" <span class='small'>opt</span>":"")+"</td><td>"+s.v6+"</td><td>"+s.v4+
+  return "<tr><td class='mono'>"+s.id+(s.opt?" <span class='small' style='color:var(--warn)'>optional · not measured</span>":"")+"</td><td>"+s.v6+"</td><td>"+s.v4+
     "</td><td>"+s.dns+"</td><td class='muted'>"+s.q+"</td></tr>"}).join("");
 
 /* ===================== results ===================== */
 var RS={client:"both",view:"charts"};
 function clients(){return RS.client==="both"?["curl","chromium"]:[RS.client]}
-
-function legend(el,items){
-  el.innerHTML=items.map(function(i){
-    return '<span><span class="swatch" style="background:'+i[1]+'"></span>'+i[0]+'</span>'}).join("");
-}
+function legend(el,items){el.innerHTML=items.map(function(i){return '<span><span class="swatch" style="background:'+i[1]+'"></span>'+i[0]+'</span>'}).join("")}
 
 function drawResults(){
   var cls=clients();
   legend($("leg1"),[["IPv6 won",C.v6],["IPv4 won",C.v4]]);
   legend($("leg2"),[["IPv6 won",C.v6],["IPv4 won",C.v4]]);
   legend($("leg3"),[["IPv6",C.v6],["IPv4",C.v4]]);
-
-  /* chart 1 — median setup */
-  /* a cell with no runs (src ph) is shown as "not measured": no bar, no number, not in any scale */
-  var nmLane=function(cls){return '<div class="'+cls+' nm"><span class="nolane">not measured</span></div>'};
+  var nmLane=function(c){return '<div class="'+c+' nm"><span class="nolane">not measured</span></div>'};
   var max1=0;SCEN.forEach(function(s){cls.forEach(function(c){if(D[c][s.id].src!=="ph")max1=Math.max(max1,D[c][s.id].med)})});
   max1=nice(max1);
-  $("chart1").innerHTML=SCEN.map(function(s){
-    return cls.map(function(c){
-      var d=D[c][s.id],w=(d.med/max1*100),inside=w>55;
-      if(d.src==="ph") return '<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+'</i></span><div class="lanes">'+
-        nmLane("lane")+'</div></div>';
-      var lab='<span class="blab" data-in="'+(inside?1:0)+'" style="'+
-        (inside?'right:calc(100% - '+w+'%)':'left:'+w+'%')+'">'+d.med.toFixed(1)+'</span>';
-      return '<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+'</i></span><div class="lanes">'+
-        '<div class="lane"><div class="fill" data-tip="<b>'+s.id+' · '+c+'</b><br>median setup '+d.med.toFixed(3)+
-        ' ms<br>'+famN(d.win)+' won · '+SRC[d.src][0]+'" style="width:'+w+'%;background:'+famC(d.win)+'"></div>'+
-        lab+'</div></div></div>'}).join("")}).join("");
+  $("chart1").innerHTML=SCEN.map(function(s){return cls.map(function(c){
+    var d=D[c][s.id],w=(d.med/max1*100),inside=w>55;
+    if(d.src==="ph")return '<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+'</i></span><div class="lanes">'+nmLane("lane")+'</div></div>';
+    var lab='<span class="blab" data-in="'+(inside?1:0)+'" style="'+(inside?'right:calc(100% - '+w+'%)':'left:'+w+'%')+'">'+d.med.toFixed(1)+'</span>';
+    return '<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+'</i></span><div class="lanes"><div class="lane"><div class="fill" data-tip="<b>'+s.id+' · '+c+'</b><br>median setup '+d.med.toFixed(3)+' ms<br>'+famN(d.win)+' won · '+SRC[d.src][0]+'" style="width:'+w+'%;background:'+famC(d.win)+'"></div>'+lab+'</div></div></div>'}).join("")}).join("");
   axis($("axis1"),max1,"ms");
 
-  /* chart 2 — penalty */
   var max2=0,pen={};
-  cls.forEach(function(c){pen[c]={};SCEN.forEach(function(s){
-    if(D[c][s.id].src==="ph")return;var p=D[c][s.id].med-D[c].C0.med;pen[c][s.id]=p;max2=Math.max(max2,p)})});
+  cls.forEach(function(c){pen[c]={};SCEN.forEach(function(s){if(D[c][s.id].src==="ph")return;var p=D[c][s.id].med-D[c].C0.med;pen[c][s.id]=p;max2=Math.max(max2,p)})});
   max2=nice(max2);
-  $("chart2").innerHTML=SCEN.filter(function(s){return s.id!=="C0"}).map(function(s){
-    return cls.map(function(c){
-      if(D[c][s.id].src==="ph") return '<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+'</i></span><div class="lanes">'+
-        nmLane("lane")+'</div></div>';
-      var p=pen[c][s.id],w=Math.max(p,0)/max2*100,zero=p<1?1:0,inside=w>55;
-      var txt=(p>0.5?"+"+p.toFixed(1):"≈0");
-      var lab='<span class="blab" data-in="'+(inside?1:0)+'" style="'+
-        (inside?'right:calc(100% - '+w+'%)':'left:'+Math.max(w,0.5)+'%')+'">'+txt+'</span>';
-      return '<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+'</i></span><div class="lanes">'+
-        '<div class="lane"><div class="fill" data-zero="'+zero+'" data-tip="<b>'+s.id+' · '+c+'</b><br>penalty '+
-        (p>0?"+":"")+p.toFixed(3)+' ms<br>against this client&#39;s own C0" style="width:'+w+'%;background:'+
-        famC(D[c][s.id].win)+'"></div>'+lab+'</div></div></div>'}).join("")}).join("");
+  $("chart2").innerHTML=SCEN.filter(function(s){return s.id!=="C0"}).map(function(s){return cls.map(function(c){
+    if(D[c][s.id].src==="ph")return '<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+'</i></span><div class="lanes">'+nmLane("lane")+'</div></div>';
+    var p=pen[c][s.id],w=Math.max(p,0)/max2*100,zero=p<1?1:0,inside=w>55;
+    var txt=(p>0.5?"+"+p.toFixed(1):"~0");
+    var lab='<span class="blab" data-in="'+(inside?1:0)+'" style="'+(inside?'right:calc(100% - '+w+'%)':'left:'+Math.max(w,0.5)+'%')+'">'+txt+'</span>';
+    return '<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+'</i></span><div class="lanes"><div class="lane"><div class="fill" data-zero="'+zero+'" data-tip="<b>'+s.id+' · '+c+'</b><br>penalty '+(p>0?"+":"")+p.toFixed(3)+' ms" style="width:'+w+'%;background:'+famC(D[c][s.id].win)+'"></div>'+lab+'</div></div></div>'}).join("")}).join("");
   axis($("axis2"),max2,"ms");
 
-  /* chart 3 — winner share */
-  $("chart3").innerHTML=SCEN.map(function(s){
-    var rows=cls.map(function(c){
-      if(D[c][s.id].src==="ph") return '<div class="bar"><span class="lbl">'+(cls.length>1?c:s.id)+(cls.length>1?'<i>'+s.id+'</i>':'<i>'+s.nm+'</i>')+
-        '</span>'+nmLane("stack100")+'</div>';
-      var w=WIN[c][s.id],tot=w[0]+w[1]+w[2];
-      var segs=[[w[0],C.v6,"IPv6"],[w[1],C.v4,"IPv4"],[w[2],"#505158","no winner"]].filter(function(x){return x[0]>0})
-        .map(function(x){return '<div class="seg" data-tip="<b>'+s.id+' · '+c+'</b><br>'+x[2]+' won '+x[0]+' of '+tot+
-          ' runs" style="flex:'+x[0]+';background:'+x[1]+'"></div>'}).join("");
-      return '<div class="bar"><span class="lbl">'+(cls.length>1?c:s.id)+(cls.length>1?'<i>'+s.id+'</i>':'<i>'+s.nm+'</i>')+
-        '</span><div class="stack100">'+segs+'</div></div>'}).join("");
-    return rows}).join("");
+  $("chart3").innerHTML=SCEN.map(function(s){return cls.map(function(c){
+    if(D[c][s.id].src==="ph")return '<div class="bar"><span class="lbl">'+(cls.length>1?c:s.id)+'<i>'+(cls.length>1?s.id:s.nm)+'</i></span>'+nmLane("stack100")+'</div>';
+    var w=WIN[c][s.id],tot=w[0]+w[1]+w[2];
+    var segs=[[w[0],C.v6,"IPv6"],[w[1],C.v4,"IPv4"],[w[2],"#505158","no winner"]].filter(function(x){return x[0]>0})
+      .map(function(x){return '<div class="seg" data-tip="<b>'+s.id+' · '+c+'</b><br>'+x[2]+' won '+x[0]+' of '+tot+'" style="flex:'+x[0]+';background:'+x[1]+'"></div>'}).join("");
+    return '<div class="bar"><span class="lbl">'+(cls.length>1?c:s.id)+'<i>'+(cls.length>1?s.id:s.nm)+'</i></span><div class="stack100">'+segs+'</div></div>'}).join("")}).join("");
 
-  /* chart 4 — inter-family delay: one dot per run that observed it (IFDV, from the records).
-     Horizontal position is the measured value; dots are stacked in five rows by list order only so
-     that near-identical values stay visible. Cells with no runs are not measured and draw nothing. */
-  var max4=0;cls.forEach(function(c){SCEN.forEach(function(s){
-    IFDV[c][s.id].forEach(function(x){max4=Math.max(max4,x[1])})})});
+  var max4=0;cls.forEach(function(c){SCEN.forEach(function(s){IFDV[c][s.id].forEach(function(x){max4=Math.max(max4,x[1])})})});
   max4=nice((max4||100)*1.15);
-  $("chart4").innerHTML=SCEN.map(function(s){
-    var rows=cls.map(function(c){
-      var d=D[c][s.id],vals=IFDV[c][s.id],head='<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+'</i></span>';
-      if(d.src==="ph") return head+'<div class="strip nm"><span class="nolane">not measured</span></div></div>';
-      if(!vals.length) return head+'<div class="strip"><span class="nolane">not_observed · only one family attempted</span></div></div>';
-      var pts=vals.map(function(x,k){
-        return '<div class="pt" data-tip="<b>'+s.id+' · '+c+'</b><br>'+x[0]+'<br>'+x[1].toFixed(3)+' ms" style="left:'+
-          (x[1]/max4*100)+'%;top:'+(7+(k%5)*6)+'px;background:'+(c==="curl"?C.curl:C.chromium)+'"></div>'}).join("");
-      pts+='<div class="med" data-tip="<b>median</b><br>'+d.ifd.toFixed(3)+' ms over '+vals.length+' runs" style="left:'+(d.ifd/max4*100)+'%"></div>';
-      return head+'<div class="strip">'+pts+'</div></div>'}).join("");
-    return rows}).join("");
+  $("chart4").innerHTML=SCEN.map(function(s){return cls.map(function(c){
+    var d=D[c][s.id],vals=IFDV[c][s.id],head='<div class="bar"><span class="lbl">'+s.id+'<i>'+(cls.length>1?c:s.nm)+'</i></span>';
+    if(d.src==="ph")return head+'<div class="strip nm"><span class="nolane">not measured</span></div></div>';
+    if(!vals.length)return head+'<div class="strip"><span class="nolane">not_observed</span></div></div>';
+    var pts=vals.map(function(x,k){
+      return '<div class="pt" data-tip="<b>'+s.id+' · '+c+'</b><br>'+x[1].toFixed(3)+' ms" style="left:'+(x[1]/max4*100)+'%;top:'+(7+(k%5)*6)+'px;background:'+(c==="curl"?C.curl:C.chromium)+'"></div>'}).join("");
+    pts+='<div class="med" data-tip="<b>median</b><br>'+d.ifd.toFixed(3)+' ms" style="left:'+(d.ifd/max4*100)+'%"></div>';
+    return head+'<div class="strip">'+pts+'</div></div>'}).join("")}).join("");
   axis($("axis4"),max4,"ms");
 
-  /* chart 5 — completion matrix */
   var m=$("chart5");
   m.style.gridTemplateColumns="76px repeat("+SCEN.length+", minmax(0,1fr))";
   var html='<div class="mhead"></div>'+SCEN.map(function(s){return '<div class="mhead">'+s.id+'</div>'}).join("");
@@ -881,84 +1503,56 @@ function drawResults(){
     html+='<div class="mhead" style="align-self:center">'+c+'</div>';
     SCEN.forEach(function(s){
       var r=D[c][s.id].runs,pct=r[0]/r[1],
-          bg=pct===0?"#171922":pct<1?"rgba(57,135,229,"+(0.14+pct*0.5)+")":"rgba(57,135,229,0.82)",
-          fg=pct>0.6?"#ffffff":"var(--ink2)";
-      html+='<div class="mcell" data-tip="<b>'+s.id+' · '+c+'</b><br>'+(s.opt?'optional condition<br>':'')+r[0]+' of '+r[1]+' runs<br>0 conflicts" '+
-        'style="background:'+bg+'"><div class="mv" style="color:'+fg+'">'+r[0]+"/"+r[1]+'</div><div class="ms">'+
-        (pct===1?"complete":pct>0?"partial":s.opt?"optional":"not started")+'</div></div>'});
-  });
+        bg=pct===0?"#171922":pct<1?"rgba(57,135,229,"+(0.14+pct*0.5)+")":"rgba(57,135,229,0.82)",
+        fg=pct>0.6?"#ffffff":"var(--ink2)";
+      html+='<div class="mcell" data-tip="<b>'+s.id+' · '+c+'</b><br>'+r[0]+'/'+r[1]+' runs<br>0 conflicts" style="background:'+bg+'"><div class="mv" style="color:'+fg+'">'+r[0]+"/"+r[1]+'</div><div class="ms">'+(pct===1?"complete":pct>0?"partial":s.opt?"optional":"not started")+'</div></div>'})});
   m.innerHTML=html;
 
-  /* table */
   var rows=[];
   SCEN.forEach(function(s){cls.forEach(function(c){
     var d=D[c][s.id],p=d.med-D[c].C0.med;
-    if(d.src==="ph"){rows.push("<tr><td class='mono'>"+s.id+"</td><td>"+c+"</td><td class='muted' colspan='4'>not measured</td>"+
-      "<td class='mono'>"+d.runs[0]+"/"+d.runs[1]+"</td><td>"+chip(d.src)+"</td></tr>");return}
-    rows.push("<tr><td class='mono'>"+s.id+"</td><td>"+c+"</td><td class='mono'>"+d.med.toFixed(3)+"</td><td class='mono'>"+
-      (p>0.5?"+"+p.toFixed(3):"≈0")+"</td><td>"+famN(d.win)+"</td><td class='mono'>"+
-      (d.ifd===null?"not_observed":d.ifd.toFixed(3))+"</td><td class='mono'>"+d.runs[0]+"/"+d.runs[1]+"</td><td>"+chip(d.src)+"</td></tr>")})});
+    if(d.src==="ph"){rows.push("<tr><td class='mono'>"+s.id+"</td><td>"+c+"</td><td class='muted' colspan='4'>not measured</td><td class='mono'>"+d.runs[0]+"/"+d.runs[1]+"</td><td>"+chip(d.src)+"</td></tr>");return}
+    rows.push("<tr><td class='mono'>"+s.id+"</td><td>"+c+"</td><td class='mono'>"+d.med.toFixed(3)+"</td><td class='mono'>"+(p>0.5?"+"+p.toFixed(3):"~0")+"</td><td>"+famN(d.win)+"</td><td class='mono'>"+(d.ifd===null?"not_observed":d.ifd.toFixed(3))+"</td><td class='mono'>"+d.runs[0]+"/"+d.runs[1]+"</td><td>"+chip(d.src)+"</td></tr>")})});
   $("dataTable").innerHTML=rows.join("");
   bindTips($("chartsView"));
 }
 function segWire(id,key,after){
   Array.prototype.forEach.call($(id).children,function(b){
-    b.onclick=function(){
-      RS[key]=b.dataset.c||b.dataset.v;
-      Array.prototype.forEach.call($(id).children,function(x){
-        x.setAttribute("aria-pressed",String(x===b))});
-      after();
-    }});
+    b.onclick=function(){RS[key]=b.dataset.c||b.dataset.v;
+      Array.prototype.forEach.call($(id).children,function(x){x.setAttribute("aria-pressed",String(x===b))});after()}})
 }
 segWire("clientSeg","client",drawResults);
-segWire("viewSeg","view",function(){
-  $("chartsView").hidden=RS.view!=="charts"; $("tableView").hidden=RS.view!=="table"});
+segWire("viewSeg","view",function(){$("chartsView").hidden=RS.view!=="charts";$("tableView").hidden=RS.view!=="table"});
 drawResults();
 
 /* ===================== evidence ===================== */
-function runCard(r){
-  return '<button class="scn" style="width:100%" data-run="'+r.id+'" aria-pressed="false">'+
-    '<span class="id">'+r.id+'</span><span class="nm">'+r.cl+" · "+SRC[r.src][0]+'</span></button>'}
+function runCard(r){return '<button class="scn" style="width:100%" data-run="'+r.id+'" aria-pressed="false"><span class="id">'+r.id+'</span><span class="nm">'+r.cl+" · "+SRC[r.src][0]+'</span></button>'}
 $("runList").innerHTML=RUNS.map(runCard).join("");
 function showRun(r){
-  $("runTitle").textContent=r.id;
-  $("runChip").innerHTML=chip(r.src);
+  $("runTitle").textContent=r.id;$("runChip").innerHTML=chip(r.src);
   var cells=[["TCP setup",r.setup.toFixed(3)+" ms"],["Inter-family",r.ifd===null?"not_observed":r.ifd.toFixed(3)+" ms"],
     ["DNS time",r.dns.toFixed(3)+" ms"],["Winner",famN(r.win)],["Abandoned",String(r.ab)],["Outcome",r.out]];
-  $("runStats").innerHTML=cells.map(function(c){
-    var sm=c[1].length>9?'font-size:15px':'font-size:19px';
-    return '<div class="stat"><div class="k">'+c[0]+'</div><div class="v mono" style="'+sm+'">'+c[1]+'</div></div>'}).join("");
-  /* the stored record as written by the orchestrator (excerpt, fields verbatim) */
-  var j=["// excerpt of "+r.chk.path].concat(r.rec.split("\n"));
-  $("runJson").innerHTML=j.map(function(l){return "<div>"+esc(l)+"</div>"}).join("");
-  /* one row per check the cross_checks block covers (docs/run_record_schema.md); a row agrees
-     unless the stored block lists a conflict for that field */
-  var CHECKS=[["success","Client success claim agrees with the capture"],["http_status","HTTP status matches the captured response"],
-    ["remote_ip","Address used matches the winning handshake"],["winner","Capture unambiguous (one data connection)"],
-    ["unexpected_traffic","No port-443, QUIC or other-port traffic"],
-    ["capture","Capture complete: no kernel-dropped or unwritten packets"]];
-  var rows=[["Cross-check status (stored)",r.chk.status,r.chk.status==="agree"]];
-  CHECKS.forEach(function(c){
-    var hit=r.chk.conflicts.filter(function(x){return x.field===c[0]})[0];
-    rows.push([c[1],hit?(hit.note||"conflict"):"agrees",!hit])});
-  rows.push(["Lab verify before / after the run",(r.chk.pre?"pass":"fail")+" / "+(r.chk.post?"pass":"fail"),r.chk.pre&&r.chk.post]);
-  rows.push(["Capture SHA-256 (stored)",r.chk.sha.slice(0,12)+"…",true]);
-  $("runChecks").innerHTML=rows.map(function(c){return '<div class="kv"><span>'+c[0]+'</span><b style="color:var(--'+
-    (c[2]?"ok":"bad")+')">'+esc(c[1])+'</b></div>'}).join("");
-  Array.prototype.forEach.call($("runList").children,function(b){
-    b.setAttribute("aria-pressed",String(b.dataset.run===r.id))});
+  $("runStats").innerHTML=cells.map(function(c){return '<div class="stat"><div class="k">'+c[0]+'</div><div class="v mono" style="font-size:'+(c[1].length>9?"15":"19")+'px">'+c[1]+'</div></div>'}).join("");
+  $("runJson").innerHTML=r.rec.split("\n").map(function(l){return "<div>"+esc(l)+"</div>"}).join("");
+  var CHECKS=[["success","Client success agrees with capture"],["http_status","HTTP status matches"],["remote_ip","Address matches winning handshake"],["winner","Capture unambiguous"],["unexpected_traffic","No unexpected traffic"],["capture","Capture complete"]];
+  var rows=[["Cross-check status",r.chk.status,r.chk.status==="agree"]];
+  CHECKS.forEach(function(c){var hit=r.chk.conflicts.filter(function(x){return x.field===c[0]})[0];rows.push([c[1],hit?(hit.note||"conflict"):"agrees",!hit])});
+  rows.push(["Lab verify before/after",(r.chk.pre?"pass":"fail")+" / "+(r.chk.post?"pass":"fail"),r.chk.pre&&r.chk.post]);
+  rows.push(["SHA-256",r.chk.sha.slice(0,16)+"...",true]);
+  $("runChecks").innerHTML=rows.map(function(c){return '<div class="kv"><span>'+c[0]+'</span><b style="color:var(--'+(c[2]?"ok":"bad")+')">'+esc(c[1])+'</b></div>'}).join("");
+  Array.prototype.forEach.call($("runList").children,function(b){b.setAttribute("aria-pressed",String(b.dataset.run===r.id))});
 }
-$("runList").addEventListener("click",function(e){
-  var b=e.target.closest("[data-run]");if(!b)return;
-  showRun(RUNS.filter(function(r){return r.id===b.dataset.run})[0]);
-});
+$("runList").addEventListener("click",function(e){var b=e.target.closest("[data-run]");if(!b)return;showRun(RUNS.filter(function(r){return r.id===b.dataset.run})[0])});
 showRun(RUNS[1]);
-$("capTable").innerHTML=CAPS.map(function(c){
-  return "<tr><td class='mono'>"+c[0]+"</td><td class='mono'>"+c[1]+"</td><td>"+c[2]+"</td><td class='mono'>"+c[3]+
-    "</td><td class='mono muted'>"+c[4]+"</td><td class='muted'>"+c[5]+"</td></tr>"}).join("");
+$("capTable").innerHTML=CAPS.map(function(c){return "<tr><td class='mono'>"+c[0]+"</td><td class='mono'>"+c[1]+"</td><td>"+c[2]+"</td><td class='mono'>"+c[3]+"</td><td class='mono muted'>"+c[4]+"</td><td class='muted'>"+c[5]+"</td></tr>"}).join("");
 
 /* ===================== playground ===================== */
 var BASE=20,DNS_BASE=4,BACKUP=250,raf=null;
+/* The Playground diagram draws IPv4 in green: the cable, its label, and the dots that travel
+   along it. The Results charts keep IPv4 orange, so C.v4 is deliberately left alone. */
+var PG4="#3fb950";
+function pgC(f){return f==="v4"?PG4:C.v6}
+var STUB=36,TAIL=30,OS_TIMEOUT=130000;
 var reduce=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 var P={scn:"C0",client:"curl",pref:"v6",he:200,cut6:false,cut4:false,a6:0,a4:0,aaaa:0};
 function addr(f){return f==="v6"?"[2001:db8:28:6::2]":"192.0.2.2"}
@@ -966,117 +1560,195 @@ function addr(f){return f==="v6"?"[2001:db8:28:6::2]":"192.0.2.2"}
 function simulate(c){
   var alive={v6:!c.cut6,v4:!c.cut4},rtt={v6:BASE+c.a6,v4:BASE+c.a4};
   var dns=DNS_BASE+c.aaaa,first=c.pref,second=first==="v6"?"v4":"v6",he=c.he,log=[],att=[];
-  log.push([0,"client → 198.51.100.53   <b>query</b>   A + AAAA www.hl.test"]);
-  log.push([DNS_BASE/2,"dns    → client          <b>answer</b>  A 192.0.2.2"]);
-  log.push([DNS_BASE/2+c.aaaa,"dns    → client          <b>answer</b>  AAAA 2001:db8:28:6::2"]);
-  log.push([dns,"client resolved in "+dns.toFixed(3)+" ms — connecting, preferring "+famN(first)]);
+  log.push([0,"client -> 198.51.100.53   <b>query</b>   A + AAAA www.hl.test"]);
+  log.push([DNS_BASE/2,"dns    -> client          <b>answer</b>  A 192.0.2.2"]);
+  log.push([DNS_BASE/2+c.aaaa,"dns    -> client          <b>answer</b>  AAAA 2001:db8:28:6::2"]);
+  log.push([dns,"client resolved in "+dns.toFixed(3)+" ms"]);
   function mk(f,t0,tag){var a={f:f,t0:t0,rtt:alive[f]?rtt[f]:null,end:alive[f]?t0+rtt[f]:null,tag:tag||""};att.push(a);return a}
   var A1=mk(first,0,"attempt 1"),winner=A1.end!==null?A1:null,inter=null,backup=null,A2=null;
   if(A1.end===null||A1.end>he){
-    if(c.client==="chromium"&&(A1.end===null||A1.end>BACKUP)&&BACKUP<he) backup=mk(first,BACKUP,"backup");
-    A2=mk(second,he,"fallback"); inter=he;
+    if(c.client==="chromium"&&(A1.end===null||A1.end>BACKUP)&&BACKUP<he)backup=mk(first,BACKUP,"backup");
+    A2=mk(second,he,"fallback");inter=he;
     var cand=[A1,backup,A2].filter(function(a){return a&&a.end!==null}).sort(function(x,y){return x.end-y.end});
     winner=cand.length?cand[0]:null;
   }
+  att.forEach(function(a){a.state=(a===winner)?"won":(a.end===null?"no_reply":"abandoned")});
+  /* When the client stops caring about each attempt. The winner runs to its ACK; every other
+     socket is cancelled the moment the winner completes, which is what the capture shows. */
   att.forEach(function(a){
-    log.push([dns+a.t0,"client → "+addr(a.f)+"   <b>SYN</b>     "+famN(a.f)+" "+a.tag]);
-    if(a.end===null) log.push([dns+a.t0+40,"  (no reply on "+famN(a.f)+" — packets discarded)"]);
+    if(a.state==="won"){a.stop=a.end;return}
+    var cancel=winner?Math.max(a.t0,winner.end):a.t0+STUB;
+    a.stop=(a.end!==null)?Math.min(a.end,cancel):cancel;
+  });
+  att.forEach(function(a){
+    log.push([dns+a.t0,"client -> "+addr(a.f)+"   <b class='lg-syn'>SYN</b>     "+famN(a.f)+" "+a.tag]);
   });
   if(winner){
-    log.push([dns+winner.end-winner.rtt/2,addr(winner.f)+" → client   <b>SYN-ACK</b> "+famN(winner.f)]);
-    log.push([dns+winner.end,"client → "+addr(winner.f)+"   <b>ACK</b>     handshake complete"]);
-    log.push([dns+winner.end+1,"GET / HTTP/1.1 → 200 OK · 9 bytes"]);
-  } else log.push([dns+he+1000,"connection failed — no family answered"]);
-  att.forEach(function(a){a.state=(a===winner)?"won":(a.end===null?"no_reply":"abandoned")});
+    log.push([dns+winner.end-winner.rtt/2,addr(winner.f)+" -> client   <b class='lg-ok'>SYN-ACK</b> "+famN(winner.f)]);
+    log.push([dns+winner.end,"client -> "+addr(winner.f)+"   <b class='lg-ok'>ACK</b>     handshake complete"]);
+    att.forEach(function(a){
+      if(a===winner)return;
+      log.push([dns+a.stop+0.001,a.end===null
+        ? "  <b class='lg-bad'>DROP</b>    "+famN(a.f)+" "+a.tag+" — no reply, given up"
+        : "client -> "+addr(a.f)+"   <b class='lg-warn'>RST</b>     "+famN(a.f)+" "+a.tag+" abandoned"]);
+    });
+    log.push([dns+winner.end+1,"<b class='lg-ok'>GET</b>     / HTTP/1.1 -> 200 OK"]);
+  }else{
+    att.forEach(function(a){
+      log.push([dns+a.t0+STUB,"  <b class='lg-bad'>DROP</b>    "+famN(a.f)+" "+a.tag+" — no reply"]);
+    });
+    var lastSyn=Math.max.apply(null,att.map(function(a){return a.t0}));
+    log.push([dns+lastSyn+STUB+1,"no family answered — client is left waiting on the OS TCP timeout (~"+(OS_TIMEOUT/1000)+" s)"]);
+  }
   log.sort(function(x,y){return x[0]-y[0]});
-  return {dns:dns,att:att,winner:winner,log:log,setup:winner?winner.end:null,inter:inter,
+  var lastStop=Math.max.apply(null,att.map(function(a){return a.stop}));
+  return{dns:dns,att:att,winner:winner,log:log,setup:winner?winner.end:null,inter:inter,
+    timeout:winner?null:OS_TIMEOUT,
     abandoned:att.filter(function(a){return a!==winner}).length,
-    total:dns+(winner?winner.end:he+1000)+30};
+    total:dns+lastStop+TAIL};
 }
-function pcfg(){return {cut6:P.cut6,cut4:P.cut4,a6:P.a6,a4:P.a4,aaaa:P.aaaa,pref:P.pref,he:P.he,client:P.client}}
+function pcfg(){return{cut6:P.cut6,cut4:P.cut4,a6:P.a6,a4:P.a4,aaaa:P.aaaa,pref:P.pref,he:P.he,client:P.client}}
 function pctrl(){return simulate({cut6:0,cut4:0,a6:0,a4:0,aaaa:0,pref:P.pref,he:P.he,client:P.client})}
 
-function pgRail(){
+function pgRailFn(){
   var r=$("pgRail");r.innerHTML="";
   SCEN.forEach(function(s){
-    var b=document.createElement("button");
-    b.className="scn";b.type="button";b.setAttribute("aria-pressed",String(P.scn===s.id));
+    var b=document.createElement("button");b.className="scn";b.type="button";b.setAttribute("aria-pressed",String(P.scn===s.id));
     b.innerHTML='<span class="id">'+s.id+(s.opt?" ·opt":"")+'</span><span class="nm">'+s.nm+'</span>';
-    b.onclick=function(){
-      P.scn=s.id;P.cut6=!!s.cut6;P.cut4=!!s.cut4;P.a6=s.a6;P.a4=s.a4;P.aaaa=s.aaaa;
+    b.onclick=function(){pgStop();P.scn=s.id;P.cut6=!!s.cut6;P.cut4=!!s.cut4;P.a6=s.a6;P.a4=s.a4;P.aaaa=s.aaaa;
       $("pgA6").value=s.a6;$("pgA4").value=s.a4;$("pgAaaa").value=s.aaaa;
-      pgSync();pgRender(simulate(pcfg()),false)};
+      pgSync();pgRender(simulate(pcfg()),false);$("pgClock").textContent="t = 0.000 ms"};
     r.appendChild(b)});
-  var c=document.createElement("button");
-  c.className="scn";c.type="button";c.setAttribute("aria-pressed",String(P.scn==="custom"));
+  var c=document.createElement("button");c.className="scn";c.type="button";c.setAttribute("aria-pressed",String(P.scn==="custom"));
   c.innerHTML='<span class="id">Custom</span><span class="nm">your own settings</span>';
-  c.onclick=function(){P.scn="custom";pgRail()};
-  r.appendChild(c);
+  c.onclick=function(){P.scn="custom";pgRailFn()};r.appendChild(c);
 }
 function pgSync(){
-  pgRail();
+  pgRailFn();
   $("pgHeV").textContent=P.he+" ms";$("pgA6V").textContent=P.a6+" ms";
   $("pgA4V").textContent=P.a4+" ms";$("pgAaaaV").textContent=P.aaaa+" ms";
-  $("pgPlug6").dataset.cut=String(P.cut6);$("pgPlug4").dataset.cut=String(P.cut4);
-  $("pgPlug6").setAttribute("aria-pressed",String(P.cut6));
-  $("pgPlug4").setAttribute("aria-pressed",String(P.cut4));
-  $("pgPlug6s").textContent=P.cut6?"cut":"connected";
-  $("pgPlug4s").textContent=P.cut4?"cut":"connected";
+  [["pgPlug6","pgPlug6s",P.cut6],["pgPlug4","pgPlug4s",P.cut4],
+   ["pgCut6","pgCut6s",P.cut6],["pgCut4","pgCut4s",P.cut4]].forEach(function(x){
+    var b=$(x[0]);if(!b)return;
+    b.dataset.cut=String(x[2]);b.setAttribute("aria-pressed",String(x[2]));
+    $(x[1]).textContent=x[2]?"cut":"connected";
+  });
   $("pgLab6").textContent="IPv6 · "+(P.cut6?"blackholed":(BASE+P.a6)+" ms RTT");
   $("pgLab4").textContent="IPv4 · "+(P.cut4?"blackholed":(BASE+P.a4)+" ms RTT");
-  $("pgLab6").setAttribute("fill",P.cut6?"#f0564a":C.v6);
-  $("pgLab4").setAttribute("fill",P.cut4?"#f0564a":C.v4);
-  $("pgP6").setAttribute("stroke",P.cut6?"#43222a":"#1d3a52");
-  $("pgP4").setAttribute("stroke",P.cut4?"#43222a":"#38291a");
-  $("pgP6").setAttribute("stroke-dasharray",P.cut6?"14 10":"none");
-  $("pgP4").setAttribute("stroke-dasharray",P.cut4?"14 10":"none");
+  $("pgLab6").setAttribute("fill",P.cut6?"#f0564a":C.v6);$("pgLab4").setAttribute("fill",P.cut4?"#f0564a":PG4);
+  $("pgP6").setAttribute("stroke",P.cut6?"#43222a":"#1d3a52");$("pgP4").setAttribute("stroke",P.cut4?"#43222a":"#1a3d22");
+  $("pgP6").setAttribute("stroke-dasharray",P.cut6?"14 10":"none");$("pgP4").setAttribute("stroke-dasharray",P.cut4?"14 10":"none");
   $("pgPref").value=P.pref;
-  Array.prototype.forEach.call($("pgClientSeg").children,function(b){
-    b.setAttribute("aria-pressed",String(b.dataset.c===P.client))});
+  Array.prototype.forEach.call($("pgClientSeg").children,function(b){b.setAttribute("aria-pressed",String(b.dataset.c===P.client))});
 }
 function pgRender(r,animated){
   var base=pctrl(),pen=(r.setup!==null&&base.setup!==null)?r.setup-base.setup:null,ok=!!r.winner;
-  $("pgDot").style.background=ok?"var(--ok)":"var(--bad)";
-  $("pgVerdict").innerHTML=ok?'<span style="color:'+famC(r.winner.f)+'">'+famN(r.winner.f)+" won</span> · connection succeeded"
-    :'<span style="color:var(--bad)">no family answered</span> · connection failed';
-  var cells=[["TCP setup",r.setup===null?"—":r.setup.toFixed(3)+" ms"],
-    ["Penalty",pen===null?"—":(pen>0?"+":"")+pen.toFixed(3)+" ms"],
-    ["Inter-family",r.inter===null?"not_observed":r.inter.toFixed(3)+" ms"],
-    ["DNS time",r.dns.toFixed(3)+" ms"],["Abandoned",String(r.abandoned)],
-    ["Winner",r.winner?famN(r.winner.f):"none"]];
+  var v=$("pgVerdict");v.setAttribute("data-s",ok?"ok":"bad");
+  $("pgVerdictT").innerHTML=ok
+    ? '<b style="color:'+famC(r.winner.f)+'">'+famN(r.winner.f)+' won the race</b> in '+r.setup.toFixed(1)+' ms'
+      +(r.abandoned?' <em>· '+r.abandoned+' attempt'+(r.abandoned>1?'s':'')+' cut at the handshake</em>':' <em>· no fallback needed</em>')
+    : '<b>No family answered</b> <em>· the client is left waiting on the OS TCP timeout, about '
+      +(r.timeout/1000)+' s. Nothing after the last SYN is drawn below.</em>';
+  var cells=[
+    {k:"TCP setup",v:r.setup===null?"—":r.setup.toFixed(1),u:r.setup===null?"":"ms",n:"first SYN to ACK"},
+    {k:"Penalty",v:pen===null?"—":(pen>0?"+":"")+pen.toFixed(1),u:pen===null?"":"ms",n:"vs healthy baseline"},
+    {k:"Inter-family",v:r.inter===null?"—":r.inter.toFixed(1),u:r.inter===null?"":"ms",n:r.inter===null?"not observed":"fallback timer fired"},
+    {k:"DNS time",v:r.dns.toFixed(1),u:"ms",n:P.aaaa?"AAAA held "+P.aaaa+" ms":"both answers returned"},
+    {k:"Attempts",v:String(r.att.length),u:"",n:r.abandoned+" abandoned"},
+    {k:"Winner",v:r.winner?famN(r.winner.f):"none",u:"",n:P.client,c:r.winner?famC(r.winner.f):"var(--bad)"}
+  ];
   $("pgKpis").innerHTML=cells.map(function(c){
-    var sz=c[1].length>9?"15px":"20px";
-    return '<div class="stat"><div class="k">'+c[0]+'</div><div class="v mono" style="font-size:'+sz+'">'+c[1]+'</div></div>'}).join("");
-  pgTimeline(r);
-  if(!animated) pgFill(r,r.total);
+    return '<div class="stat"><div class="k">'+c.k+'</div><div class="v"'+(c.c?' style="color:'+c.c+'"':'')+'>'
+      +c.v+(c.u?'<u>'+c.u+'</u>':'')+'</div><div class="n">'+c.n+'</div></div>'}).join("");
+  pgTimeline(r);if(!animated)pgFill(r,r.total);
+}
+/* Round the axis up so the four gridline labels land on readable numbers instead of 164/327/491. */
+function niceSpan(v){
+  if(!(v>0))return 60;
+  var u=v<200?5:v<400?10:v<1000?25:50;
+  return Math.ceil(v/4/u)*u*4;
 }
 function pgTimeline(r){
-  var span=Math.max(r.total,60);
+  var span=niceSpan(Math.max(r.total,60));
+  var pct=function(t){return Math.max(0,Math.min(100,t/span*100))};
+  var mk=function(left,color,shape,label,pos){
+    var edge=left<9?' data-edge="l"':(left>91?' data-edge="r"':'');
+    return '<div class="mk" data-pos="'+pos+'"'+edge+' style="left:'+left+'%;color:'+color+'">'
+      +'<i style="border-radius:'+shape+';background:'+color+'"></i>'
+      +(label?'<span>'+label+'</span>':'')+'</div>';
+  };
   $("pgTl").innerHTML=["v6","v4"].map(function(f){
-    var as=r.att.filter(function(a){return a.f===f});
-    var inner=as.map(function(a){
-      var L=(r.dns+a.t0)/span*100,W=(a.end!==null?a.rtt:30)/span*100,h="";
-      h+='<div class="tspan" style="left:'+L+'%;width:'+W+'%;background:'+famC(f)+'"></div>';
-      h+='<div class="mk" style="left:'+L+'%;color:'+famC(f)+'"><i style="border-radius:50%;background:'+famC(f)+
-        '"></i><span>SYN '+(r.dns+a.t0).toFixed(1)+'</span></div>';
-      if(a.end!==null&&a.state==="won")
-        h+='<div class="mk" style="left:'+((r.dns+a.end)/span*100)+'%;color:var(--ok)"><i style="border-radius:2px;background:var(--ok)"></i><span>'+
-          (r.dns+a.end).toFixed(1)+'</span></div>';
-      if(a.end===null)
-        h+='<div class="mk" style="left:'+(L+W)+'%;color:var(--bad)"><i style="border-radius:2px;background:var(--bad)"></i><span>no reply</span></div>';
-      return h}).join("");
-    return '<div class="tlane"><span class="mono" style="font-size:12.5px;color:'+famC(f)+'">'+famN(f)+
-      '</span><div class="track">'+(inner||'<span class="nolane">not attempted</span>')+'</div></div>'}).join("");
+    var as=r.att.filter(function(a){return a.f===f}),inner="";
+    as.forEach(function(a){
+      var L=pct(r.dns+a.t0),R=pct(r.dns+a.stop),W=Math.max(R-L,0.7);
+      inner+='<div class="tspan" data-s="'+a.state+'" style="left:'+L+'%;width:'+W+'%;background:'
+        +(a.state==="won"?"var(--ok)":a.state==="no_reply"?"var(--bad)":famC(f))+'"></div>';
+    });
+    /* One SYN dot per attempt; its label only where there is room for it. */
+    var lastSyn=-99;
+    as.forEach(function(a){
+      var L=pct(r.dns+a.t0),lab=(L-lastSyn<9)?"":"SYN "+(r.dns+a.t0).toFixed(1);
+      if(lab)lastSyn=L;
+      inner+=mk(L,famC(f),"50%",lab,"bot");
+    });
+    /* End markers: the winner first, then anything far enough away. Two attempts on the same
+       family are cut at the same instant, so without this they stack on one spot. */
+    var placed=[];
+    as.slice().sort(function(x,y){return (x.state==="won"?0:1)-(y.state==="won"?0:1)}).forEach(function(a){
+      var R=pct(r.dns+a.stop);
+      if(placed.some(function(q){return Math.abs(q-R)<6}))return;
+      placed.push(R);
+      if(a.state==="won")inner+=mk(R,"var(--ok)","2px","ACK "+(r.dns+a.stop).toFixed(1),"top");
+      else if(a.state==="no_reply")inner+=mk(R,"var(--bad)","2px",r.winner?"dropped":"no reply","top");
+      else inner+=mk(R,"var(--warn)","2px","cut","top");
+    });
+    return '<div class="tlane"><span class="mono" style="font-size:12.5px;color:'+famC(f)+'">'+famN(f)
+      +'</span><div class="track">'+(inner||'<span class="nolane">not attempted</span>')+'</div></div>'}).join("");
   axis($("pgAxis"),span,"ms");
+  pgFitMarks();
 }
+/* The percentage guess above cannot know how wide a label renders, so once it is on screen
+   measure each one and flip it to the side that actually fits. */
+function pgFitMarks(){
+  var tracks=document.querySelectorAll("#pgTl .track");
+  Array.prototype.forEach.call(tracks,function(t){
+    var marks=t.querySelectorAll(".mk");
+    Array.prototype.forEach.call(marks,function(m){m.removeAttribute("data-edge")});
+    var tb=t.getBoundingClientRect();
+    if(tb.width<2)return;                    /* hidden: keep the guess, re-fit when shown */
+    Array.prototype.forEach.call(marks,function(m){
+      var r=m.getBoundingClientRect();
+      if(r.width>tb.width-4)return;          /* wider than the lane: leave centred, let it clip */
+      if(r.right>tb.right-2)m.setAttribute("data-edge","r");
+      else if(r.left<tb.left+2)m.setAttribute("data-edge","l");
+    });
+    /* Percentages cannot predict label width, so drop any label that still lands on its
+       neighbour. The dot stays, so no attempt disappears from the lane. */
+    ["top","bot"].forEach(function(pos){
+      var row=[];
+      Array.prototype.forEach.call(t.querySelectorAll('.mk[data-pos="'+pos+'"] span'),function(s){
+        s.style.visibility="";row.push(s);
+      });
+      row.map(function(s){return{s:s,r:s.getBoundingClientRect()}})
+         .sort(function(a,b){return a.r.left-b.r.left})
+         .reduce(function(keep,o){
+           if(keep&&o.r.left<keep.r.right+6){o.s.style.visibility="hidden";return keep}
+           return o;
+         },null);
+    });
+  });
+}
+(function(){var tmr;window.addEventListener("resize",function(){
+  clearTimeout(tmr);tmr=setTimeout(pgFitMarks,120)})})();
 function pgFill(r,upto){
-  $("pgLog").innerHTML=r.log.filter(function(l){return l[0]<=upto}).map(function(l){
-    return '<div><span style="color:#7183a0">'+l[0].toFixed(3).padStart(8," ")+'</span>  '+l[1]+'</div>'}).join("");
+  var el=$("pgLog"),stick=el.scrollTop+el.clientHeight>=el.scrollHeight-24;
+  el.innerHTML=r.log.filter(function(l){return l[0]<=upto}).map(function(l){
+    return '<div><span class="lg-t">'+l[0].toFixed(3).padStart(8," ")+'</span>  '+l[1]+'</div>'}).join("");
+  if(stick)el.scrollTop=el.scrollHeight;
 }
-function pgStop(){if(raf){cancelAnimationFrame(raf);raf=null}$("pgDots").innerHTML="";$("pgFx").innerHTML=""}
-function pgRun(){
-  pgStop();
-  var r=simulate(pcfg());pgRender(r,true);$("pgLog").innerHTML="";
+function pgStop(){if(raf){cancelAnimationFrame(raf);raf=null}try{$("pgDots").innerHTML="";$("pgFx").innerHTML=""}catch(e){}}
+function pgRunFn(){
+  pgStop();var r=simulate(pcfg());pgRender(r,true);$("pgLog").innerHTML="";
   var mult=Number($("pgSpeed").value);
   if(mult===0||reduce){pgFill(r,r.total);$("pgClock").textContent="t = "+r.total.toFixed(3)+" ms";return}
   var dp=$("pgDns"),dl=dp.getTotalLength();
@@ -1085,67 +1757,127 @@ function pgRun(){
           {p:dp,len:dl,t0:DNS_BASE/2+P.aaaa,dur:DNS_BASE/2,dir:-1,c:"#90a1b9"}];
   r.att.forEach(function(a){
     var p=a.f==="v6"?$("pgP6"):$("pgP4"),len=p.getTotalLength(),t=r.dns+a.t0;
-    if(a.end!==null){
-      fl.push({p:p,len:len,t0:t,dur:a.rtt/2,dir:1,c:famC(a.f)});
-      fl.push({p:p,len:len,t0:t+a.rtt/2,dur:a.rtt/2,dir:-1,c:famC(a.f),glow:a.state==="won"});
-    } else fl.push({p:p,len:len,t0:t,dur:26,dir:1,c:famC(a.f),dies:true});
+    if(a.state==="won"){
+      var h=a.rtt/2;
+      fl.push({p:p,len:len,t0:t,dur:h,dir:1,c:pgC(a.f)});
+      fl.push({p:p,len:len,t0:t+h,dur:h,dir:-1,c:pgC(a.f),glow:true});
+    }else if(a.state==="no_reply"){
+      fl.push({p:p,len:len,t0:t,dur:26,dir:1,c:pgC(a.f),reach:.62,note:"✕ dropped",nc:"#f0564a"});
+    }else{
+      /* abandoned: the socket is cut the moment the winner completes, so the dot stops where it got to */
+      var hh=a.rtt/2,d=a.stop-a.t0;
+      if(d<=hh)fl.push({p:p,len:len,t0:t,dur:hh,dir:1,c:pgC(a.f),cut:d,note:"abandoned",nc:"#d29922"});
+      else{
+        fl.push({p:p,len:len,t0:t,dur:hh,dir:1,c:pgC(a.f)});
+        fl.push({p:p,len:len,t0:t+hh,dur:hh,dir:-1,c:pgC(a.f),cut:d-hh,note:"abandoned",nc:"#d29922"});
+      }
+    }
   });
   var ns="http://www.w3.org/2000/svg";
   var nodes=fl.map(function(f){
-    var e=document.createElementNS(ns,"circle");
-    e.setAttribute("r","6");e.setAttribute("fill",f.c);e.setAttribute("opacity","0");
-    if(f.glow)e.setAttribute("filter","url(#pgGlow)");
-    $("pgDots").appendChild(e);return e});
+    var e=document.createElementNS(ns,"circle");e.setAttribute("r","6");e.setAttribute("fill",f.c);e.setAttribute("opacity","0");
+    if(f.glow)e.setAttribute("filter","url(#pgGlow)");$("pgDots").appendChild(e);return e});
   var t0=performance.now(),end=r.total;
   (function tick(now){
     var T=(now-t0)/mult;
     fl.forEach(function(f,i){
-      var e=nodes[i],k=(T-f.t0)/f.dur;
-      if(k<0||k>1.6){e.setAttribute("opacity","0");return}
-      var kk=Math.min(k,1),L=f.dir===1?kk*f.len:(1-kk)*f.len;
-      if(f.dies)L=kk*f.len*0.62;
+      var e=nodes[i],el=T-f.t0;
+      if(el<0){e.setAttribute("opacity","0");return}
+      var cut=(f.cut!=null)?f.cut:f.dur;              /* when this dot stops moving */
+      var k=Math.min(el,cut)/f.dur,frac=f.reach?k*f.reach:k;
+      var L=f.dir===1?frac*f.len:(1-frac)*f.len;
       var pt=f.p.getPointAtLength(L);
       e.setAttribute("cx",pt.x);e.setAttribute("cy",pt.y);
-      e.setAttribute("opacity",String(f.dies?Math.max(0,1-Math.max(0,k-1)/0.6):(k>1?0:1)));
-      if(f.dies&&k>=1&&!f.x){f.x=1;
-        var g=document.createElementNS(ns,"text");
-        g.setAttribute("x",pt.x);g.setAttribute("y",pt.y-14);g.setAttribute("text-anchor","middle");
-        g.setAttribute("fill","#f0564a");g.setAttribute("font-family","IBM Plex Mono, monospace");g.setAttribute("font-size","13");
-        g.textContent="✕ dropped";$("pgFx").appendChild(g)}
+      var after=el-cut;
+      /* a plain leg vanishes when it arrives; a cut leg lingers briefly, then fades with its note */
+      var op=after<=0?1:(f.note?Math.max(0,1-after/70):0);
+      e.setAttribute("opacity",String(op));
+      if(f.note&&after>=0&&!f.shown){f.shown=1;
+        var g=document.createElementNS(ns,"text");g.setAttribute("x",pt.x);g.setAttribute("y",pt.y-14);
+        g.setAttribute("text-anchor","middle");g.setAttribute("fill",f.nc||"#f0564a");
+        g.setAttribute("font-family","IBM Plex Mono, monospace");g.setAttribute("font-size","12.5");
+        g.textContent=f.note;$("pgFx").appendChild(g)}
     });
-    $("pgClock").textContent="t = "+Math.min(T,end).toFixed(3)+" ms";
-    pgFill(r,T);
-    if(T<end)raf=requestAnimationFrame(tick);else{raf=null;pgFill(r,end)}
+    $("pgClock").textContent="t = "+Math.min(T,end).toFixed(3)+" ms";pgFill(r,T);
+    if(T<end)raf=requestAnimationFrame(tick);else{raf=null;pgFill(r,end);
+      $("pgClock").textContent="t = "+end.toFixed(3)+" ms"}
   })(performance.now());
 }
-$("pgPlug6").onclick=function(){P.cut6=!P.cut6;P.scn="custom";pgSync();pgRender(simulate(pcfg()),false)};
-$("pgPlug4").onclick=function(){P.cut4=!P.cut4;P.scn="custom";pgSync();pgRender(simulate(pcfg()),false)};
+function pgToggleCut(fam){
+  pgStop();if(fam==="v6")P.cut6=!P.cut6;else P.cut4=!P.cut4;
+  P.scn="custom";pgSync();pgRender(simulate(pcfg()),false);$("pgClock").textContent="t = 0.000 ms";
+}
+["pgPlug6","pgCut6"].forEach(function(id){var b=$(id);if(b)b.onclick=function(){pgToggleCut("v6")}});
+["pgPlug4","pgCut4"].forEach(function(id){var b=$(id);if(b)b.onclick=function(){pgToggleCut("v4")}});
+function pgIdle(){pgStop();pgSync();pgRender(simulate(pcfg()),false);$("pgClock").textContent="t = 0.000 ms"}
 Array.prototype.forEach.call($("pgClientSeg").children,function(b){
   b.onclick=function(){P.client=b.dataset.c;P.he=b.dataset.c==="curl"?200:300;$("pgHe").value=P.he;
-    $("pgCli").textContent=b.dataset.c;pgSync();pgRender(simulate(pcfg()),false)}});
-$("pgPref").onchange=function(){P.pref=this.value;P.scn="custom";pgSync();pgRender(simulate(pcfg()),false)};
+    $("pgCli").textContent=b.dataset.c;pgIdle()}});
+$("pgPref").onchange=function(){P.pref=this.value;P.scn="custom";pgIdle()};
 [["pgHe","he"],["pgA6","a6"],["pgA4","a4"],["pgAaaa","aaaa"]].forEach(function(p){
-  $(p[0]).oninput=function(){P[p[1]]=Number(this.value);if(p[0]!=="pgHe")P.scn="custom";
-    pgSync();pgRender(simulate(pcfg()),false)}});
-$("pgRun").onclick=pgRun;
+  $(p[0]).oninput=function(){P[p[1]]=Number(this.value);if(p[0]!=="pgHe")P.scn="custom";pgIdle()}});
+$("pgRun").onclick=pgRunFn;
 $("pgReset").onclick=function(){
   pgStop();P={scn:"C0",client:"curl",pref:"v6",he:200,cut6:false,cut4:false,a6:0,a4:0,aaaa:0};
   $("pgHe").value=200;$("pgA6").value=0;$("pgA4").value=0;$("pgAaaa").value=0;$("pgSpeed").value="4";
   $("pgCli").textContent="curl";pgSync();pgRender(simulate(pcfg()),false);$("pgClock").textContent="t = 0.000 ms"};
 pgSync();pgRender(simulate(pcfg()),false);
 
-/* ===================== routing ===================== */
-function route(){
-  var h=(location.hash||"#overview").replace("#","");
-  if(PAGES.indexOf(h)<0)h="overview";
-  PAGES.forEach(function(p){$("p-"+p).hidden=(p!==h)});
-  Array.prototype.forEach.call($("nav").children,function(a){
-    if(a.getAttribute("href")==="#"+h)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
-  if(h!=="playground")pgStop();
-  window.scrollTo(0,0);
-}
-window.addEventListener("hashchange",route);
-route();
+/* ===================== constellation interactivity ===================== */
+document.querySelectorAll(".cnode").forEach(function(n){
+  n.addEventListener("click",function(){
+    var key=n.dataset.node;
+    var map={
+      "browser-01":"overview","dns-resolver":"method","edge-v6":"results",
+      "pcap-sniffer":"evidence","origin-svc":"team","race-controller":"playground"
+    };
+    if(map[key]==="team"){$("teamSection").scrollIntoView({behavior:"smooth",block:"start"});return}
+    if(map[key])switchTab(map[key]);
+  });
+});
+
+/* ===================== constellation orbit ===================== */
+/* The five outer nodes revolve slowly (one lap per 90 s) around the race controller. Cards stay upright;
+   only their positions move. Motion pauses while the pointer is over the constellation. */
+(function(){
+  var CX=500,CY=240,RX=340,RY=150,PERIOD=90;
+  var ORB=[
+    {k:"browser-01",ox:500,oy:150,a:-90},
+    {k:"dns-resolver",ox:800,oy:200,a:-18},
+    {k:"origin-svc",ox:800,oy:410,a:54},
+    {k:"pcap-sniffer",ox:200,oy:410,a:126},
+    {k:"edge-v6",ox:200,oy:200,a:198}
+  ];
+  var ns="http://www.w3.org/2000/svg";
+  ORB.forEach(function(o){
+    var g=document.querySelector('.cnode[data-node="'+o.k+'"]');
+    var w=document.createElementNS(ns,"g");
+    g.parentNode.insertBefore(w,g);w.appendChild(g);
+    o.w=w;o.l=$("ol-"+o.k);
+  });
+  function place(){
+    ORB.forEach(function(o){
+      var r=o.a*Math.PI/180,x=CX+RX*Math.cos(r),y=CY+RY*Math.sin(r);
+      o.w.setAttribute("transform","translate("+(x-o.ox).toFixed(2)+" "+(y-o.oy).toFixed(2)+")");
+      o.l.setAttribute("x2",x.toFixed(2));o.l.setAttribute("y2",y.toFixed(2));
+    });
+  }
+  place();
+  var box=$("constellationBox"),paused=false,last=null;
+  box.addEventListener("mouseenter",function(){paused=true});
+  box.addEventListener("mouseleave",function(){paused=false});
+  if(window.matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+  (function spin(now){
+    if(last!==null&&!paused){
+      var dt=Math.min((now-last)/1000,0.1),da=360/PERIOD*dt;
+      ORB.forEach(function(o){o.a+=da});
+      place();
+    }
+    last=now;
+    requestAnimationFrame(spin);
+  })(performance.now());
+})();
+
 })();
 </script>
 
