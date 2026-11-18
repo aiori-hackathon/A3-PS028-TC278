@@ -93,10 +93,39 @@ The orchestrator does not retry. A failed verify or an incomplete capture stops 
   - its Happy Eyeballs timeout was left at its default (not set)
   - it resolves through glibc
 - **Chromium** 156.0.8078.4 via Playwright 1.64.1:
-  - full Chromium in new headless mode, a fresh browser process and profile per run, with Playwright's default of no sandbox
+  - the full browser (not the headless shell) in new headless mode, a fresh browser process and profile per run, with Playwright's default of no sandbox
   - loads `http://www.hl.test/chromium.html`
   - QUIC, DNS-over-HTTPS and HTTPS-Upgrades are disabled
   - a NetLog is written for every run, and the launch flags are read back from it and checked
+
+**Client builds.**
+- **Browser:** the client referred to here as Chromium is Google Chrome for Testing 156.0.8078.4
+  (branch-heads/8078@{#13}), as reported by NetLog clientInfo, installed by `playwright install chromium`.
+  - All 166 Chromium NetLogs on the lab machine report the same clientInfo: name `Google Chrome for Testing`,
+    version `156.0.8078.4`, `official` build, cl
+    `f842f52ef39fd97b449eb27cff414bf05a98ddce-refs/branch-heads/8078@{#13}`.
+  - The binary is `~/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome` (Playwright build 1248).
+  - "Chromium" remains the short name in code, records and this report.
+- **curl:** full `curl -V` output. Only its first line is stored in each run record.
+
+  ```
+  curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10
+  Release-Date: 2023-12-06, security patched: 8.5.0-2ubuntu10.16
+  Protocols: dict file ftp ftps gopher gophers http https imap imaps ldap ldaps mqtt pop3 pop3s rtmp rtsp scp sftp smb smbs smtp smtps telnet tftp
+  Features: alt-svc AsynchDNS brotli GSS-API HSTS HTTP2 HTTPS-proxy IDN IPv6 Kerberos Largefile libz NTLM PSL SPNEGO SSL threadsafe TLS-SRP UnixSockets zstd
+  ```
+
+  - **Provenance:** captured on 2026-11-18 from `/usr/bin/curl`, with `PYTHONPATH` and `LD_LIBRARY_PATH` unset.
+    - The first line is identical to the one stored in the dataset records.
+    - The dpkg log shows the `curl` and `libcurl4t64` packages (8.5.0-2ubuntu10.16) were last installed or upgraded on 2026-10-16, before the dataset was run on 2026-10-26.
+    - The kernel has changed since then, from 7.0.0-38 to 7.0.0-43. That does not affect `curl -V` output.
+  - **AsynchDNS is present,** and no c-ares library appears in the version line.
+    - [Interpretation, from curl's documentation, not observed] This combination is curl's threaded resolver, which
+      resolves through glibc's `getaddrinfo` in a separate thread rather than blocking the transfer.
+    - AsynchDNS alone does not say whether the A and AAAA queries are sent in parallel.
+  - [Packet-level (pcap)] **The A and AAAA queries were sent together.** In all 140 curl captures in the dataset:
+    - both queries for `www.hl.test` were sent from the same source port, A first;
+    - the AAAA query followed 0.024 / 0.038 / 0.056 ms (min / median / max) later.
 
 **Records and cross-checks.** Each metric is stored as `{value, status}`, where the status is
 `computed`, `not_observed` or `not_applicable`. Every record compares six fields between the

@@ -9,7 +9,10 @@ Chromium's NetLog records it as a separate socket-pool connect job marked `backu
 The IPv4 SYN at about 301 ms comes from the **first** connect job's `second` connector.
 It is not part of the backup job.
 
-Runs examined: Chromium 156.0.8078.4 via Playwright 1.64.1, all on 2026-10-26.
+Runs examined: Chromium 156.0.8078.4 via Playwright 1.64.1, all on 2026-10-26. The client referred
+to here as Chromium is Google Chrome for Testing 156.0.8078.4 (branch-heads/8078@{#13}), as reported
+by NetLog clientInfo, installed by `playwright install chromium`. Its full cl string is
+`f842f52ef39fd97b449eb27cff414bf05a98ddce-refs/branch-heads/8078@{#13}`, and it is an `official` build.
 - Clean pilot (session `20261026T125239Z`): `20261026T125321Z_S1_chromium_r01`, `…125337Z…r02`, `…125353Z…r03`.
 - First pilot (session `20261026T123827Z`, superseded config): `20261026T123909Z_S1_chromium_r01`, `…123925Z…r02`. The same pattern appears there too.
 
