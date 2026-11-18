@@ -9,6 +9,7 @@ from __future__ import annotations
 import shlex
 from pathlib import Path
 
+from analysis.scenario_config import scenario_ids
 from runner import client_chromium
 
 REPO = Path(__file__).resolve().parents[2]
@@ -19,7 +20,8 @@ CURL_URL = "http://www.hl.test/"
 CHROMIUM_URL = "http://www.hl.test/chromium.html"  # HTML page with a data: icon (no favicon request)
 CURL_FORMAT = "%{http_code}|%{remote_ip}|%{time_namelookup}|%{time_connect}|%{time_total}|%{num_connects}"
 
-ALL_SCENARIOS = ("C0", "S1", "S2", "S3", "S4", "S5", "S6")
+# Every scenario defined in src/config/scenarios.yaml (the single source of scenario IDs).
+ALL_SCENARIOS = scenario_ids()
 
 
 # --- curl -------------------------------------------------------------------------------

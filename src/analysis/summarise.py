@@ -1,6 +1,12 @@
-"""Summarise the measurement dataset: the 14 sessions listed in docs/dataset.md, nothing else.
+"""Summarise a measurement dataset: exactly the sessions its manifest lists, nothing else.
 
-    .venv/bin/python src/analysis/summarise.py            # print tables, write data/generated/summary/summary.json
+    .venv/bin/python src/analysis/summarise.py                  # the core dataset (docs/dataset.md)
+    .venv/bin/python src/analysis/summarise.py --dataset NAME   # docs/datasets/NAME.md
+
+The core dataset is the 14 sessions (2 clients x C0-S6 x 20 reps) in docs/dataset.md; its output goes
+to data/generated/summary/. Any other dataset is a manifest in docs/datasets/ that declares its own
+shape (clients, scenarios, reps) in a YAML header, and is checked against that shape; its output goes
+to data/generated/summary/NAME/. Either way an incomplete or unclean dataset is refused.
 
 Evidence levels, kept apart throughout:
   packet   from the pcap (the run record's packet_observations and metrics): packet-level evidence
@@ -39,16 +45,23 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import yaml  # noqa: E402
+
 from analysis.metrics import TARGET_NAME, scenario_penalty  # noqa: E402
 from analysis.parse_pcap import parse  # noqa: E402
+from analysis.scenario_config import scenario_ids  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
-DATASET_DOC = REPO / "docs" / "dataset.md"
+DATASET_DOC = REPO / "docs" / "dataset.md"          # the frozen core dataset
+DATASETS_DIR = REPO / "docs" / "datasets"           # further datasets: <name>.md manifests
+CORE_DATASET = "core"
 RUNS_DIR = REPO / "data" / "generated" / "runs"
 OUT_DIR = REPO / "data" / "generated" / "summary"
+# Shape of the frozen core dataset (docs/dataset.md has no header; this is its declared shape).
 CLIENTS = ("curl", "chromium")
 SCENARIOS = ("C0", "S1", "S2", "S3", "S4", "S5", "S6")
 EXPECTED_REPS = 20
+KNOWN_CLIENTS = CLIENTS  # the clients whose records this analysis understands
 AAAA_DELAY_MS = 300  # S6 configuration (scenarios.yaml); used only to word the S6 interpretation
 
 
@@ -56,23 +69,140 @@ class DatasetError(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class Shape:
+    """What a dataset declares it contains: every client x every scenario, reps runs each."""
+    clients: tuple[str, ...]
+    scenarios: tuple[str, ...]
+    reps: int
+
+    @property
+    def cells(self) -> list[tuple[str, str]]:
+        return [(c, s) for c in self.clients for s in self.scenarios]
+
+
+CORE_SHAPE = Shape(CLIENTS, SCENARIOS, EXPECTED_REPS)
+
+
+@dataclass(frozen=True)
+class Manifest:
+    path: Path
+    shape: Shape
+    sessions: list[tuple[str, str, str]]   # (client, scenario, session id), in table order
+
+
 # --- which sessions --------------------------------------------------------------------
 
-_ROW_RE = re.compile(r"^\|\s*\d+\s*\|\s*(curl|chromium)\s*\|\s*(C0|S[1-6])\s*\|\s*`(\d{8}T\d{6}Z)`\s*\|")
+def _row_re() -> re.Pattern:
+    """A session row: | n | client | scenario | `session` | ... (scenario IDs from scenarios.yaml)."""
+    clients = "|".join(map(re.escape, KNOWN_CLIENTS))
+    scenarios = "|".join(map(re.escape, scenario_ids()))
+    return re.compile(rf"^\|\s*\d+\s*\|\s*({clients})\s*\|\s*({scenarios})\s*\|\s*`(\d{{8}}T\d{{6}}Z)`\s*\|")
+
+
+_ROW_LIKE_RE = re.compile(r"^\|\s*\d+\s*\|")   # any numbered table row, to catch rows that do not parse
+_HEADER_KEYS = {"clients", "scenarios", "reps"}
+_OPTIONAL_KEYS = {"title", "description"}
+
+
+def _front_matter(doc: Path, text: str) -> tuple[dict | None, str]:
+    """A leading '---' YAML block, if any, and the text after it."""
+    if not text.startswith("---\n"):
+        return None, text
+    end = text.find("\n---\n", 4)
+    if end < 0:
+        raise DatasetError(f"{doc}: header starts with '---' but has no closing '---'")
+    try:
+        header = yaml.safe_load(text[4:end])
+    except yaml.YAMLError as exc:
+        raise DatasetError(f"{doc}: header is not valid YAML: {exc}") from exc
+    if not isinstance(header, dict):
+        raise DatasetError(f"{doc}: header must be a mapping with clients, scenarios and reps")
+    return header, text[end + 5:]
+
+
+def _shape_from_header(doc: Path, h: dict) -> Shape:
+    missing = sorted(_HEADER_KEYS - set(h))
+    unknown = sorted(set(h) - _HEADER_KEYS - _OPTIONAL_KEYS)
+    if missing:
+        raise DatasetError(f"{doc}: header is missing {', '.join(missing)}")
+    if unknown:
+        raise DatasetError(f"{doc}: header has unknown keys {', '.join(unknown)}")
+    clients, scenarios, reps = h["clients"], h["scenarios"], h["reps"]
+    for key, val in (("clients", clients), ("scenarios", scenarios)):
+        if not isinstance(val, list) or not val or not all(isinstance(v, str) for v in val):
+            raise DatasetError(f"{doc}: header {key} must be a non-empty list of names")
+        if len(set(val)) != len(val):
+            raise DatasetError(f"{doc}: header {key} lists a name twice: {val}")
+    bad_c = [c for c in clients if c not in KNOWN_CLIENTS]
+    if bad_c:
+        raise DatasetError(f"{doc}: unknown client(s) {bad_c}; known: {list(KNOWN_CLIENTS)}")
+    valid = scenario_ids()
+    bad_s = [s for s in scenarios if s not in valid]
+    if bad_s:
+        raise DatasetError(f"{doc}: scenario(s) {bad_s} are not defined in src/config/scenarios.yaml "
+                           f"(defined: {list(valid)})")
+    if isinstance(reps, bool) or not isinstance(reps, int) or reps < 1:
+        raise DatasetError(f"{doc}: header reps must be a whole number of at least 1, got {reps!r}")
+    return Shape(tuple(clients), tuple(scenarios), reps)
+
+
+def load_manifest(doc: Path = DATASET_DOC, require_header: bool = False) -> Manifest:
+    """Read a dataset manifest and check its session table against the shape it declares.
+
+    A manifest without a header is the core dataset and has the core shape (docs/dataset.md);
+    with require_header, a missing header is an error (every docs/datasets/ manifest needs one).
+    """
+    text = doc.read_text(encoding="utf-8")
+    header, body = _front_matter(doc, text)
+    if header is None:
+        if require_header:
+            raise DatasetError(f"{doc}: no header; a dataset manifest must declare clients, scenarios and reps")
+        shape = CORE_SHAPE
+    else:
+        shape = _shape_from_header(doc, header)
+    try:
+        section = body.split("## Sessions in the dataset", 1)[1].split("\n## ", 1)[0]
+    except IndexError as exc:
+        raise DatasetError(f"{doc}: no 'Sessions in the dataset' section") from exc
+    row_re, rows = _row_re(), []
+    for line in section.splitlines():
+        m = row_re.match(line)
+        if m:
+            rows.append(m.groups())
+        elif _ROW_LIKE_RE.match(line):
+            raise DatasetError(f"{doc}: cannot read session row (unknown client or scenario?): {line.strip()}")
+    cells = [(c, s) for c, s, _ in rows]
+    if sorted(cells) != sorted(shape.cells):
+        raise DatasetError(f"{doc}: expected exactly one session per client x scenario "
+                           f"({len(shape.cells)}), got {cells}")
+    return Manifest(doc, shape, rows)
 
 
 def dataset_sessions(doc: Path = DATASET_DOC) -> list[tuple[str, str, str]]:
     """(client, scenario, session) for every row of the 'Sessions in the dataset' table."""
-    text = doc.read_text(encoding="utf-8")
-    try:
-        section = text.split("## Sessions in the dataset", 1)[1].split("\n## ", 1)[0]
-    except IndexError as exc:
-        raise DatasetError(f"{doc}: no 'Sessions in the dataset' section") from exc
-    rows = [m.groups() for m in map(_ROW_RE.match, section.splitlines()) if m]
-    cells = [(c, s) for c, s, _ in rows]
-    if sorted(cells) != sorted((c, s) for c in CLIENTS for s in SCENARIOS):
-        raise DatasetError(f"{doc}: expected exactly one session per client x scenario (14), got {cells}")
-    return rows
+    return load_manifest(doc).sessions
+
+
+def dataset_path(name: str = CORE_DATASET) -> Path:
+    """'core' is docs/dataset.md; any other name is docs/datasets/<name>.md, which must exist."""
+    if name == CORE_DATASET:
+        return DATASET_DOC
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", name):
+        raise DatasetError(f"dataset name {name!r}: use lower-case letters, digits, '-' and '_'")
+    path = DATASETS_DIR / f"{name}.md"
+    if not path.is_file():
+        raise DatasetError(f"no dataset manifest {path}")
+    return path
+
+
+def load_dataset(name: str = CORE_DATASET) -> Manifest:
+    return load_manifest(dataset_path(name), require_header=name != CORE_DATASET)
+
+
+def out_dir_for(name: str = CORE_DATASET) -> Path:
+    """Core output stays where it always was; other datasets never overwrite it."""
+    return OUT_DIR if name == CORE_DATASET else OUT_DIR / name
 
 
 # --- per run ---------------------------------------------------------------------------
@@ -305,15 +435,17 @@ def summarise_cell(runs: list[Run]) -> dict:
     }
 
 
-def summarise(runs: list[Run]) -> dict:
-    cells: dict[str, dict[str, dict]] = {c: {} for c in CLIENTS}
-    for c in CLIENTS:
-        for s in SCENARIOS:
+def summarise(runs: list[Run], shape: Shape = CORE_SHAPE) -> dict:
+    cells: dict[str, dict[str, dict]] = {c: {} for c in shape.clients}
+    for c in shape.clients:
+        for s in shape.scenarios:
             cells[c][s] = summarise_cell([r for r in runs if r.client == c and r.scenario == s])
         c0 = [r.setup_ms for r in runs if r.client == c and r.scenario == "C0" and r.setup_ms is not None]
-        for s in SCENARIOS:
+        for s in shape.scenarios:
             sc = [r.setup_ms for r in runs if r.client == c and r.scenario == s and r.setup_ms is not None]
             cells[c][s]["scenario_penalty_ms"] = scenario_penalty(sc, c0)
+            if "C0" not in shape.scenarios:   # never borrowed from another dataset's C0
+                cells[c][s]["scenario_penalty_note"] = "no C0 in this dataset"
     return {"cells": cells, "interpretation": interpretations(cells)}
 
 
@@ -330,10 +462,17 @@ def interpretations(cells: dict) -> list[dict]:
     Statements are worded from the data: if the evidence does not hold in every run, the text says so.
     """
     out = []
+    if "curl" not in cells or "chromium" not in cells:
+        return out  # every statement below compares the two clients
     cu, ch = cells["curl"], cells["chromium"]
+
+    def have(*scenarios: str) -> bool:
+        return all(s in cu and s in ch for s in scenarios)
 
     # 1. Chromium's longer setup in S1/S2: when the v4 attempt starts, not the backup attempt.
     for s in ("S1", "S2"):
+        if not have(s):
+            continue
         a, b = cu[s], ch[s]
         if not (a["tcp_setup_ms"] and b["tcp_setup_ms"]):
             continue
@@ -369,81 +508,83 @@ def interpretations(cells: dict) -> list[dict]:
             "reference": "docs/findings/chromium_s1_second_v6_syn.md",
         })
 
-    # 2. S6: when the first SYN goes out relative to the A and AAAA answers (packet timing only).
-    s6 = {}
-    for name, cell_set in (("curl", cu), ("Chromium", ch)):
-        c = cell_set["S6"]
-        d = c["dns_ms"]
-        s6[name] = (d, c)
-    def after_aaaa(c: dict) -> int:
-        return (c["dns_answer_by_type_ms"] or {}).get("runs with first SYN after the AAAA answer", 0)
-
-    def a_max(c: dict) -> float | None:
-        st = (c["dns_answer_by_type_ms"] or {}).get("A answer")
-        return st["max"] if st else None
-
-    def v4_runs(c: dict) -> int:
-        return sum(v for k, v in c["attempt_shape"].items() if "v4" in k.split(">"))
-
-    both = all(after_aaaa(c) == c["n"] for _, c in s6.values())
-    a_early = all(a_max(c) is not None and a_max(c) < AAAA_DELAY_MS for _, c in s6.values())
-    ev = []
-    for n, (d, c) in s6.items():
-        if d:
-            ev.append({"source": "packet", "text": f"{n} DNS time min/median/max {d['min']}/{d['median']}/{d['max']} "
-                                                   f"ms (n={d['n']}); first SYN family {c['first_syn_family']}"})
-        by = c["dns_answer_by_type_ms"]
-        if by:
-            parts = ", ".join(f"{k} median {v['median']} ms (max {v['max']})" for k, v in by.items()
-                              if isinstance(v, dict) and k != "first SYN after the A answer")
-            ev.append({"source": "packet", "text": f"{n}, from the first www.hl.test query: {parts}; first SYN "
-                                                   f"after the AAAA answer in {after_aaaa(c)}/{c['n']} runs"})
-            off = by.get("first SYN after the A answer")
-            if off:
-                ev.append({"source": "packet", "text": f"{n}: first SYN after the first A answer min/median/max "
-                                                       f"{off['min']}/{off['median']}/{off['max']} ms (n={off['n']})"})
-        ev.append({"source": "packet", "text": f"{n}: runs with any IPv4 SYN {v4_runs(c)}/{c['n']}"})
-    out.append({
-        "topic": "S6: when is the first SYN sent, relative to the A and AAAA answers?",
-        "statement": (
-            ("Both clients sent their first SYN only after the delayed AAAA answer had arrived, in every run. "
-             if both else "Not every S6 run shows the first SYN after the AAAA answer; see evidence. ")
-            + (f"The A answer arrived much earlier (always under {AAAA_DELAY_MS} ms), and no IPv4 SYN was sent "
-               "in any S6 run. " if a_early and all(v4_runs(c) == 0 for _, c in s6.values()) else "")
-            + "The AAAA delay therefore appears in DNS time, not in TCP setup time (which starts at the first "
-            "SYN); S6 must be reported with both. The captures show when each packet was sent, not why: they "
-            "say nothing about how either client's resolver or connection logic is built."),
-        "evidence": ev,
-        "reference": "docs/findings/chromium_s1_second_v6_syn.md (S2/S3/S6 pilot section) and docs/dataset.md",
-    })
-
-    # 3. S4/S5: IPv6 first and won, so the impaired IPv4 path was not exercised.
-    ev = []
-    untouched = True
-    for s in ("S4", "S5"):
+    if have("S6"):
+        # 2. S6: when the first SYN goes out relative to the A and AAAA answers (packet timing only).
+        s6 = {}
         for name, cell_set in (("curl", cu), ("Chromium", ch)):
-            c = cell_set[s]
-            v4_tries = sum(v for k, v in c["attempt_shape"].items() if "v4" in k.split(">"))
-            untouched &= v4_tries == 0 and c["winning_family"].get("v6", 0) == c["n"]
-            ev.append({"source": "packet", "text": f"{s} {name}: first SYN {c['first_syn_family']}, winner "
-                                                   f"{c['winning_family']}, runs with any IPv4 SYN {v4_tries}/{c['n']}"})
-            if c["netlog"]:
-                ev.append({"source": "client (NetLog)", "text": f"{s} Chromium resolver order "
-                                                                f"{c['netlog']['resolver_order']}"})
-    out.append({
-        "topic": "S4/S5: was the impaired IPv4 path exercised?",
-        "statement": (
-            ("No. In every S4 and S5 run both clients tried IPv6 first and connected in about one baseline RTT, "
-             "and neither ever sent an IPv4 SYN. The IPv4 blackhole (S4) and +600 ms IPv4 delay (S5) "
-             "therefore did not affect either client in this lab. Chromium's NetLog shows its resolver "
-             "ordering IPv6 first. curl resolves through glibc, which reads the lab's default gai.conf; "
-             "Chromium used its built-in DNS client, so the same order was reached by different routes. "
-             "This holds for this lab's address-selection setup only; an IPv4-first policy was not tested.")
-            if untouched else
-            "Not uniform: at least one S4/S5 run sent an IPv4 SYN or did not win on IPv6; see evidence."),
-        "evidence": ev,
-        "reference": "docs/run_record_schema.md (client_report.resolved)",
-    })
+            c = cell_set["S6"]
+            d = c["dns_ms"]
+            s6[name] = (d, c)
+        def after_aaaa(c: dict) -> int:
+            return (c["dns_answer_by_type_ms"] or {}).get("runs with first SYN after the AAAA answer", 0)
+
+        def a_max(c: dict) -> float | None:
+            st = (c["dns_answer_by_type_ms"] or {}).get("A answer")
+            return st["max"] if st else None
+
+        def v4_runs(c: dict) -> int:
+            return sum(v for k, v in c["attempt_shape"].items() if "v4" in k.split(">"))
+
+        both = all(after_aaaa(c) == c["n"] for _, c in s6.values())
+        a_early = all(a_max(c) is not None and a_max(c) < AAAA_DELAY_MS for _, c in s6.values())
+        ev = []
+        for n, (d, c) in s6.items():
+            if d:
+                ev.append({"source": "packet", "text": f"{n} DNS time min/median/max {d['min']}/{d['median']}/{d['max']} "
+                                                       f"ms (n={d['n']}); first SYN family {c['first_syn_family']}"})
+            by = c["dns_answer_by_type_ms"]
+            if by:
+                parts = ", ".join(f"{k} median {v['median']} ms (max {v['max']})" for k, v in by.items()
+                                  if isinstance(v, dict) and k != "first SYN after the A answer")
+                ev.append({"source": "packet", "text": f"{n}, from the first www.hl.test query: {parts}; first SYN "
+                                                       f"after the AAAA answer in {after_aaaa(c)}/{c['n']} runs"})
+                off = by.get("first SYN after the A answer")
+                if off:
+                    ev.append({"source": "packet", "text": f"{n}: first SYN after the first A answer min/median/max "
+                                                           f"{off['min']}/{off['median']}/{off['max']} ms (n={off['n']})"})
+            ev.append({"source": "packet", "text": f"{n}: runs with any IPv4 SYN {v4_runs(c)}/{c['n']}"})
+        out.append({
+            "topic": "S6: when is the first SYN sent, relative to the A and AAAA answers?",
+            "statement": (
+                ("Both clients sent their first SYN only after the delayed AAAA answer had arrived, in every run. "
+                 if both else "Not every S6 run shows the first SYN after the AAAA answer; see evidence. ")
+                + (f"The A answer arrived much earlier (always under {AAAA_DELAY_MS} ms), and no IPv4 SYN was sent "
+                   "in any S6 run. " if a_early and all(v4_runs(c) == 0 for _, c in s6.values()) else "")
+                + "The AAAA delay therefore appears in DNS time, not in TCP setup time (which starts at the first "
+                "SYN); S6 must be reported with both. The captures show when each packet was sent, not why: they "
+                "say nothing about how either client's resolver or connection logic is built."),
+            "evidence": ev,
+            "reference": "docs/findings/chromium_s1_second_v6_syn.md (S2/S3/S6 pilot section) and docs/dataset.md",
+        })
+
+    if have("S4", "S5"):
+        # 3. S4/S5: IPv6 first and won, so the impaired IPv4 path was not exercised.
+        ev = []
+        untouched = True
+        for s in ("S4", "S5"):
+            for name, cell_set in (("curl", cu), ("Chromium", ch)):
+                c = cell_set[s]
+                v4_tries = sum(v for k, v in c["attempt_shape"].items() if "v4" in k.split(">"))
+                untouched &= v4_tries == 0 and c["winning_family"].get("v6", 0) == c["n"]
+                ev.append({"source": "packet", "text": f"{s} {name}: first SYN {c['first_syn_family']}, winner "
+                                                       f"{c['winning_family']}, runs with any IPv4 SYN {v4_tries}/{c['n']}"})
+                if c["netlog"]:
+                    ev.append({"source": "client (NetLog)", "text": f"{s} Chromium resolver order "
+                                                                    f"{c['netlog']['resolver_order']}"})
+        out.append({
+            "topic": "S4/S5: was the impaired IPv4 path exercised?",
+            "statement": (
+                ("No. In every S4 and S5 run both clients tried IPv6 first and connected in about one baseline RTT, "
+                 "and neither ever sent an IPv4 SYN. The IPv4 blackhole (S4) and +600 ms IPv4 delay (S5) "
+                 "therefore did not affect either client in this lab. Chromium's NetLog shows its resolver "
+                 "ordering IPv6 first. curl resolves through glibc, which reads the lab's default gai.conf; "
+                 "Chromium used its built-in DNS client, so the same order was reached by different routes. "
+                 "This holds for this lab's address-selection setup only; an IPv4-first policy was not tested.")
+                if untouched else
+                "Not uniform: at least one S4/S5 run sent an IPv4 SYN or did not win on IPv6; see evidence."),
+            "evidence": ev,
+            "reference": "docs/run_record_schema.md (client_report.resolved)",
+        })
     return out
 
 
@@ -455,12 +596,11 @@ def _fmt_stats(st: dict | None) -> str:
 
 def text_report(summary: dict) -> str:
     lines = []
-    for c in CLIENTS:
+    for c, by_scenario in summary["cells"].items():
         lines.append(f"\n{c}  (packet-level unless stated)")
         lines.append(f"  {'scn':4} {'n':>3} {'ok':>3}  {'winner':16} {'setup median [IQR] ms':26} {'penalty':>9}  "
                      f"{'inter-family: obs/not, median':30} {'fail/aband per run':20} {'shape':22} dns median")
-        for s in SCENARIOS:
-            x = summary["cells"][c][s]
+        for s, x in by_scenario.items():
             inter = x["inter_family"]
             inter_txt = f"{inter['observed']}/{inter['not_observed']}" + (
                 f", {inter['stats_over_observed_only']['median']}" if inter["stats_over_observed_only"] else ", -")
@@ -477,11 +617,13 @@ def text_report(summary: dict) -> str:
     return "\n".join(lines)
 
 
-def build(doc: Path = DATASET_DOC, runs_dir: Path = RUNS_DIR) -> tuple[list[tuple[str, str, str]], list[Run], dict]:
-    sessions = dataset_sessions(doc)
+def build(doc: Path = DATASET_DOC, runs_dir: Path = RUNS_DIR, manifest: Manifest | None = None,
+          repo: Path | None = REPO) -> tuple[list[tuple[str, str, str]], list[Run], dict]:
+    m = manifest or load_manifest(doc)
+    doc, sessions, shape = m.path, m.sessions, m.shape
     prov: dict = {}
-    runs = load_runs(sessions, runs_dir, provenance=prov)
-    summary = summarise(runs)
+    runs = load_runs(sessions, runs_dir, expected=shape.reps, repo=repo, provenance=prov)
+    summary = summarise(runs, shape)
     summary["dataset"] = {"source": str(doc.relative_to(REPO)) if doc.is_relative_to(REPO) else str(doc),
                           "sessions": [{"client": c, "scenario": s, "session": sid} for c, s, sid in sessions],
                           "runs": len(runs),
@@ -489,18 +631,25 @@ def build(doc: Path = DATASET_DOC, runs_dir: Path = RUNS_DIR) -> tuple[list[tupl
                                           "configs": [json.loads(x) for x in sorted(p["configs"])],
                                           "code_versions": sorted(x for x in p["code"] if x)}
                                       for c, p in prov.items()}}
+    if doc != DATASET_DOC:  # a named dataset records the shape it declared (core output stays as it was)
+        summary["dataset"]["shape"] = {"clients": list(shape.clients), "scenarios": list(shape.scenarios),
+                                       "reps": shape.reps}
     return sessions, runs, summary
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", type=Path, default=OUT_DIR)
+    ap.add_argument("--dataset", default=CORE_DATASET,
+                    help="dataset name: 'core' (docs/dataset.md, the default) or NAME for docs/datasets/NAME.md")
+    ap.add_argument("--out", type=Path, default=None,
+                    help="output folder (default: data/generated/summary/, or .../summary/NAME/ for a named dataset)")
     a = ap.parse_args(argv)
     try:
-        _, runs, summary = build()
+        _, runs, summary = build(manifest=load_dataset(a.dataset))
     except DatasetError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
+    a.out = a.out or out_dir_for(a.dataset)
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     (a.out / "runs.json").write_text(json.dumps([r.__dict__ for r in runs], indent=1) + "\n", encoding="utf-8")

@@ -40,6 +40,8 @@ from analysis.check_batch import check_batch, report  # noqa: E402
 from runner.child_env import STRIPPED_VARS, child_env  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
+# The recipe for the frozen core dataset (docs/dataset.md): kept as a fixed list on purpose, so a
+# scenario added to scenarios.yaml later never changes what "the full matrix" means.
 SCENARIOS = ["C0", "S1", "S2", "S3", "S4", "S5", "S6"]
 CLIENTS = ["curl", "chromium"]
 REPS = 20
