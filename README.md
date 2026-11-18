@@ -61,9 +61,10 @@ handshake (DNS time excluded).
   SYN. This result is scoped to this lab's resolver configuration, where curl uses glibc's default
   address selection in the namespace and Chromium's own resolver also ordered IPv6 first. It is not
   a universal result.
-- **Both clients waited for the slow AAAA answer (S6).** In 20/20 runs per client the first SYN was
-  sent only after the AAAA answer (at about 302 ms), although the A answer arrived in about 1 ms. The
-  delay shows in DNS time, not in TCP setup time, so S6 is always reported with both.
+- **In S6 both clients sent their first SYN only after the AAAA answer.** In 20/20 runs per client
+  the first SYN came after the AAAA answer (at about 302 ms), although the A answer arrived in about
+  1 ms, and no IPv4 SYN was sent in any S6 run. The delay shows in DNS time, not in TCP setup time,
+  so S6 is always reported with both.
 - **Every run succeeded with HTTP 200 (280/280), and every log-versus-capture cross-check agreed.**
 
 The technical report has the full tables (interquartile ranges, scenario penalties, abandoned
@@ -128,7 +129,7 @@ measurements. The netem values were validated by pilot runs and are specific to 
 | S4 | IPv4 blackhole | 100% loss on the IPv4 link | blackhole / 20 ms |
 | S5 | IPv4 +600 ms RTT | 310 ms each way on IPv4 | 620 / 20 ms |
 | S6 | AAAA delayed | The DNS server holds the AAAA answer for 300 ms; A is immediate | 20 / 20 ms |
-| X1 | Compound stress (optional) | **Not run.** It was optional, was never defined, and the orchestrator does not accept it. | — |
+| X1 | Compound stress (optional in our proposal) | **Not run.** PS-028 asks for six scenarios and does not mention X1; our proposal listed it as an optional extra, to run only if time allowed. It was never configured in `scenarios.yaml`, and the orchestrator does not accept it. | — |
 
 Definitions are in [`src/config/scenarios.yaml`](src/config/scenarios.yaml). The RTTs measured
 before the dataset's runs were 20.35–21.4 ms on baseline links, 171.0 ms for S3 and 621.0 ms for
@@ -337,7 +338,7 @@ sudo src/lab/teardown.sh                  # removes both namespaces and the lab 
   RFC 8305 or the Happy Eyeballs v3 draft.
 - **Sample size.** 20 runs per cell. We report medians and interquartile ranges, with no
   significance tests.
-- **X1 not run.** The optional compound-stress scenario was not defined or measured.
+- **X1 not run.** The compound-stress scenario was an optional extra in our proposal, not one of the six scenarios PS-028 asks for. It was never configured or measured.
 
 The full list is in section 3 of the [technical report](docs/report.md).
 

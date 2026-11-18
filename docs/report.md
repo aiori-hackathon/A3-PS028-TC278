@@ -69,7 +69,7 @@ carry no qdisc, so the capture sees every client packet at the moment it is sent
 | S4 IPv4 blackhole | baseline | 100% loss | immediate | blackhole / 20 ms |
 | S5 IPv4 +600 ms RTT | baseline | 310 ms each way | immediate | 620 / 20 ms |
 | S6 AAAA delayed 300 ms | baseline | baseline | AAAA reply held 300 ms, A immediate | 20 / 20 ms |
-| X1 compound stress (optional) | not defined | not defined | n/a | **not measured** |
+| X1 compound stress (optional in our proposal) | not configured | not configured | n/a | **not measured** |
 
 ### 1.3 One run
 
@@ -225,13 +225,19 @@ broken IPv4 path is harmless in general (see Limitations, L2).
 
 - **First SYN after the AAAA answer:** in **20/20 runs for each client**, the first SYN went out only after the delayed AAAA answer.
   It was over IPv6 every time, even though the A answer had arrived about 1 ms in.
+- **No early IPv4 SYN:** in S6 no client sent an IPv4 SYN within 50 ms of the A answer, which differs
+  from the 50 ms Resolution Delay RFC 8305 recommends. In fact neither client sent an IPv4 SYN at any
+  point in S6 (0/20 runs each). From `summarise.py`, the first SYN of either family went out
+  301.153 / 301.774 / 302.526 ms (min / median / max) after the first A answer for curl, and
+  300.794 / 301.785 / 303.782 ms for Chromium.
 - **Chromium's HTTPS query:** Chromium also queried the HTTPS record type, which was answered at a median 0.63 ms.
 - **Setup time:** TCP setup stayed at baseline, 20.812 ms (curl) and 21.317 ms (Chromium).
 
-[Interpretation] Neither client connected over IPv4 on the early A answer while the AAAA answer
-was outstanding. The 300 ms delay therefore appears in DNS time, not in TCP setup time, which starts
-at the first SYN. S6 must always be reported with both numbers. Why the clients wait (resolver
-design) is not visible in this data.
+[Interpretation] Because the first SYN followed the AAAA answer, the 300 ms delay appears in DNS
+time, not in TCP setup time, which starts at the first SYN. S6 must always be reported with both
+numbers. The captures show when each packet was sent, not why: they say nothing about how either
+client's resolver or connection logic is built, and no claim is made about it. The observation holds
+for these two client versions in this lab only.
 
 ### 2.6 Baseline repeatability (C0)
 
@@ -289,8 +295,9 @@ not interpreted.
 - There is no server-side capture, so one-way delays are not measured separately.
 - Client-reported values (curl `-w` output, NetLog) are used only where labelled [Client log].
 
-**L8. X1 (compound stress) is not defined or measured.** It is optional in the problem statement, and
-the report gives no figures for it.
+**L8. X1 (compound stress) was not configured or measured.** PS-028 asks for six scenarios and does
+not mention X1. X1 was an optional extra in our own proposal, to run only if time allowed. It was never
+added to `src/config/scenarios.yaml`, and the report gives no figures for it.
 
 **L9. RFC 8305 is a reference only.** The data shows when each client opened each attempt. It does not
 test conformance to RFC 8305 or the Happy Eyeballs v3 draft, and none is claimed.
