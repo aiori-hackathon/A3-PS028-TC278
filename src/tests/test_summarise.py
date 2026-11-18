@@ -177,9 +177,40 @@ def test_netlog_v4_source_variants():
 
 
 def test_dns_by_type_on_the_s1_fixture():
-    answers, first_syn = sm.dns_by_type(FIX / "s1_manual_curl.pcap", None)
+    answers, first_syn, after_a = sm.dns_by_type(FIX / "s1_manual_curl.pcap", None)
     assert {"A", "AAAA"} <= set(answers)
     assert first_syn is not None and first_syn >= max(answers["A"], answers["AAAA"])
+    # first SYN minus the first A answer, from raw timestamps: equal to the rounded difference within 1 µs
+    assert after_a is not None and after_a > 0
+    assert abs(after_a - (first_syn - answers["A"])) <= 0.0015
+
+
+def _s6_like_pcap(path, a_ms, aaaa_ms, syn_ms):
+    """A and AAAA queried together at t0; answers and an IPv6 handshake at the given offsets."""
+    from tests import pcapgen as g
+    t0, c, s = 1_800_000_000 * 1_000_000_000, "198.51.100.1", "198.51.100.53"
+    qa, q6 = g.dns_query(1, "www.hl.test", "A"), g.dns_query(2, "www.hl.test", "AAAA")
+    frames = [(t0, g.ip_udp(c, s, 5000, 53, qa)), (t0 + 40_000, g.ip_udp(c, s, 5000, 53, q6)),
+              (t0 + int(a_ms * g.MS), g.ip_udp(s, c, 53, 5000, g.dns_reply(qa, g.S4))),
+              (t0 + int(aaaa_ms * g.MS), g.ip_udp(s, c, 53, 5000, g.dns_reply(q6, g.S6)))]
+    frames += g.handshake(t0 + int(syn_ms * g.MS), g.C6, g.S6, 40000)
+    path.write_bytes(g.pcap(sorted(frames, key=lambda f: f[0]), nanosecond=True))
+    return path
+
+
+def test_dns_by_type_first_syn_after_the_a_answer(tmp_path):
+    pcap = _s6_like_pcap(tmp_path / "s6.pcap", a_ms=1.0, aaaa_ms=302.0, syn_ms=302.75)
+    answers, first_syn, after_a = sm.dns_by_type(pcap, None)
+    assert answers == {"A": 1.0, "AAAA": 302.0}
+    assert first_syn == 302.75
+    assert after_a == 301.75                     # SYN at 302.75 ms minus the A answer at 1.0 ms
+
+
+def test_dns_by_type_without_target_queries_returns_nothing(tmp_path):
+    from tests import pcapgen as g
+    pcap = tmp_path / "no_dns.pcap"
+    pcap.write_bytes(g.pcap(g.handshake(1_800_000_000 * 1_000_000_000, g.C6, g.S6, 40000)))
+    assert sm.dns_by_type(pcap, None) == ({}, None, None)
 
 
 # --- dashboard ---------------------------------------------------------------------------
