@@ -43,6 +43,7 @@ if __package__ in (None, ""):  # run as a script: make src/ importable
 import yaml  # noqa: E402
 
 from analysis import metrics  # noqa: E402
+from analysis.scenario_config import SCENARIOS_FILE  # noqa: E402
 from analysis.parse_pcap import parse  # noqa: E402
 from analysis.validate_record import SCHEMA_VERSION, validate  # noqa: E402
 from runner.child_env import STRIPPED_VARS, child_env_with_removed, describe  # noqa: E402
@@ -51,7 +52,6 @@ from runner.clients import (CLIENTS, CURL_FORMAT, CURL_URL, curl_argv,  # noqa: 
 
 REPO = Path(__file__).resolve().parents[2]
 LAB = REPO / "src" / "lab"
-SCENARIOS_FILE = REPO / "src" / "config" / "scenarios.yaml"
 NGINX_CONF = REPO / "src" / "config" / "nginx.conf"
 DNS_SERVER = REPO / "src" / "dns" / "hl_dns.py"
 VENV_PYTHON = REPO / ".venv" / "bin" / "python"

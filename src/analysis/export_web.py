@@ -2,6 +2,10 @@
 
     .venv/bin/python src/analysis/export_web.py            # rewrite web/index.html in place
     .venv/bin/python src/analysis/export_web.py --check    # print what would change, write nothing
+    .venv/bin/python src/analysis/export_web.py --dataset NAME --page COPY.html   # a named dataset, into a copy
+
+A named dataset (docs/datasets/NAME.md) is never written into web/index.html, which shows the core
+dataset: it needs --page pointing at another file. Its scenarios must all exist on that page.
 
 Only the text between the HAPPYLAB DATA START/END markers is replaced. Inside it this writes:
   D[client][scenario]   = {med, win, ifd, runs:[used, target], src}
@@ -13,7 +17,7 @@ Only the text between the HAPPYLAB DATA START/END markers is replaced. Inside it
   CAPS                  = capture inventory: those five pcaps plus the two committed fixtures
 
 Rules:
-  - Records come only from the 14 sessions listed in docs/dataset.md.
+  - Records come only from the sessions the dataset lists (by default the 14 in docs/dataset.md).
   - A run whose cross_checks are not "agree" (or whose lab verify failed) is excluded from every
     aggregate and named in a warning; the exit status is then 1.
   - src: "val" (shown as "complete") = target runs used, all clean; "pil" = 1 to target-1; "ph" = none.
@@ -42,7 +46,8 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from analysis.summarise import (  # noqa: E402
-    DATASET_DOC, EXPECTED_REPS, REPO, RUNS_DIR, Run, dataset_sessions, run_from_record)
+    CORE_DATASET, DATASET_DOC, EXPECTED_REPS, REPO, RUNS_DIR, Run, dataset_sessions,
+    load_dataset, run_from_record)
 
 PAGE = REPO / "web" / "index.html"
 FIXTURES = REPO / "src" / "tests" / "fixtures"
@@ -333,7 +338,8 @@ class Export:
 
 
 def export(page_text: str, sessions: list[tuple[str, str, str]], runs_dir: Path = RUNS_DIR,
-           repo: Path = REPO, target: int = EXPECTED_REPS, fixtures: Path = FIXTURES) -> Export:
+           repo: Path = REPO, target: int = EXPECTED_REPS, fixtures: Path = FIXTURES,
+           source: str = "docs/dataset.md") -> Export:
     _, block, _ = split_page(page_text)
     old_d, _ = parse_existing(block)  # WIN is parsed only to check it matches D
     cells = load_cells(sessions, runs_dir)
@@ -370,19 +376,33 @@ def export(page_text: str, sessions: list[tuple[str, str, str]], runs_dir: Path 
     codes = sorted({rec["environment"].get("git_commit", "?") for cell in cells.values() for _, rec in cell.used})
     dates = sorted({rec["timestamps"]["run_start_utc"][:10] for cell in cells.values() for _, rec in cell.used})
     used = sum(len(cell.used) for cell in cells.values())
-    header = (f"{used} runs from the {len(sessions)} sessions in docs/dataset.md; "
+    header = (f"{used} runs from the {len(sessions)} sessions in {source}; "
               f"runs dated {', '.join(dates) or '-'}; code {', '.join(codes) or '-'}")
     return Export(render_block(d, win, runs, caps, header, ifdv), warnings, ok)
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--page", type=Path, default=PAGE)
+    ap.add_argument("--dataset", default=CORE_DATASET,
+                    help="dataset name: 'core' (docs/dataset.md, the default) or NAME for docs/datasets/NAME.md")
+    ap.add_argument("--page", type=Path, default=None,
+                    help="page to rewrite (default web/index.html; required, and not web/index.html, "
+                         "for a named dataset)")
     ap.add_argument("--check", action="store_true", help="report only; do not write the page")
     a = ap.parse_args(argv)
+    if a.dataset != CORE_DATASET and (a.page is None or a.page.resolve() == PAGE.resolve()):
+        print(f"ERROR: --dataset {a.dataset}: web/index.html shows the core dataset only; "
+              "pass --page with a copy of the page to export a named dataset", file=sys.stderr)
+        return 2
+    a.page = a.page or PAGE
     try:
         text = a.page.read_text(encoding="utf-8")
-        res = export(text, dataset_sessions(DATASET_DOC))
+        if a.dataset == CORE_DATASET:
+            res = export(text, dataset_sessions(DATASET_DOC))
+        else:
+            m = load_dataset(a.dataset)
+            res = export(text, m.sessions, target=m.shape.reps,
+                         source=str(m.path.relative_to(REPO)) if m.path.is_relative_to(REPO) else str(m.path))
     except Exception as exc:  # noqa: BLE001 — every failure is reported and exits non-zero
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2

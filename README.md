@@ -213,7 +213,7 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m playwright install chromium   # Chromium 156.0.8078.4 for Playwright 1.64.1
 
-scripts/test.sh                           # 285 tests; no root needed
+scripts/test.sh                           # 322 tests; no root needed
 
 sudo src/lab/setup.sh                     # build the lab, then verify it (prints PASS/FAIL per check)
 sudo src/lab/verify.sh up                 # re-check at any time: real RTT on target
@@ -252,15 +252,19 @@ sudo .venv/bin/python src/runner/run_matrix.py --only S3:chromium # one batch
 
 ### Summarise, dashboard and website data
 
-`summarise.py`, `dashboard.py` and `export_web.py` read **only** the 14 sessions listed in the
-"Sessions in the dataset" table of [`docs/dataset.md`](docs/dataset.md). For a new matrix, put your
-session IDs in that table first. Each script refuses an incomplete or unclean session.
+By default `summarise.py`, `dashboard.py` and `export_web.py` read **only** the 14 sessions listed in
+the "Sessions in the dataset" table of [`docs/dataset.md`](docs/dataset.md), the frozen core dataset.
+For your own sessions (a re-run of the matrix, or a new scenario added to `src/config/scenarios.yaml`),
+write a manifest `docs/datasets/<name>.md` that declares its clients, scenarios and repetitions, and
+pass `--dataset <name>`; see [`docs/datasets/README.md`](docs/datasets/README.md). Each script refuses
+an incomplete or unclean session, and a manifest whose table or runs do not match its declared shape.
 
 ```bash
 .venv/bin/python src/analysis/summarise.py          # tables + labelled interpretation; writes data/generated/summary/summary.json
 .venv/bin/python src/analysis/dashboard.py          # data/generated/summary/dashboard.html (Plotly, works offline)
 .venv/bin/python src/analysis/export_web.py --check # would web/index.html change?
 .venv/bin/python src/analysis/export_web.py         # rewrite only the generated-data block in web/index.html
+.venv/bin/python src/analysis/summarise.py --dataset <name>   # a manifest in docs/datasets/; writes data/generated/summary/<name>/
 ```
 
 ### Tear down
@@ -300,7 +304,8 @@ sudo src/lab/teardown.sh                  # removes both namespaces and the lab 
 ├── CLAUDE.md                 project rules: metric definitions, wording, lab safety
 ├── docs/
 │   ├── report.md             technical report (methodology, results, limitations)
-│   ├── dataset.md            the 14 sessions / 280 runs that make up the dataset
+│   ├── dataset.md            the 14 sessions / 280 runs that make up the core dataset (frozen)
+│   ├── datasets/             manifest format for further datasets (--dataset <name>)
 │   ├── run_record_schema.md  run record schema v0.2
 │   ├── findings/             Chromium's second IPv6 SYN: pcap + NetLog analysis
 │   └── examples/             hand-written schema example (used by the validator tests)

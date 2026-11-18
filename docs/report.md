@@ -305,7 +305,7 @@ test conformance to RFC 8305 or the Happy Eyeballs v3 draft, and none is claimed
 ## 4. Reproducing the figures
 
 ```
-scripts/test.sh                                   # 285 tests, including parser and metric checks
+scripts/test.sh                                   # 322 tests, including parser and metric checks
 .venv/bin/python src/analysis/summarise.py        # tables above + interpretation, writes data/generated/summary/
 .venv/bin/python src/analysis/dashboard.py        # the same data as an offline Plotly dashboard
 ```

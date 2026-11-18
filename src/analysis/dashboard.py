@@ -1,10 +1,11 @@
-"""Build the HappyLab dashboard: one standalone HTML page from the dataset in docs/dataset.md.
+"""Build the HappyLab dashboard: one standalone HTML page from a dataset (default: docs/dataset.md).
 
     .venv/bin/python src/analysis/dashboard.py              # data/generated/summary/dashboard.html (Plotly inline, works offline)
     .venv/bin/python src/analysis/dashboard.py --cdn        # load plotly.js from jsDelivr instead (small file)
+    .venv/bin/python src/analysis/dashboard.py --dataset NAME   # docs/datasets/NAME.md -> data/generated/summary/NAME/
 
-Everything shown comes from summarise.build(), which reads only the 14 sessions listed in
-docs/dataset.md and refuses an incomplete or unclean session. Each section carries an evidence
+Everything shown comes from summarise.build(), which reads only the sessions the dataset manifest
+lists (the 14 core sessions by default) and refuses an incomplete or unclean session. Each section carries an evidence
 label: packet-level (pcap), client log, or interpretation.
 """
 
@@ -23,7 +24,8 @@ import plotly  # noqa: E402
 import plotly.graph_objects as go  # noqa: E402
 from plotly.offline import get_plotlyjs, get_plotlyjs_version  # noqa: E402
 
-from analysis.summarise import CLIENTS, OUT_DIR, SCENARIOS, DatasetError, Run, build  # noqa: E402
+from analysis.summarise import (CLIENTS, CORE_DATASET, EXPECTED_REPS, SCENARIOS, DatasetError,  # noqa: E402
+                                Run, build, load_dataset, out_dir_for)
 
 # Validated with the dataviz palette checker (light and dark surfaces). The v6 aqua is below 3:1
 # contrast on the light surface, so families are always named in legends, labels and tables.
@@ -45,13 +47,20 @@ def _base_layout(**kw) -> dict:
     return layout
 
 
-def _jitter(rep: int, width: float = 0.5) -> float:
-    return (rep - 10.5) / 20 * width
+def _jitter(rep: int, width: float = 0.5, reps: int = EXPECTED_REPS) -> float:
+    return (rep - (reps + 1) / 2) / reps * width
 
 
-def fig_setup(runs: list[Run]) -> dict:
+def shape_of(cells: dict) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """(clients, scenarios) of a summary, in its own order; the figures draw exactly these."""
+    clients = tuple(cells)
+    scenarios = tuple(dict.fromkeys(s for c in clients for s in cells[c]))
+    return clients, scenarios
+
+
+def fig_setup(runs: list[Run], clients=CLIENTS, scenarios=SCENARIOS) -> dict:
     data = []
-    for c in CLIENTS:
+    for c in clients:
         rs = [r for r in runs if r.client == c and r.setup_ms is not None]
         data.append(go.Box(
             x=[r.scenario for r in rs], y=[r.setup_ms for r in rs], name=CLIENT_LABEL[c], meta={"role": c},
@@ -59,30 +68,31 @@ def fig_setup(runs: list[Run]) -> dict:
             fillcolor="rgba(0,0,0,0)", offsetgroup=c, customdata=[r.run_id for r in rs],
             hovertemplate="%{customdata}<br>TCP setup %{y:.3f} ms<extra>" + CLIENT_LABEL[c] + "</extra>"))
     return {"data": data, "layout": _base_layout(
-        boxmode="group", xaxis=dict(title=dict(text="Scenario"), categoryorder="array", categoryarray=list(SCENARIOS)),
+        boxmode="group", xaxis=dict(title=dict(text="Scenario"), categoryorder="array", categoryarray=list(scenarios)),
         yaxis=dict(title=dict(text="TCP setup time (ms)"), rangemode="tozero"))}
 
 
 def fig_penalty(cells: dict) -> dict:
+    clients, scenarios = shape_of(cells)
     data = []
-    for c in CLIENTS:
-        vals = [cells[c][s]["scenario_penalty_ms"] for s in SCENARIOS]
+    for c in clients:
+        vals = [cells[c][s]["scenario_penalty_ms"] for s in scenarios]
         data.append(go.Bar(
-            x=list(SCENARIOS), y=vals, name=CLIENT_LABEL[c], meta={"role": c}, offsetgroup=c,
+            x=list(scenarios), y=vals, name=CLIENT_LABEL[c], meta={"role": c}, offsetgroup=c,
             text=[f"{v:.1f}" if v is not None and abs(v) >= 5 else "" for v in vals], textposition="outside",
             hovertemplate="%{x}: %{y:.3f} ms<extra>" + CLIENT_LABEL[c] + " penalty</extra>"))
     return {"data": data, "layout": _base_layout(
         barmode="group", bargap=0.3, bargroupgap=0.08,
-        xaxis=dict(title=dict(text="Scenario"), categoryorder="array", categoryarray=list(SCENARIOS)),
+        xaxis=dict(title=dict(text="Scenario"), categoryorder="array", categoryarray=list(scenarios)),
         yaxis=dict(title=dict(text="Median setup minus own C0 median (ms)"), rangemode="tozero"))}
 
 
-def timeline_rows() -> list[tuple[str, str]]:
-    return [(s, c) for s in SCENARIOS for c in CLIENTS]
+def timeline_rows(clients=CLIENTS, scenarios=SCENARIOS) -> list[tuple[str, str]]:
+    return [(s, c) for s in scenarios for c in clients]
 
 
-def fig_timeline(runs: list[Run]) -> dict:
-    rows = timeline_rows()
+def fig_timeline(runs: list[Run], clients=CLIENTS, scenarios=SCENARIOS, reps: int = EXPECTED_REPS) -> dict:
+    rows = timeline_rows(clients, scenarios)
     index = {row: i for i, row in enumerate(rows)}
     data = []
     for fam in ("v6", "v4"):
@@ -92,7 +102,7 @@ def fig_timeline(runs: list[Run]) -> dict:
                 continue
             data.append(go.Scatter(
                 x=[a["offset_ms"] for _, a in pts],
-                y=[index[(r.scenario, r.client)] + _jitter(r.repetition) for r, _ in pts],
+                y=[index[(r.scenario, r.client)] + _jitter(r.repetition, reps=reps) for r, _ in pts],
                 mode="markers", name=f"IPv{fam[1]} {KIND_LABEL[kind]}", meta={"role": fam},
                 marker=dict(symbol=KIND_SYMBOL[kind], size=8, opacity=0.8, line=dict(width=0)),
                 customdata=[[r.run_id, a["result"], a["syn_retransmits"]] for r, a in pts],
@@ -100,7 +110,8 @@ def fig_timeline(runs: list[Run]) -> dict:
                                "attempt %{customdata[1]}, kernel retransmits %{customdata[2]}<extra></extra>")))
     done = [r for r in runs if r.setup_ms is not None]
     data.append(go.Scatter(
-        x=[r.setup_ms for r in done], y=[index[(r.scenario, r.client)] + _jitter(r.repetition) for r in done],
+        x=[r.setup_ms for r in done],
+        y=[index[(r.scenario, r.client)] + _jitter(r.repetition, reps=reps) for r in done],
         mode="markers", name="winning handshake complete (ACK)", meta={"role": "ink"},
         marker=dict(symbol="line-ns-open", size=10, line=dict(width=2)),
         customdata=[[r.run_id, r.winner] for r in done],
@@ -116,15 +127,17 @@ def fig_timeline(runs: list[Run]) -> dict:
                      y0=0, y1=1, line=dict(dash="dot", width=1), meta={"role": "muted"})],
         annotations=[dict(x=RFC8305_REFERENCE_MS, y=1, xref="x", yref="paper", yanchor="bottom", showarrow=False,
                           text="250 ms: RFC 8305 suggested attempt delay (reference only)", font=dict(size=11))])
-    for i in range(1, len(SCENARIOS)):
-        layout["shapes"].append(dict(type="line", xref="paper", yref="y", x0=0, x1=1, y0=2 * i - 0.5,
-                                     y1=2 * i - 0.5, line=dict(width=1), meta={"role": "grid"}))
+    n = len(clients)
+    for i in range(1, len(scenarios)):
+        layout["shapes"].append(dict(type="line", xref="paper", yref="y", x0=0, x1=1, y0=n * i - 0.5,
+                                     y1=n * i - 0.5, line=dict(width=1), meta={"role": "grid"}))
     return {"data": data, "layout": layout}
 
 
 def fig_inter_family(runs: list[Run], cells: dict) -> dict:
+    clients, scenarios = shape_of(cells)
     data, annotations = [], []
-    for k, c in enumerate(CLIENTS):
+    for k, c in enumerate(clients):
         rs = [r for r in runs if r.client == c and r.inter_family_ms is not None]
         data.append(go.Box(
             x=[r.scenario for r in rs], y=[r.inter_family_ms for r in rs], name=CLIENT_LABEL[c], meta={"role": c},
@@ -132,7 +145,7 @@ def fig_inter_family(runs: list[Run], cells: dict) -> dict:
             fillcolor="rgba(0,0,0,0)", offsetgroup=c, customdata=[r.run_id for r in rs],
             hovertemplate="%{customdata}<br>second family's first SYN +%{y:.3f} ms<extra>" + CLIENT_LABEL[c]
                           + "</extra>"))
-        for s in SCENARIOS:
+        for s in scenarios:
             inter = cells[c][s]["inter_family"]
             if inter["not_observed"]:
                 annotations.append(dict(
@@ -140,15 +153,15 @@ def fig_inter_family(runs: list[Run], cells: dict) -> dict:
                     showarrow=False, textangle=-90, font=dict(size=11),
                     text=f"{CLIENT_LABEL[c]}: not observed ×{inter['not_observed']}"))
     # annotations are placed against an empty-but-ranged axis, so make sure every category exists
-    data.append(go.Scatter(x=list(SCENARIOS), y=[None] * len(SCENARIOS), showlegend=False, hoverinfo="skip"))
+    data.append(go.Scatter(x=list(scenarios), y=[None] * len(scenarios), showlegend=False, hoverinfo="skip"))
     return {"data": data, "layout": _base_layout(
         boxmode="group", annotations=annotations,
-        xaxis=dict(title=dict(text="Scenario"), categoryorder="array", categoryarray=list(SCENARIOS)),
+        xaxis=dict(title=dict(text="Scenario"), categoryorder="array", categoryarray=list(scenarios)),
         yaxis=dict(title=dict(text="Inter-family attempt delay (ms)"), range=[0, 360]))}
 
 
-def fig_winner(cells: dict) -> dict:
-    rows = timeline_rows()
+def fig_winner(cells: dict, reps: int = EXPECTED_REPS) -> dict:
+    rows = timeline_rows(*shape_of(cells))
     labels = [f"{s} · {CLIENT_LABEL[c]}" for s, c in rows]
     data = []
     for fam in ("v6", "v4"):
@@ -163,13 +176,13 @@ def fig_winner(cells: dict) -> dict:
                            hovertemplate="%{y}: no winner in %{x} runs<extra></extra>"))
     return {"data": data, "layout": _base_layout(
         barmode="stack", height=480, margin=dict(l=120, r=16, t=16, b=48), bargap=0.25,
-        xaxis=dict(title=dict(text="Runs"), range=[0, 20], dtick=5),
+        xaxis=dict(title=dict(text="Runs"), range=[0, reps], dtick=5),
         yaxis=dict(autorange="reversed", showgrid=False))}
 
 
-def fig_dns(runs: list[Run]) -> dict:
+def fig_dns(runs: list[Run], clients=CLIENTS, scenarios=SCENARIOS) -> dict:
     data = []
-    for c in CLIENTS:
+    for c in clients:
         rs = [r for r in runs if r.client == c and r.dns_ms is not None]
         data.append(go.Box(
             x=[r.scenario for r in rs], y=[r.dns_ms for r in rs], name=CLIENT_LABEL[c], meta={"role": c},
@@ -177,7 +190,7 @@ def fig_dns(runs: list[Run]) -> dict:
             fillcolor="rgba(0,0,0,0)", offsetgroup=c, customdata=[r.run_id for r in rs],
             hovertemplate="%{customdata}<br>DNS time %{y:.3f} ms<extra>" + CLIENT_LABEL[c] + "</extra>"))
     return {"data": data, "layout": _base_layout(
-        boxmode="group", xaxis=dict(title=dict(text="Scenario"), categoryorder="array", categoryarray=list(SCENARIOS)),
+        boxmode="group", xaxis=dict(title=dict(text="Scenario"), categoryorder="array", categoryarray=list(scenarios)),
         yaxis=dict(title=dict(text="DNS time, www.hl.test (ms, log scale)"), type="log"))}
 
 
@@ -204,14 +217,22 @@ def _rtt(cell: dict) -> str:
     return "<br>".join(out)
 
 
+def _penalty(x: dict) -> str:
+    v = x["scenario_penalty_ms"]
+    if v is not None:
+        return f"{v:.3f}"
+    return f"– <span class=muted>({_e(x.get('scenario_penalty_note', 'not available'))})</span>"
+
+
 def summary_table(cells: dict) -> str:
     head = ("<tr><th>Scenario</th><th>Client</th><th>Measured RTT, ms <span class=src>lab verify</span></th>"
             "<th>Runs / success</th><th>Winner</th><th>Setup median [IQR], ms</th><th>Range, ms</th>"
             "<th>Penalty, ms</th><th>Inter-family delay</th><th>Failed / abandoned per run</th>"
             "<th>Attempt shape</th><th>DNS median, ms</th></tr>")
     body = []
-    for s in SCENARIOS:
-        for c in CLIENTS:
+    clients, scenarios = shape_of(cells)
+    for s in scenarios:
+        for c in clients:
             x = cells[c][s]
             st, inter = x["tcp_setup_ms"], x["inter_family"]
             io = inter["stats_over_observed_only"]
@@ -223,7 +244,7 @@ def summary_table(cells: dict) -> str:
                 f"<td>{_rtt(x)}</td><td>{x['n']} / {x['successes']}</td>"
                 f"<td>{_counts(x['winning_family'], lambda k: 'IPv' + k[1] if k.startswith('v') else k)}</td>"
                 f"<td>{st['median']} [{st['q1']}–{st['q3']}]</td><td>{st['min']}–{st['max']}</td>"
-                f"<td>{x['scenario_penalty_ms']:.3f}</td><td>{inter_txt}</td><td>{fa}</td>"
+                f"<td>{_penalty(x)}</td><td>{inter_txt}</td><td>{fa}</td>"
                 f"<td>{_counts(x['attempt_shape'], lambda k: k.replace('>', ' → '))}</td>"
                 f"<td>{x['dns_ms']['median'] if x['dns_ms'] else '-'}</td></tr>")
     return f"<table>{head}{''.join(body)}</table>"
@@ -343,18 +364,30 @@ def chart(id_: str) -> str:
     return f"<div id={id_} class=chart role=img aria-label='{_e(id_)} chart'></div>"
 
 
+def _lede_scope(ds: dict, clients, scenarios, reps: int, code: str) -> str:
+    if "shape" not in ds:  # the core dataset: wording unchanged
+        return (f"{ds['runs']} runs: 2 clients × 7 scenarios × 20 repetitions, from the 14 sessions listed in\n"
+                f"<code>{_e(ds['source'])}</code> (full matrix, 2026-10-26, code version <code>{_e(code)}</code>).")
+    return (f"{ds['runs']} runs: {len(clients)} client(s) × {len(scenarios)} scenario(s) ({_e(', '.join(scenarios))}) "
+            f"× {reps} repetitions, from the {len(ds['sessions'])} sessions listed in <code>{_e(ds['source'])}</code> "
+            f"(code version <code>{_e(code)}</code>). Not the core dataset.")
+
+
 def render(summary: dict, runs: list[Run], plotly_src: str) -> str:
     cells = summary["cells"]
-    figs = {"setup": fig_setup(runs), "penalty": fig_penalty(cells), "timeline": fig_timeline(runs),
-            "inter": fig_inter_family(runs, cells), "winner": fig_winner(cells), "dns": fig_dns(runs)}
-    figs_json = json.dumps({k: json.loads(json.dumps(v, cls=plotly.utils.PlotlyJSONEncoder)) for k, v in figs.items()})
+    clients, scenarios = shape_of(cells)
     ds = summary["dataset"]
+    shape = ds.get("shape")  # recorded for named datasets; the core dataset has the core shape
+    reps = shape["reps"] if shape else EXPECTED_REPS
+    figs = {"setup": fig_setup(runs, clients, scenarios), "penalty": fig_penalty(cells),
+            "timeline": fig_timeline(runs, clients, scenarios, reps), "inter": fig_inter_family(runs, cells),
+            "winner": fig_winner(cells, reps), "dns": fig_dns(runs, clients, scenarios)}
+    figs_json = json.dumps({k: json.loads(json.dumps(v, cls=plotly.utils.PlotlyJSONEncoder)) for k, v in figs.items()})
     versions = "; ".join(f"{CLIENT_LABEL[c]}: {p['versions'][0].split(' (')[0]}" for c, p in ds["clients"].items())
     code = ", ".join(sorted({v for p in ds["clients"].values() for v in p["code_versions"]}))
     body = f"""
 <header><div><h1>HappyLab: IPv6/IPv4 fallback measurements</h1>
-<p class=lede>{ds['runs']} runs: 2 clients × 7 scenarios × 20 repetitions, from the 14 sessions listed in
-<code>{_e(ds['source'])}</code> (full matrix, 2026-10-26, code version <code>{_e(code)}</code>). {_e(versions)}.
+<p class=lede>{_lede_scope(ds, clients, scenarios, reps, code)} {_e(versions)}.
 Times are from packet captures inside an isolated lab; every scenario's RTT was measured before each run.</p>
 <div class=legend-row><span class='tag tag-packet'>Packet-level (pcap)</span><span class=muted>seen on the wire</span>
 <span class='tag tag-client'>Client log</span><span class=muted>reported by the client (curl, Chromium NetLog)</span>
@@ -401,14 +434,19 @@ Times are from packet captures inside an isolated lab; every scenario's RTT was 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", type=Path, default=OUT_DIR / "dashboard.html")
+    ap.add_argument("--dataset", default=CORE_DATASET,
+                    help="dataset name: 'core' (docs/dataset.md, the default) or NAME for docs/datasets/NAME.md")
+    ap.add_argument("--out", type=Path, default=None,
+                    help="output file (default: data/generated/summary/dashboard.html, "
+                         "or .../summary/NAME/dashboard.html)")
     ap.add_argument("--cdn", action="store_true", help="load plotly.js from jsDelivr instead of inlining it")
     a = ap.parse_args(argv)
     try:
-        _, runs, summary = build()
+        _, runs, summary = build(manifest=load_dataset(a.dataset))
     except DatasetError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
+    a.out = a.out or out_dir_for(a.dataset) / "dashboard.html"
     ver = get_plotlyjs_version()
     src = (f"<script src='https://cdn.jsdelivr.net/npm/plotly.js-dist-min@{ver}/plotly.min.js'></script>" if a.cdn
            else f"<script>{get_plotlyjs()}</script>")
