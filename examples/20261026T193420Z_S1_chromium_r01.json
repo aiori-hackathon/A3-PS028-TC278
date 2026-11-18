@@ -1,0 +1,242 @@
+{
+  "schema_version": "0.2",
+  "run_id": "20261026T193420Z_S1_chromium_r01",
+  "scenario": {
+    "id": "S1",
+    "label": "IPv6 blackhole",
+    "repetition": 1,
+    "netem": {
+      "v4": {
+        "delay_ms_each_way": 10,
+        "loss_pct": 0
+      },
+      "v6": {
+        "delay_ms_each_way": 10,
+        "loss_pct": 100
+      }
+    },
+    "dns": {
+      "delay_ms": {
+        "A": 0,
+        "AAAA": 0
+      }
+    },
+    "measured_rtt_ms": {
+      "v4": {
+        "value": 21.2,
+        "status": "computed",
+        "note": "median of 10 pings, loss 0% (verify.sh PASS)"
+      },
+      "v6": {
+        "value": null,
+        "status": "not_observed",
+        "note": "blackhole: loss 100%, ICMP errors 0 (verify.sh PASS)"
+      }
+    }
+  },
+  "client": {
+    "name": "chromium",
+    "version": "Chromium 156.0.8078.4",
+    "argv": [
+      "/home/sr/projects/A3-PS028-TC278/.venv/bin/python",
+      "/home/sr/projects/A3-PS028-TC278/src/runner/client_chromium.py",
+      "--url",
+      "http://www.hl.test/chromium.html",
+      "--netlog",
+      "/home/sr/projects/A3-PS028-TC278/data/generated/logs/20261026T193420Z_S1_chromium_r01_netlog.json"
+    ],
+    "config": {
+      "url": "http://www.hl.test/chromium.html",
+      "browser_per_run": "fresh browser process and fresh temporary profile per run",
+      "launch_args_extra": [
+        "--disable-quic",
+        "--disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,AvoidCorsURLLoaderRestartOnRedirect,Translate,AutoDeElevate,OptimizationHints,NetworkTimeServiceQuerying,AimEnabled,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion,DnsOverHttps",
+        "--log-net-log=<run netlog path>",
+        "--net-log-capture-mode=Default"
+      ],
+      "launch_args_reported": [
+        "--disable-quic",
+        "--disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,AvoidCorsURLLoaderRestartOnRedirect,Translate,AutoDeElevate,OptimizationHints,NetworkTimeServiceQuerying,AimEnabled,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion,DnsOverHttps"
+      ],
+      "headless_mode": "new headless (channel=chromium)",
+      "sandbox": "off (Playwright default chromiumSandbox=False)",
+      "quic": "disabled (--disable-quic)",
+      "secure_dns": "disabled (DnsOverHttps in the merged --disable-features)",
+      "https_upgrades": "disabled (HttpsUpgrades in the merged --disable-features)",
+      "feature_switch": "one merged --disable-features: Playwright's default list plus ours; Playwright's own switch removed with ignore_default_args; checked per run against the NetLog command line (client_report.launch_check)",
+      "happy_eyeballs": "Chromium default (not overridden)",
+      "resolver": "Chromium default, not overridden (see the run's NetLog)",
+      "navigation": "page.goto wait_until=load timeout=15000 ms",
+      "playwright_version": "1.64.1",
+      "launcher": "ip netns exec hl-client runuser -u sr --"
+    }
+  },
+  "environment": {
+    "kernel": "7.0.0-38-generic",
+    "python": "3.12.3",
+    "git_commit": "ecba28c",
+    "session_id": "20261026T193419Z",
+    "network": "HappyLab namespaces hl-client/hl-server; impairment server-side only (netem + ifb)",
+    "resolver": "198.51.100.53 (src/dns/hl_dns.py, TTL 0)",
+    "gai_conf": "lab default (/etc/netns/hl-client/gai.conf)",
+    "server": "nginx version: nginx/1.24.0 (Ubuntu), src/config/nginx.conf (HTTP/1.1, keep-alive off)",
+    "child_env": "inherited, with PYTHONPATH, LD_LIBRARY_PATH removed (none were set in parent)",
+    "capture_interfaces": {
+      "1": "lo",
+      "2": "hl-v4c",
+      "3": "hl-v6c",
+      "4": "hl-ctlc"
+    }
+  },
+  "timestamps": {
+    "run_start_utc": "2026-10-26T19:34:20.452152Z",
+    "client_start_epoch_ns": 1793043268288131190,
+    "client_end_epoch_ns": 1793043269446555321,
+    "capture_start_epoch_ns": 1793043268287998452,
+    "capture_end_epoch_ns": 1793043269959924907
+  },
+  "outcome": {
+    "success": true,
+    "exit_code": 0,
+    "http_status": 200,
+    "error": null,
+    "source": "client/runner log (Playwright)",
+    "client_report": {
+      "ok": true,
+      "error": null,
+      "http_status": 200,
+      "remote_ip": "192.0.2.2",
+      "remote_port": 80,
+      "timing_ms": {
+        "domainLookupStart": 1.199999999254942,
+        "domainLookupEnd": 1.199999999254942,
+        "connectStart": 1.199999999254942,
+        "connectEnd": 324.29999999981374,
+        "requestStart": 324.69999999925494,
+        "responseStart": 347.29999999981374,
+        "responseEnd": 348.09999999962747,
+        "loadEventEnd": 354.19999999925494
+      },
+      "browser_version": "156.0.8078.4",
+      "playwright_version": "1.64.1",
+      "launch_args": [
+        "--disable-quic",
+        "--disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,AvoidCorsURLLoaderRestartOnRedirect,Translate,AutoDeElevate,OptimizationHints,NetworkTimeServiceQuerying,AimEnabled,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion,DnsOverHttps",
+        "--log-net-log=/home/sr/projects/A3-PS028-TC278/data/generated/logs/20261026T193420Z_S1_chromium_r01_netlog.json",
+        "--net-log-capture-mode=Default"
+      ],
+      "headless_mode": "new headless (channel=chromium)",
+      "sandbox": false,
+      "netlog_path": "data/generated/logs/20261026T193420Z_S1_chromium_r01_netlog.json",
+      "url": "http://www.hl.test/chromium.html",
+      "launch_check": "ok",
+      "connect_jobs": [
+        {
+          "epoch_ms": 1793043268964,
+          "job": 116,
+          "backup_job": false,
+          "connector": "first",
+          "address": "[2001:db8:28:6::2]:80",
+          "t_ms": 0
+        },
+        {
+          "epoch_ms": 1793043269214,
+          "job": 149,
+          "backup_job": true,
+          "connector": "first",
+          "address": "[2001:db8:28:6::2]:80",
+          "t_ms": 250
+        },
+        {
+          "epoch_ms": 1793043269265,
+          "job": 116,
+          "backup_job": false,
+          "connector": "second",
+          "address": "192.0.2.2:80",
+          "t_ms": 301
+        }
+      ],
+      "resolved": {
+        "addresses": [
+          "2001:db8:28:6::2",
+          "192.0.2.2"
+        ],
+        "families": [
+          "v6",
+          "v4"
+        ],
+        "resolver": "built-in DNS task"
+      }
+    }
+  },
+  "evidence": {
+    "pcap_path": "captures/20261026T193420Z_S1_chromium_r01.pcap",
+    "pcap_sha256": "a42eaa79d9a0bee9ae9f4001c885b5368b1960f3e3fb8a5f2f63259a98bd2152",
+    "client_log_path": "data/generated/logs/20261026T193420Z_S1_chromium_r01.log",
+    "pre_verify_ok": true,
+    "post_restore_verify_ok": true
+  },
+  "packet_observations": {
+    "winning_family": {
+      "value": "v4",
+      "status": "computed"
+    },
+    "attempts": {
+      "value": [
+        {
+          "family": "v6",
+          "dst": "2001:db8:28:6::2",
+          "src_port": 58826,
+          "first_syn_ns": 1793043268964851000,
+          "syn_retransmits": 0,
+          "result": "abandoned"
+        },
+        {
+          "family": "v6",
+          "dst": "2001:db8:28:6::2",
+          "src_port": 58830,
+          "first_syn_ns": 1793043269215141000,
+          "syn_retransmits": 0,
+          "result": "abandoned"
+        },
+        {
+          "family": "v4",
+          "dst": "192.0.2.2",
+          "src_port": 34294,
+          "first_syn_ns": 1793043269266117000,
+          "syn_retransmits": 0,
+          "result": "won"
+        }
+      ],
+      "status": "computed"
+    },
+    "failed_or_abandoned_attempts": {
+      "value": 2,
+      "status": "computed"
+    }
+  },
+  "metrics": {
+    "dns_time_ms": {
+      "value": 0.756,
+      "status": "computed",
+      "note": "only www.hl.test queries counted; 50 queries for other names before the first SYN not counted: accounts.google.com, update.googleapis.com, www.google.com"
+    },
+    "tcp_setup_time_ms": {
+      "value": 324.766,
+      "status": "computed"
+    },
+    "inter_family_attempt_delay_ms": {
+      "value": 301.266,
+      "status": "computed"
+    },
+    "scenario_penalty_ms": {
+      "value": null,
+      "status": "not_applicable",
+      "note": "per-scenario aggregate; see scenario summary"
+    }
+  },
+  "cross_checks": {
+    "status": "agree",
+    "conflicts": []
+  }
+}
