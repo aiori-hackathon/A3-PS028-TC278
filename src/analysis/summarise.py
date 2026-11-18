@@ -27,6 +27,9 @@ Per client x scenario cell:
       other-family   the first SYN to the other family (its offset is the inter-family delay)
     Kernel SYN retransmissions are not attempts (same socket); they appear as syn_retransmits.
   - DNS time (packet; project definition, target name only)
+  - oracle baseline (derived; metrics.oracle_baseline): oracle setup = the winning family's pre-run
+    measured RTT (lab verify ping), cost of racing = TCP setup (packet) minus that; statistics only
+    over runs where it was computed, with the other statuses counted
   - NetLog connect jobs and resolver order (client, Chromium only)
 """
 
@@ -47,7 +50,7 @@ if __package__ in (None, ""):
 
 import yaml  # noqa: E402
 
-from analysis.metrics import TARGET_NAME, scenario_penalty  # noqa: E402
+from analysis.metrics import ORACLE_EVIDENCE, TARGET_NAME, oracle_baseline, scenario_penalty  # noqa: E402
 from analysis.parse_pcap import parse  # noqa: E402
 from analysis.scenario_config import scenario_ids  # noqa: E402
 
@@ -250,6 +253,13 @@ class Run:
     label: str = ""
     # lab verify before the run (ping medians): family -> (value or None, status)
     measured_rtt: dict[str, tuple[float | None, str]] | None = None
+    # oracle baseline (derived): see metrics.oracle_baseline
+    oracle_setup_ms: float | None = None
+    cost_of_racing_ms: float | None = None
+    oracle_status: str = "not_yet_computed"
+    oracle_note: str | None = None
+    single_family: bool | None = None
+    dns_delay_ms: dict[str, float] | None = None   # configured DNS answer delay per type (scenario config)
 
     @property
     def shape(self) -> str:
@@ -292,7 +302,8 @@ def run_from_record(r: dict) -> Run:
     cr = r["outcome"].get("client_report") or {}
     jobs = cr.get("connect_jobs")
     resolved = cr.get("resolved") or {}
-    return Run(
+    dns_delay = (r["scenario"].get("dns") or {}).get("delay_ms")
+    run = Run(
         run_id=r["run_id"], client=r["client"]["name"], scenario=r["scenario"]["id"],
         repetition=r["scenario"]["repetition"], success=bool(r["outcome"]["success"]),
         winner=_val(obs["winning_family"]), setup_ms=_val(met["tcp_setup_time_ms"]),
@@ -306,7 +317,17 @@ def run_from_record(r: dict) -> Run:
         label=r["scenario"].get("label", ""),
         measured_rtt={f: (v.get("value"), v.get("status", "?"))
                       for f, v in (r["scenario"].get("measured_rtt_ms") or {}).items()} or None,
+        dns_delay_ms=dns_delay,
     )
+    o = oracle_baseline(run.winner, run.setup_ms, r["scenario"].get("measured_rtt_ms"),
+                        [a["family"] for a in run.attempts], dns_delay)
+    run.oracle_setup_ms = _val(o["oracle_setup_ms"])
+    run.cost_of_racing_ms = _val(o["cost_of_racing_ms"])
+    # the cost's status is the run's oracle status (it is not computed whenever the oracle is not)
+    run.oracle_status = o["cost_of_racing_ms"]["status"]
+    run.oracle_note = o["cost_of_racing_ms"].get("note")
+    run.single_family = o["single_family"]
+    return run
 
 
 def _rtt_summary(runs: list[Run]) -> dict | None:
@@ -383,6 +404,23 @@ def _stats(values: list[float]) -> dict | None:
             "q3": round(q[2], 3), "min": round(v[0], 3), "max": round(v[-1], 3)}
 
 
+def oracle_cell(runs: list[Run]) -> dict:
+    """Per-cell oracle summary (derived). Statistics only over runs where the cost was computed."""
+    ok = [r for r in runs if r.oracle_status == "computed"]
+    delays = {t: v for r in runs for t, v in (r.dns_delay_ms or {}).items() if v}
+    return {
+        "evidence": ORACLE_EVIDENCE,
+        "oracle_setup_ms": _stats([r.oracle_setup_ms for r in ok]),
+        "cost_of_racing_ms": _stats([r.cost_of_racing_ms for r in ok]),
+        "status": dict(Counter(r.oracle_status for r in runs)),
+        "not_computed_notes": sorted({r.oracle_note for r in runs if r.oracle_status != "computed" and r.oracle_note}),
+        "single_family_runs": sum(1 for r in ok if r.single_family),
+        "dns_note": None if not delays else (
+            "DNS answer delay configured (" + ", ".join(f"{t} {v} ms" for t, v in sorted(delays.items()))
+            + "); TCP setup excludes DNS, so that delay is not in the cost of racing; see DNS time"),
+    }
+
+
 def summarise_cell(runs: list[Run]) -> dict:
     setups = [r.setup_ms for r in runs if r.setup_ms is not None]
     observed = [r.inter_family_ms for r in runs if r.inter_family_ms is not None]
@@ -414,6 +452,7 @@ def summarise_cell(runs: list[Run]) -> dict:
         "attempt_offsets_ms": {k: _stats(v) for k, v in sorted(offsets.items())},
         "syn_retransmits_total": sum(a["syn_retransmits"] for r in runs for a in r.attempts),
         "dns_ms": _stats([r.dns_ms for r in runs if r.dns_ms is not None]),
+        "oracle": oracle_cell(runs),
         "dns_answer_by_type_ms": None if not any(r.dns_answers_ms for r in runs) else {
             **{f"{t} answer": _stats([r.dns_answers_ms[t] for r in runs if r.dns_answers_ms and t in r.dns_answers_ms])
                for t in sorted({t for r in runs for t in (r.dns_answers_ms or {})})},
@@ -446,7 +485,7 @@ def summarise(runs: list[Run], shape: Shape = CORE_SHAPE) -> dict:
             cells[c][s]["scenario_penalty_ms"] = scenario_penalty(sc, c0)
             if "C0" not in shape.scenarios:   # never borrowed from another dataset's C0
                 cells[c][s]["scenario_penalty_note"] = "no C0 in this dataset"
-    return {"cells": cells, "interpretation": interpretations(cells)}
+    return {"cells": cells, "interpretation": interpretations(cells) + oracle_interpretation(cells)}
 
 
 # --- interpretation (labelled; built only from the numbers above) --------------------------
@@ -588,10 +627,54 @@ def interpretations(cells: dict) -> list[dict]:
     return out
 
 
+def oracle_interpretation(cells: dict) -> list[dict]:
+    """One labelled statement on the oracle baseline, for whatever cells the dataset has.
+
+    The oracle is a hindsight reference: it uses the family that won, which no client knows in advance.
+    """
+    ev = []
+    for c, by_s in cells.items():
+        for s, x in by_s.items():
+            o = x["oracle"]
+            st, cost = o["status"], o["cost_of_racing_ms"]
+            if cost:
+                ev.append({"source": "derived", "text": (
+                    f"{s} {c}: cost of racing median {cost['median']} ms [IQR {cost['q1']}, {cost['q3']}] over "
+                    f"{cost['n']}/{x['n']} runs; oracle setup median {o['oracle_setup_ms']['median']} ms; "
+                    f"winner {x['winning_family']}"
+                    + (f"; {o['single_family_runs']} single-family runs" if o["single_family_runs"] else "")
+                    + (f"; not computed: { {k: v for k, v in st.items() if k != 'computed'} }"
+                       if len(st) > 1 or "computed" not in st else ""))})
+            else:
+                ev.append({"source": "derived", "text": f"{s} {c}: cost of racing not computed in any run ({st})"})
+    if not any(x["oracle"]["cost_of_racing_ms"] for by_s in cells.values() for x in by_s.values()):
+        return []
+    return [{
+        "topic": "Oracle baseline: how much time did racing add over a direct connection to the winning family?",
+        "statement": (
+            "If each client had connected straight to the family that eventually won, with no racing, we take "
+            "its TCP setup to be about one measured RTT of that family (the oracle setup). The cost of racing is "
+            "the measured TCP setup time minus that reference, listed per scenario and client below. It is a "
+            "hindsight reference: the oracle uses the winner, which no client can know before connecting, so it "
+            "is a lower bound for comparison, not a target any client could meet. The value says how much time "
+            "the observed attempt order and timing added in this lab; it says nothing about how either client "
+            "is built. In single-family runs no race took place, and the value is only the handshake time "
+            "against the ping RTT. Where a DNS answer was delayed, that delay is outside TCP setup and so is "
+            "not in this value."),
+        "evidence": ev,
+        "reference": "src/analysis/metrics.py (oracle_baseline)",
+    }]
+
+
 # --- output ----------------------------------------------------------------------------
 
 def _fmt_stats(st: dict | None) -> str:
     return "-" if not st else f"{st['median']} [{st['q1']}-{st['q3']}]"
+
+
+def _fmt_cost(st: dict | None) -> str:
+    """Median [Q1, Q3]; a comma, because the cost can be negative."""
+    return "-" if not st else f"{st['median']} [{st['q1']}, {st['q3']}]"
 
 
 def text_report(summary: dict) -> str:
@@ -609,6 +692,18 @@ def text_report(summary: dict) -> str:
                 f"{_fmt_stats(x['tcp_setup_ms']):26} {x['scenario_penalty_ms']!s:>9}  {inter_txt:30} "
                 f"{json.dumps(x['failed_or_abandoned_per_run']):20} {json.dumps(x['attempt_shape']):22} "
                 f"{x['dns_ms']['median'] if x['dns_ms'] else '-'}")
+    lines.append("\nORACLE BASELINE (derived: pcap TCP setup minus the winning family's pre-run ping RTT)")
+    lines.append(f"  {'client':9} {'scn':4} {'oracle median':>13} {'cost median [IQR] ms':26} statuses / notes")
+    for c, by_scenario in summary["cells"].items():
+        for s, x in by_scenario.items():
+            o = x["oracle"]
+            notes = [json.dumps(o["status"])]
+            if o["single_family_runs"]:
+                notes.append(f"{o['single_family_runs']} single-family runs (no race)")
+            if o["dns_note"]:
+                notes.append("DNS delay not in cost; see DNS time")
+            lines.append(f"  {c:9} {s:4} {o['oracle_setup_ms']['median'] if o['oracle_setup_ms'] else '-':>13} "
+                         f"{_fmt_cost(o['cost_of_racing_ms']):26} {'; '.join(notes)}")
     lines.append("\nINTERPRETATION (labelled; built from the evidence listed)")
     for it in summary["interpretation"]:
         lines.append(f"- {it['topic']}\n  {it['statement']}")
