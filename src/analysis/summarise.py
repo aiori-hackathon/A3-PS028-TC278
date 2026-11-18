@@ -113,9 +113,10 @@ class Run:
     netlog_v4_source: str | None        # Chromium NetLog: which job/connector started IPv4 (client log)
     resolved_families: list[str] | None  # Chromium NetLog: resolver address order (client log)
     # pcap, re-parsed: first answer per query type for the target name, ms after its first query,
-    # and the first SYN's offset from the same origin
+    # the first SYN's offset from the same origin, and the first SYN's offset from the first A answer
     dns_answers_ms: dict[str, float] | None = None
     first_syn_after_query_ms: float | None = None
+    first_syn_after_a_answer_ms: float | None = None
     label: str = ""
     # lab verify before the run (ping medians): family -> (value or None, status)
     measured_rtt: dict[str, tuple[float | None, str]] | None = None
@@ -133,20 +134,27 @@ def netlog_v4_source(jobs: list[dict] | None) -> str | None:
     return None if jobs is None else "no IPv4 connect"
 
 
-def dns_by_type(pcap: Path, window: tuple[int, int], target: str = TARGET_NAME) -> tuple[dict, float | None]:
-    """Packet-level: first answer time per query type for the target name, from the first target query."""
+def dns_by_type(pcap: Path, window: tuple[int, int],
+                target: str = TARGET_NAME) -> tuple[dict, float | None, float | None]:
+    """Packet-level: first answer time per query type for the target name, from the first target query.
+
+    Returns (answers by type, first SYN from the same origin, first SYN minus the first A answer).
+    The last is computed from the raw timestamps, so it is not a difference of rounded values.
+    """
     tl = parse(pcap, window)
     name = target.rstrip(".") + "."
     ex = [d for d in tl.dns if d.qname == name]
     if not ex:
-        return {}, None
+        return {}, None, None
     t0 = min(d.query_ns for d in ex)
     answers: dict[str, float] = {}
     for d in sorted(ex, key=lambda d: d.response_ns or 1 << 62):
         if d.response_ns is not None and d.qtype not in answers:
             answers[d.qtype] = round((d.response_ns - t0) / 1e6, 3)
     syns = [a.first_syn_ns for a in tl.attempts if a.dport == 80]
-    return answers, (round((min(syns) - t0) / 1e6, 3) if syns else None)
+    a_ns = [d.response_ns for d in ex if d.qtype == "A" and d.response_ns is not None]
+    after_a = round((min(syns) - min(a_ns)) / 1e6, 3) if syns and a_ns else None
+    return answers, (round((min(syns) - t0) / 1e6, 3) if syns else None), after_a
 
 
 def run_from_record(r: dict) -> Run:
@@ -228,7 +236,7 @@ def load_runs(sessions: list[tuple[str, str, str]], runs_dir: Path = RUNS_DIR,
                 if hashlib.sha256(pcap.read_bytes()).hexdigest() != r["evidence"]["pcap_sha256"]:
                     raise DatasetError(f"{r['run_id']}: pcap hash does not match the record")
                 ts = r["timestamps"]
-                run.dns_answers_ms, run.first_syn_after_query_ms = dns_by_type(
+                run.dns_answers_ms, run.first_syn_after_query_ms, run.first_syn_after_a_answer_ms = dns_by_type(
                     pcap, (ts["client_start_epoch_ns"], ts["capture_end_epoch_ns"]))
             runs.append(run)
     return runs
@@ -280,6 +288,8 @@ def summarise_cell(runs: list[Run]) -> dict:
             **{f"{t} answer": _stats([r.dns_answers_ms[t] for r in runs if r.dns_answers_ms and t in r.dns_answers_ms])
                for t in sorted({t for r in runs for t in (r.dns_answers_ms or {})})},
             "first SYN": _stats([r.first_syn_after_query_ms for r in runs if r.first_syn_after_query_ms is not None]),
+            "first SYN after the A answer": _stats([r.first_syn_after_a_answer_ms for r in runs
+                                                    if r.first_syn_after_a_answer_ms is not None]),
             "runs with first SYN after the AAAA answer": sum(
                 1 for r in runs if r.dns_answers_ms and "AAAA" in r.dns_answers_ms
                 and r.first_syn_after_query_ms is not None
@@ -359,7 +369,7 @@ def interpretations(cells: dict) -> list[dict]:
             "reference": "docs/findings/chromium_s1_second_v6_syn.md",
         })
 
-    # 2. S6: both clients wait for the delayed AAAA answer before the first SYN.
+    # 2. S6: when the first SYN goes out relative to the A and AAAA answers (packet timing only).
     s6 = {}
     for name, cell_set in (("curl", cu), ("Chromium", ch)):
         c = cell_set["S6"]
@@ -372,6 +382,9 @@ def interpretations(cells: dict) -> list[dict]:
         st = (c["dns_answer_by_type_ms"] or {}).get("A answer")
         return st["max"] if st else None
 
+    def v4_runs(c: dict) -> int:
+        return sum(v for k, v in c["attempt_shape"].items() if "v4" in k.split(">"))
+
     both = all(after_aaaa(c) == c["n"] for _, c in s6.values())
     a_early = all(a_max(c) is not None and a_max(c) < AAAA_DELAY_MS for _, c in s6.values())
     ev = []
@@ -382,19 +395,24 @@ def interpretations(cells: dict) -> list[dict]:
         by = c["dns_answer_by_type_ms"]
         if by:
             parts = ", ".join(f"{k} median {v['median']} ms (max {v['max']})" for k, v in by.items()
-                              if isinstance(v, dict))
+                              if isinstance(v, dict) and k != "first SYN after the A answer")
             ev.append({"source": "packet", "text": f"{n}, from the first www.hl.test query: {parts}; first SYN "
                                                    f"after the AAAA answer in {after_aaaa(c)}/{c['n']} runs"})
+            off = by.get("first SYN after the A answer")
+            if off:
+                ev.append({"source": "packet", "text": f"{n}: first SYN after the first A answer min/median/max "
+                                                       f"{off['min']}/{off['median']}/{off['max']} ms (n={off['n']})"})
+        ev.append({"source": "packet", "text": f"{n}: runs with any IPv4 SYN {v4_runs(c)}/{c['n']}"})
     out.append({
-        "topic": "S6: does the client wait for the delayed AAAA answer?",
+        "topic": "S6: when is the first SYN sent, relative to the A and AAAA answers?",
         "statement": (
             ("Both clients sent their first SYN only after the delayed AAAA answer had arrived, in every run. "
              if both else "Not every S6 run shows the first SYN after the AAAA answer; see evidence. ")
-            + (f"The A answer arrived much earlier (always under {AAAA_DELAY_MS} ms), so neither client connected "
-               "over IPv4 on the early A answer while the AAAA answer was outstanding. " if a_early else "")
+            + (f"The A answer arrived much earlier (always under {AAAA_DELAY_MS} ms), and no IPv4 SYN was sent "
+               "in any S6 run. " if a_early and all(v4_runs(c) == 0 for _, c in s6.values()) else "")
             + "The AAAA delay therefore appears in DNS time, not in TCP setup time (which starts at the first "
-            "SYN); S6 must be reported with both. Why the clients wait (resolver design) is not visible in "
-            "the data."),
+            "SYN); S6 must be reported with both. The captures show when each packet was sent, not why: they "
+            "say nothing about how either client's resolver or connection logic is built."),
         "evidence": ev,
         "reference": "docs/findings/chromium_s1_second_v6_syn.md (S2/S3/S6 pilot section) and docs/dataset.md",
     })
