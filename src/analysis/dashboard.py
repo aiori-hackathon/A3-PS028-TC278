@@ -37,6 +37,17 @@ CLIENT_LABEL = {"curl": "curl", "chromium": "Chromium"}
 KIND_SYMBOL = {"first": "circle", "same-family": "diamond", "other-family": "square"}
 KIND_LABEL = {"first": "first SYN", "same-family": "new attempt, same family", "other-family": "first SYN, other family"}
 RFC8305_REFERENCE_MS = 250
+TAG_LABEL = {"packet": "Packet-level (pcap)", "client": "Client log", "interp": "Interpretation",
+             "derived": "Derived (pcap − lab RTT)"}
+
+
+def evidence_tag(source: str) -> tuple[str, str]:
+    """(css kind, label) for an evidence source; 'derived' is never shown as packet-level or client log."""
+    if source == "packet":
+        return "packet", "Packet-level"
+    if source == "derived":
+        return "derived", "Derived"
+    return "client", "Client log"
 
 
 def _base_layout(**kw) -> dict:
@@ -180,6 +191,23 @@ def fig_winner(cells: dict, reps: int = EXPECTED_REPS) -> dict:
         yaxis=dict(autorange="reversed", showgrid=False))}
 
 
+def fig_cost(runs: list[Run], clients=CLIENTS, scenarios=SCENARIOS) -> dict:
+    """Cost of racing per run (derived): only runs where it was computed; the rest are counted in the table."""
+    data = []
+    for c in clients:
+        rs = [r for r in runs if r.client == c and r.cost_of_racing_ms is not None]
+        data.append(go.Box(
+            x=[r.scenario for r in rs], y=[r.cost_of_racing_ms for r in rs], name=CLIENT_LABEL[c], meta={"role": c},
+            boxpoints="all", jitter=0.5, pointpos=0, marker=dict(size=6, opacity=0.75), line=dict(width=1.5),
+            fillcolor="rgba(0,0,0,0)", offsetgroup=c,
+            customdata=[[r.run_id, r.setup_ms, r.oracle_setup_ms] for r in rs],
+            hovertemplate=("%{customdata[0]}<br>cost of racing %{y:.3f} ms<br>= TCP setup %{customdata[1]:.3f} ms"
+                           " − oracle %{customdata[2]:.3f} ms<extra>" + CLIENT_LABEL[c] + "</extra>")))
+    return {"data": data, "layout": _base_layout(
+        boxmode="group", xaxis=dict(title=dict(text="Scenario"), categoryorder="array", categoryarray=list(scenarios)),
+        yaxis=dict(title=dict(text="TCP setup minus winning family's measured RTT (ms)"), zeroline=True))}
+
+
 def fig_dns(runs: list[Run], clients=CLIENTS, scenarios=SCENARIOS) -> dict:
     data = []
     for c in clients:
@@ -250,12 +278,39 @@ def summary_table(cells: dict) -> str:
     return f"<table>{head}{''.join(body)}</table>"
 
 
+def oracle_table(cells: dict) -> str:
+    head = ("<tr><th>Scenario</th><th>Client</th><th>Winner</th><th>Oracle setup median, ms "
+            "<span class=src>lab verify</span></th><th>Cost of racing median [IQR], ms</th><th>Range, ms</th>"
+            "<th>Runs computed / total</th><th>Notes</th></tr>")
+    body = []
+    clients, scenarios = shape_of(cells)
+    for s in scenarios:
+        for c in clients:
+            x = cells[c][s]
+            o = x["oracle"]
+            st, orc = o["cost_of_racing_ms"], o["oracle_setup_ms"]
+            notes = [f"{_e(k)} {v}" for k, v in o["status"].items() if k != "computed"]
+            notes += [_e(n) for n in o["not_computed_notes"]]
+            if o["single_family_runs"]:
+                notes.append(f"{o['single_family_runs']} runs tried one family only: no race took place")
+            if o["dns_note"]:
+                notes.append(_e(o["dns_note"]))
+            # "to", not a dash: the cost can be negative
+            cost_txt = f"{st['median']} [{st['q1']} to {st['q3']}]" if st else "–"
+            range_txt = f"{st['min']} to {st['max']}" if st else "–"
+            body.append(
+                f"<tr><td><b>{s}</b><br><span class=muted>{_e(x['label'])}</span></td><td>{CLIENT_LABEL[c]}</td>"
+                f"<td>{_counts(x['winning_family'], lambda k: 'IPv' + k[1] if k.startswith('v') else k)}</td>"
+                f"<td>{orc['median'] if orc else '–'}</td><td>{cost_txt}</td><td>{range_txt}</td>"
+                f"<td>{o['status'].get('computed', 0)} / {x['n']}</td><td>{'<br>'.join(notes) or '–'}</td></tr>")
+    return f"<table>{head}{''.join(body)}</table>"
+
+
 def interpretation_html(items: list[dict]) -> str:
     out = []
     for it in items:
-        ev = "".join(f"<li><span class='tag tag-{'packet' if e['source'] == 'packet' else 'client'}'>"
-                     f"{'Packet-level' if e['source'] == 'packet' else 'Client log'}</span> {_e(e['text'])}</li>"
-                     for e in it["evidence"])
+        ev = "".join(f"<li><span class='tag tag-{k}'>{lbl}</span> {_e(e['text'])}</li>"
+                     for e in it["evidence"] for k, lbl in [evidence_tag(e["source"])])
         out.append(f"<article class='interp'><div class=interp-head><span class='tag tag-interp'>Interpretation"
                    f"</span><h3>{_e(it['topic'])}</h3></div><p>{_e(it['statement'])}</p>"
                    f"<details><summary>Evidence it rests on</summary><ul>{ev}</ul>"
@@ -302,7 +357,7 @@ section{background:var(--panel);border:1px solid var(--border);border-radius:10p
 .note{color:var(--text-2);font-size:.92rem;max-width:90ch}
 .tag{display:inline-block;font-size:.72rem;font-weight:600;letter-spacing:.02em;text-transform:uppercase;border-radius:4px;padding:1px 6px;border:1px solid var(--base);color:var(--text-2);white-space:nowrap}
 .tag-packet{border-style:solid}.tag-client{border-style:dashed}
-.tag-interp{border-style:dotted;font-style:italic}
+.tag-interp{border-style:dotted;font-style:italic}.tag-derived{border-style:double;border-width:3px}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:16px}
 .chart{width:100%;min-height:380px}
 .scroll{overflow-x:auto}
@@ -355,8 +410,7 @@ draw();
 
 
 def section(title: str, tags: list[str], note: str, body: str) -> str:
-    t = "".join(f"<span class='tag tag-{k}'>{ {'packet': 'Packet-level (pcap)', 'client': 'Client log', 'interp': 'Interpretation'}[k]}</span>"
-                for k in tags)
+    t = "".join(f"<span class='tag tag-{k}'>{TAG_LABEL[k]}</span>" for k in tags)
     return f"<section><div class=sec-head><h2>{_e(title)}</h2>{t}</div><p class=note>{note}</p>{body}</section>"
 
 
@@ -381,7 +435,8 @@ def render(summary: dict, runs: list[Run], plotly_src: str) -> str:
     reps = shape["reps"] if shape else EXPECTED_REPS
     figs = {"setup": fig_setup(runs, clients, scenarios), "penalty": fig_penalty(cells),
             "timeline": fig_timeline(runs, clients, scenarios, reps), "inter": fig_inter_family(runs, cells),
-            "winner": fig_winner(cells, reps), "dns": fig_dns(runs, clients, scenarios)}
+            "winner": fig_winner(cells, reps), "dns": fig_dns(runs, clients, scenarios),
+            "cost": fig_cost(runs, clients, scenarios)}
     figs_json = json.dumps({k: json.loads(json.dumps(v, cls=plotly.utils.PlotlyJSONEncoder)) for k, v in figs.items()})
     versions = "; ".join(f"{CLIENT_LABEL[c]}: {p['versions'][0].split(' (')[0]}" for c, p in ds["clients"].items())
     code = ", ".join(sorted({v for p in ds["clients"].values() for v in p["code_versions"]}))
@@ -391,6 +446,7 @@ def render(summary: dict, runs: list[Run], plotly_src: str) -> str:
 Times are from packet captures inside an isolated lab; every scenario's RTT was measured before each run.</p>
 <div class=legend-row><span class='tag tag-packet'>Packet-level (pcap)</span><span class=muted>seen on the wire</span>
 <span class='tag tag-client'>Client log</span><span class=muted>reported by the client (curl, Chromium NetLog)</span>
+<span class='tag tag-derived'>Derived</span><span class=muted>pcap timing combined with the lab's pre-run RTT check</span>
 <span class='tag tag-interp'>Interpretation</span><span class=muted>our reading of the evidence</span></div></div>
 <button id=theme type=button>Theme: auto</button></header>
 """ + section("TCP setup time and scenario penalty", ["packet"],
@@ -414,6 +470,16 @@ Times are from packet captures inside an isolated lab; every scenario's RTT was 
                   "From the first query to the last answer for www.hl.test sent before the first SYN (log scale). "
                   "In S6 the AAAA answer was delayed by 300 ms; the delay shows up here, not in TCP setup time, "
                   "so S6 is reported with both.", chart("dns")) \
+        + section("Oracle baseline and cost of racing", ["derived"],
+                  "Per run, the oracle setup is the measured RTT of the family that eventually won (the lab's "
+                  "ping check before that run, not a modelled value), and the cost of racing is the packet-level "
+                  "TCP setup time minus it. Values are not clamped: a small negative cost means the handshake "
+                  "was faster than the ping median. Runs where it could not be computed are counted, never "
+                  "plotted as zero. In single-family runs no race took place. TCP setup excludes DNS, so a "
+                  "delayed DNS answer (S6) is not in this value; see DNS time. <b>Interpretation:</b> the oracle "
+                  "is what a direct connection to the winning family would have cost in hindsight; no client "
+                  "knows the winner in advance, so it is a reference, not a target.",
+                  f"{chart('cost')}<div class=scroll>{oracle_table(cells)}</div>") \
         + section("All numbers", ["packet"],
                   "Medians with interquartile range. Measured RTT is the pre-run lab check (ping median; "
                   "\"no reply\" means a verified blackhole). Failed/abandoned attempts are counted per run.",

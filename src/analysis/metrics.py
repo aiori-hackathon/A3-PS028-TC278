@@ -7,6 +7,9 @@ Fixed definitions (do not redefine):
   "not observed" if only one family is tried.
 - Scenario penalty = client's median setup time in a scenario minus its own median in C0.
 
+Project addition (see oracle_baseline): oracle setup = the winning family's pre-run measured RTT;
+cost of racing = TCP setup time minus that. It reads existing records and changes no fixed metric.
+
 Project rules used here (documented in docs/run_record_schema.md):
 - Winning attempt: the completed handshake on which the client sent data. If several
   connections carried data the run is ambiguous and nothing is picked.
@@ -215,6 +218,62 @@ def scenario_penalty(setup_times_ms: list[float], c0_setup_times_ms: list[float]
     if not setup_times_ms or not c0_setup_times_ms:
         return None
     return round(statistics.median(setup_times_ms) - statistics.median(c0_setup_times_ms), 3)
+
+
+ORACLE_EVIDENCE = ("derived: packet-level TCP setup time (pcap) minus the winning family's RTT measured by "
+                   "the lab verify step before the run (ping median)")
+
+
+def oracle_baseline(winning_family: str | None, tcp_setup_time_ms: float | None,
+                    measured_rtt_ms: dict | None, families_tried: list[str] | None = None,
+                    dns_delay_ms: dict | None = None) -> dict:
+    """Oracle baseline for one run (project metric, added alongside the fixed ones, not replacing them).
+
+    oracle_setup_ms   = the measured RTT of the family that won this run
+                        (the record's scenario.measured_rtt_ms[winning_family]; never a modelled constant)
+    cost_of_racing_ms = tcp_setup_time_ms - oracle_setup_ms
+
+    measured_rtt_ms is the record block: {family: {"value", "status", ...}}. Both outputs use the
+    record's {"value", "status", "note"} convention. Nothing is clamped: a negative cost (setup faster
+    than the pre-run ping median) is reported as it is. Cases handled explicitly:
+      - no winning family, or no setup time       -> not_observed
+      - winning family's RTT not computed/missing -> not_available, with the RTT's own status
+      - only one family tried                     -> computed, single_family=True, with a note:
+                                                     no race took place, the value is handshake
+                                                     time against ping RTT only
+      - a configured DNS answer delay             -> computed, with a note: TCP setup excludes DNS,
+                                                     so that delay is not in cost_of_racing_ms
+    """
+    tried = list(families_tried or [])
+    single = len(set(tried)) == 1 if tried else None
+    notes = []
+    if single:
+        notes.append(f"only {tried[0]} was tried: no race took place, so this is the handshake time "
+                     "minus the pre-run ping RTT, not a cost of racing")
+    delayed = {t: v for t, v in (dns_delay_ms or {}).items() if v}
+    if delayed:
+        what = ", ".join(f"{t} {v} ms" for t, v in sorted(delayed.items()))
+        notes.append(f"DNS answer delay configured ({what}); TCP setup excludes DNS, so that delay is not "
+                     "in cost_of_racing_ms and shows in dns_time_ms instead")
+
+    def out(oracle, cost):
+        return {"oracle_setup_ms": oracle, "cost_of_racing_ms": cost, "single_family": single,
+                "evidence": ORACLE_EVIDENCE}
+
+    if winning_family is None:
+        nw = _wrapped(None, "not_observed", "no winning family in this run")
+        return out(nw, nw)
+    rtt = (measured_rtt_ms or {}).get(winning_family)
+    if not rtt or rtt.get("status") != "computed" or rtt.get("value") is None:
+        status = rtt.get("status", "missing") if rtt else "missing"
+        na = _wrapped(None, "not_available",
+                      f"measured RTT for the winning family {winning_family} is {status}")
+        return out(na, na)
+    oracle = _wrapped(round(float(rtt["value"]), 3), note="; ".join(notes) or None)
+    if tcp_setup_time_ms is None:
+        return out(oracle, _wrapped(None, "not_observed", "no TCP setup time in this run"))
+    cost = _wrapped(round(tcp_setup_time_ms - float(rtt["value"]), 3), note="; ".join(notes) or None)
+    return out(oracle, cost)
 
 
 def cross_check(outcome: dict, client_report: dict | None, m: RunMetrics) -> dict:
