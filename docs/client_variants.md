@@ -48,17 +48,18 @@ sudo .venv/bin/python src/runner/run_matrix.py --only S1:curl          # same ke
 .venv/bin/python src/analysis/variant_control.py --dataset variant-control
 ```
 
-`variant_control.py` compares the variant's median TCP setup time (packet-level) with two
-references:
+`variant_control.py` reports up to three deltas of median TCP setup time (packet-level), each
+"first minus second":
 
-1. **Plain curl S1 in the same dataset.** This uses the same kernel and code, so it isolates the
-   flag. It is the control proper.
-2. **Plain curl S1 in the frozen core dataset** (median 222.221 ms). The core runs were measured on
-   kernel 7.0.0-38; this host now runs 7.0.0-43. So a difference here mixes the flag with the
-   kernel change and anything else that changed on the host. This makes it a cross-kernel
-   comparison, not a clean control.
+1. **Flag:** `curl@he200` minus plain curl S1 in the same dataset. Same kernel and code, so this
+   isolates the flag. It is the control proper.
+2. **Cross-kernel:** plain curl S1 in the dataset minus plain curl S1 in the frozen core dataset
+   (median 222.221 ms, kernel 7.0.0-38; this host now runs 7.0.0-43). Neither side sets the flag,
+   so a difference comes from what changed on the host, not from the flag.
+3. **Variant vs core:** `curl@he200` minus core plain curl. Flag and host change are mixed;
+   printed for completeness only.
 
-The kernels on both sides are read from the records and printed next to each delta.
+The kernels and client versions of every side are read from the records and printed.
 
 The delta is reported as measured, and nothing is tuned to make it zero. A delta counts as
 **non-trivial** when the two medians' 95% bootstrap CIs do not overlap. That is a descriptive flag,
