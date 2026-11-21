@@ -331,6 +331,9 @@ added to `src/config/scenarios.yaml`, and the report gives no figures for it.
 **L9. RFC 8305 is a reference only.** The data shows when each client opened each attempt. It does not
 test conformance to RFC 8305 or the Happy Eyeballs v3 draft, and none is claimed.
 
+**L10. Cross-kernel comparison of curl S1 ([`variant-control`](datasets/variant-control.md), `src/analysis/variant_control.py`).**
+Cross-kernel comparison: curl S1 (variant-control) differed from curl S1 (core dataset) by -0.618 ms in median TCP setup time (221.603 ms, 95% CI 221.214-222.002, n=20, against 222.221 ms, 95% CI 222.099-222.435, n=20; on kernel 7.0.0-43-generic against 7.0.0-38-generic). The intervals do not overlap. The cause is not established by these data. In context (interpretation): the difference is 0.28% of the core median and about 326 times smaller than curl's S1 scenario penalty in the core dataset (201.524 ms), so it does not affect conclusions that rest on differences of that size; it is, however, larger than the sub-millisecond quantities in the core results (S4–S6 penalties of 0.001–0.115 ms, costs of racing of −0.30 to −0.48 ms, median CI widths of 0.137–0.370 ms), whose sensitivity to the kernel change these data cannot rule out.
+
 ## 4. Reproducing the figures
 
 ```
