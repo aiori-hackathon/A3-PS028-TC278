@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import ipaddress
 import struct
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from dnslib import QTYPE, RCODE, DNSRecord
@@ -57,6 +57,7 @@ class Packet:
     icmp_code: int | None = None
     ifindex: int | None = None    # Linux cooked v2 only
     outgoing: bool | None = None  # Linux cooked captures only
+    frame_no: int | None = None   # 1-based record number in the file (as tcpdump -# and Wireshark count)
 
 
 # --- reading ---------------------------------------------------------------------
@@ -78,15 +79,17 @@ def read_pcap(path: str | Path) -> tuple[int, list[Packet]]:
 
     packets: list[Packet] = []
     off = 24
+    frame_no = 0
     while off + 16 <= len(data):
         sec, frac, incl, _orig = struct.unpack(endian + "IIII", data[off:off + 16])
         frame = data[off + 16:off + 16 + incl]
         if len(frame) < incl:
             raise PcapError(f"{path}: truncated record at byte {off}")
         off += 16 + incl
+        frame_no += 1  # counts every record, decoded or not, so numbers match other tools
         pkt = _decode_link(linktype, sec * 1_000_000_000 + frac * ns_per_unit, frame)
         if pkt is not None:
-            packets.append(pkt)
+            packets.append(replace(pkt, frame_no=frame_no))
     return linktype, packets
 
 
