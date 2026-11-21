@@ -1,13 +1,23 @@
 # Grid for the generated EXTENSION scenarios (src/runner/scenario_grid.py writes them to
 # scenarios_generated.yaml). The core scenarios C0 and S1-S6 are not here and are never generated.
 #
-# Each entry: family (v4 | v6), kind (delay | loss) and values.
-#   delay N: "+N ms RTT" on that family: delay_ms_each_way = 10 + N/2, verify_target = 20 + N (N even).
-#   loss N:  N% loss in each direction on that family at baseline delay (1-99). Not runnable yet:
-#            the lab's verify.sh cannot check partial loss, so the orchestrator refuses these.
+# Each entry: family (v4 | v6), kind (delay | loss | jitter) and values.
+#   delay N:  "+N ms RTT" on that family: delay_ms_each_way = 10 + N/2, verify_target = 20 + N (N even).
+#   loss N:   N% loss in each direction on that family at baseline delay (1-99). Verified in band
+#             mode: round-trip ping loss 1 - (1 - N/100)^2 within 4 binomial standard errors (200 pings).
+#   jitter J: netem jitter J ms each way ('distribution normal'), base delay 10 + 2J each way, so the
+#             mean RTT is 20 + 4J. Verified in band mode on the RTT median and standard deviation.
+#             delay_twin: true also generates the delay-only scenario with the same mean RTT (+4J).
+#   loss_sole_path N (compound): loss N on that family AND the other family blackholed, so that family
+#             is the only working path and a lost SYN can only be answered after the kernel's SYN
+#             retransmission. N = 30: each SYN round succeeds with probability 0.7^2 = 0.49, so runs
+#             spread over several retransmission rounds within curl's 10 s --max-time.
 #
-# Values are PROVISIONAL (an IPv6 latency sweep around the observed fallback points, curl ~200 ms and
-# Chromium ~300 ms after the first IPv6 SYN); pilots decide the final set.
+# Values are PROVISIONAL; pilots decide the final set.
+#   delay sweep: around the observed fallback points (curl's first IPv4 SYN ~200 ms after its first
+#     IPv6 SYN, Chromium's ~300 ms).
+#   jitter: J = 50 puts the mean RTT at 220 ms and J = 70 at 300 ms, one near each client's
+#     observed fallback point (J = 150, mean 620 ms, was dropped: far above both).
 
 schema_version: 1
 
@@ -15,3 +25,13 @@ grids:
   - family: v6
     kind: delay
     values: [100, 200, 250, 300, 350, 400]
+  - family: v6
+    kind: loss
+    values: [10, 30, 50]
+  - family: v6
+    kind: jitter
+    values: [50, 70]
+    delay_twin: true
+  - family: v6
+    kind: loss_sole_path
+    values: [30]

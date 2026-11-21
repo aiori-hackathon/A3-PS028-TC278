@@ -195,6 +195,8 @@ class Attempt:
     client_data_bytes: int = 0
     first_client_data_ns: int | None = None
     http_status: int | None = None        # from the first server segment starting with "HTTP/"
+    syn_times_ns: list[int] = field(default_factory=list)      # every client SYN, first one included
+    synack_times_ns: list[int] = field(default_factory=list)   # every matching SYN-ACK (retransmissions too)
 
     @property
     def syn_retransmits(self) -> int:
@@ -284,9 +286,11 @@ def _track_tcp(p: Packet, attempts: dict[tuple, Attempt]) -> bool:
         a = attempts.get(fwd)
         if a is None:
             attempts[fwd] = Attempt(family=p.family, src=p.src, sport=p.sport, dst=p.dst,
-                                    dport=p.dport, first_syn_ns=p.ts_ns, client_isn=p.seq)
+                                    dport=p.dport, first_syn_ns=p.ts_ns, client_isn=p.seq,
+                                    syn_times_ns=[p.ts_ns])
         else:
             a.syn_count += 1
+            a.syn_times_ns.append(p.ts_ns)
         return True
 
     if fwd in attempts:  # client -> server
@@ -305,6 +309,8 @@ def _track_tcp(p: Packet, attempts: dict[tuple, Attempt]) -> bool:
     if rev in attempts:  # server -> client
         a = attempts[rev]
         if syn and ack:
+            if p.ack == (a.client_isn + 1) % 2**32:
+                a.synack_times_ns.append(p.ts_ns)
             if a.synack_ns is None and p.ack == (a.client_isn + 1) % 2**32:
                 a.synack_ns, a.server_isn = p.ts_ns, p.seq
         elif p.flags & RST and a.server_rst_ns is None:

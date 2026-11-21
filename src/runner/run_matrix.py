@@ -59,12 +59,13 @@ EXIT_MEANING = {0: "completed", 1: "stopped (failed verify, incomplete capture o
 
 
 def orchestrator_cmd(scenario: str, client: str, reps: int = REPS,
-                     adaptive: tuple[int, int, float] | None = None) -> list[str]:
+                     adaptive: tuple | None = None) -> list[str]:
     cmd = [str(REPO / ".venv" / "bin" / "python"), str(REPO / "src" / "runner" / "orchestrate.py"),
            "--client", client, "--scenario", scenario]
     if adaptive:
-        lo, hi, w = adaptive
-        return cmd + ["--reps-adaptive", str(lo), str(hi), "--ci-width-ms", f"{w:g}"]
+        lo, hi, w, *rest = adaptive
+        return (cmd + ["--reps-adaptive", str(lo), str(hi), "--ci-width-ms", f"{w:g}"]
+                + (["--win-ci-width", f"{rest[0]:g}"] if rest else []))
     return cmd + ["--reps", str(reps)]
 
 
@@ -113,7 +114,7 @@ class Log:
 
 
 def run_batch(n: int, scenario: str, client: str, out_dir: Path, log: Log,
-              adaptive: tuple[int, int, float] | None = None) -> tuple[int, str, str | None]:
+              adaptive: tuple | None = None) -> tuple[int, str, str | None]:
     cmd = orchestrator_cmd(scenario, client, adaptive=adaptive)
     path = out_dir / f"{n:02d}_{scenario}_{file_token(client)}.log"
     reps_txt = f"adaptive {adaptive[0]}-{adaptive[1]}" if adaptive else f"x{REPS}"
@@ -154,14 +155,19 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--reps-adaptive", type=int, nargs=2, metavar=("MIN", "MAX"),
                     help="adaptive repetitions per batch (needs --ci-width-ms); default: fixed 20")
     ap.add_argument("--ci-width-ms", type=float)
+    ap.add_argument("--win-ci-width", type=float,
+                    help="with --reps-adaptive: also require the IPv6 win fraction's 95%% Wilson CI to be no wider")
     a = ap.parse_args(argv)
     adaptive = None
     if a.reps_adaptive:
         if a.ci_width_ms is None or a.ci_width_ms <= 0 or not 1 <= a.reps_adaptive[0] <= a.reps_adaptive[1]:
             ap.error("--reps-adaptive MIN MAX needs 1 <= MIN <= MAX and a positive --ci-width-ms")
-        adaptive = (a.reps_adaptive[0], a.reps_adaptive[1], a.ci_width_ms)
-    elif a.ci_width_ms is not None:
-        ap.error("--ci-width-ms only applies with --reps-adaptive")
+        if a.win_ci_width is not None and not 0 < a.win_ci_width < 1:
+            ap.error("--win-ci-width must be between 0 and 1")
+        adaptive = (a.reps_adaptive[0], a.reps_adaptive[1], a.ci_width_ms) + (
+            (a.win_ci_width,) if a.win_ci_width is not None else ())
+    elif a.ci_width_ms is not None or a.win_ci_width is not None:
+        ap.error("--ci-width-ms and --win-ci-width only apply with --reps-adaptive")
     todo = select(PLAN, a.start, a.only)
     if not todo:
         ap.error("nothing selected")

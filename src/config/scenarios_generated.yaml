@@ -62,3 +62,66 @@ scenarios:
     v6: {delay_ms_each_way: 210, loss_pct: 0}
     dns: {delay_ms: {A: 0, AAAA: 0}}
     verify_target: {v4: 20, v6: 420}
+
+  Gv6l10:
+    label: IPv6 10% loss each way (generated extension)
+    extension: true
+    grid: {family: v6, kind: loss, value: 10}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 10, loss_pct: 10}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: {band: loss, expect_loss_pct: 19.0, tolerance_pct: 12, rtt_ms: 20, pings: 200}}
+
+  Gv6l30:
+    label: IPv6 30% loss each way (generated extension)
+    extension: true
+    grid: {family: v6, kind: loss, value: 30}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 10, loss_pct: 30}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: {band: loss, expect_loss_pct: 51.0, tolerance_pct: 15, rtt_ms: 20, pings: 200}}
+
+  Gv6l50:
+    label: IPv6 50% loss each way (generated extension)
+    extension: true
+    grid: {family: v6, kind: loss, value: 50}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 10, loss_pct: 50}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: {band: loss, expect_loss_pct: 75.0, tolerance_pct: 13, rtt_ms: 20, pings: 200}}
+
+  Gv6j50:
+    label: IPv6 jitter 50 ms each way (normal), base delay 110 ms each way (generated extension)
+    extension: true
+    grid: {family: v6, kind: jitter, value: 50, delay_twin: Gv6d200}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 110, loss_pct: 0, jitter_ms_each_way: 50}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: {band: jitter, median_ms: [194.9, 245.1], sd_ms: [56.5, 84.9], pings: 200}}
+
+  Gv6j70:
+    label: IPv6 jitter 70 ms each way (normal), base delay 150 ms each way (generated extension)
+    extension: true
+    grid: {family: v6, kind: jitter, value: 70, delay_twin: Gv6d280}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 150, loss_pct: 0, jitter_ms_each_way: 70}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: {band: jitter, median_ms: [264.9, 335.1], sd_ms: [79.1, 118.9], pings: 200}}
+
+  Gv6d280:
+    label: IPv6 +280 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 280}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 150, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 300}
+
+  Gv6c30:
+    label: IPv6 30% loss each way, IPv4 blackholed (compound, IPv6 is the only working path) (generated extension)
+    extension: true
+    grid: {family: v6, kind: loss_sole_path, value: 30}
+    v4: {delay_ms_each_way: 10, loss_pct: 100}
+    v6: {delay_ms_each_way: 10, loss_pct: 30}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: blackhole, v6: {band: loss, expect_loss_pct: 51.0, tolerance_pct: 15, rtt_ms: 20, pings: 200}}

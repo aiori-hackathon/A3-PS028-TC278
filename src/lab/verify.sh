@@ -5,7 +5,10 @@
 #   sudo src/lab/verify.sh down                       # nothing of the lab left
 #
 # V4_TARGET / V6_TARGET: expected RTT in ms (default: BASELINE_RTT_MS from lab.env),
-# or "blackhole" when 100% loss is expected.
+# or "blackhole" when 100% loss is expected. That point check is the default.
+# Band targets (band:loss:... or band:jitter:..., see hl_rtt_check in lib.sh) are for partial-loss
+# and jitter links: the scenario declares the band, the target carries its ping count N, and the
+# pings go out every BAND_PING_INTERVAL_S. The observed values are printed on the RTT line.
 # Every check prints PASS or FAIL; all checks run, then the script exits 1 if any failed.
 # RTT lines are measured with ping from inside hl-client (packet-level evidence);
 # netem lines are configuration only, not ground truth.
@@ -115,9 +118,14 @@ check_file_in_ns() {
 # rtt LABEL NS FAMILY DST TARGET: measure real RTT with ping and compare to TARGET
 rtt() {
     local label=$1 ns=$2 family=$3 dst=$4 target=$5 out stats verdict
-    out=$(LC_ALL=C ip netns exec "$ns" ping "-$family" -n -c "$PING_COUNT" \
-          -i "$PING_INTERVAL_S" -W "$PING_WAIT_S" "$dst" 2>&1 || true)
-    if ! stats=$(hl_rtt_stats <<<"$out"); then
+    local count=$PING_COUNT interval=$PING_INTERVAL_S want_sd="" band_n
+    band_n=$(hl_band_pings "$target")
+    if [[ -n $band_n ]]; then
+        count=$band_n interval=$BAND_PING_INTERVAL_S want_sd=sd
+    fi
+    out=$(LC_ALL=C ip netns exec "$ns" ping "-$family" -n -c "$count" \
+          -i "$interval" -W "$PING_WAIT_S" "$dst" 2>&1 || true)
+    if ! stats=$(hl_rtt_stats "$want_sd" <<<"$out"); then
         fail "RTT $label: could not read ping output"
         sed 's/^/  | /' <<<"$out"
         return 0
@@ -130,13 +138,15 @@ rtt() {
 }
 
 valid_target() {
-    [[ $1 == blackhole || $1 =~ ^[0-9]+(\.[0-9]+)?$ ]]
+    local n='[0-9]+(\.[0-9]+)?'
+    [[ $1 == blackhole || $1 =~ ^$n$ || $1 =~ ^band:loss:$n:$n:$n:[0-9]+$ \
+       || $1 =~ ^band:jitter:$n:$n:$n:$n:[0-9]+$ ]]
 }
 
 verify_up() {
     local v4_target=${1:-$BASELINE_RTT_MS} v6_target=${2:-$BASELINE_RTT_MS} ns
     for t in "$v4_target" "$v6_target"; do
-        valid_target "$t" || { echo "error: bad target '$t' (use a number in ms or 'blackhole')" >&2; exit 2; }
+        valid_target "$t" || { echo "error: bad target '$t' (use a number in ms, 'blackhole', or a band:loss:/band:jitter: target)" >&2; exit 2; }
     done
     echo "== HappyLab verify up: $(date -u +%Y-%m-%dT%H:%M:%SZ) targets v4=$v4_target v6=$v6_target =="
 

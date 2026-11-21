@@ -1,5 +1,9 @@
-# Run-record schema (version 0.4)
+# Run-record schema (version 0.5)
 
+Version 0.5 adds `scenario.verify_observed` (what the pre-run verify measured, per family, in point
+or band mode; see [Verify modes](#verify-modes-point-and-band)) and the optional win-fraction parts
+of the `adaptive` block (`win_ci_width`, `after_this_run.win`). Earlier records remain valid and
+contain neither.
 Version 0.4 adds the optional `client.variant` (a curl configuration such as `he200`; see
 [Client variants and file names](#client-variants-and-file-names)) and allows generated extension
 scenario IDs such as `Gv6d200`. Earlier records remain valid and may contain neither.
@@ -72,12 +76,13 @@ So a null always says *why* it is null, and "not observed" is never confused wit
 
 | Key | Type | Notes |
 |---|---|---|
-| `id` | string | One of `C0`, `S1`–`S6`, `X1`, or `harness-test`; from 0.4 also a generated extension ID (`G<v4\|v6><d\|l><N>`, e.g. `Gv6d200`, see below). `harness-test` marks runs that test the tooling (for example, the loopback curl run). They are never measurement data. |
+| `id` | string | One of `C0`, `S1`–`S6`, `X1`, or `harness-test`; from 0.4 also a generated extension ID (`G<v4\|v6><d\|l\|j\|c><N>`, e.g. `Gv6d200`, `Gv6l10`, `Gv6j50`, `Gv6c30`, see below). `harness-test` marks runs that test the tooling (for example, the loopback curl run). They are never measurement data. |
 | `label` | string | Human-readable name. |
 | `repetition` | integer ≥ 1 | |
 | `netem` | object or null | Configured impairment per link. Configuration only; it is **not** ground truth. null for `harness-test`. |
 | `dns` | object or null | e.g. `{"aaaa_delay_ms": 300}`. |
 | `measured_rtt_ms` | object | `{"v4": <wrapped>, "v6": <wrapped>}`. RTT measured before the scenario. |
+| `verify_observed` | object | 0.5, written by the orchestrator from 0.5 on. Per family: `{mode, target, verify_arg, verdict, observed}`. `mode` is `point` or `band`; `target` is the scenario's verify target (a number, `"blackhole"`, or a band object); `verify_arg` the exact argument passed to `verify.sh`; `verdict` `PASS`/`FAIL`; `observed` `{median_ms, min_ms, max_ms, sd_ms, loss_pct, sent, received, errors}` from the ping summary (`sd_ms` only in band mode, else null). Packet-level (ICMP echo); records the measured values, not only pass/fail. |
 
 ### `client`
 
@@ -115,8 +120,10 @@ Dataset manifests, CLI arguments and summaries use the label itself (`curl@he200
 C0 (baseline) and S1–S6 (PS-028's six required scenarios) are defined by hand in
 `src/config/scenarios.yaml`. Further scenarios are generated from `src/config/scenario_grid.yaml`
 by `src/runner/scenario_grid.py` into `src/config/scenarios_generated.yaml`, every one marked
-`extension: true`. Their IDs are `G` + family + `d` (delay, "+N ms RTT") or `l` (loss, N %) + N,
-e.g. `Gv6d200`. A generated ID that equals or looks like a core ID (`C0`, `S1`–`S6`, `X1`, or any
+`extension: true`. Their IDs are `G` + family + `d` (delay, "+N ms RTT"), `l` (loss, N % each way)
+`j` (jitter, J ms each way) or `c` (compound: N % loss each way with the other family blackholed)
++ N, e.g. `Gv6d200`, `Gv6l10`, `Gv6j50`, `Gv6c30`. A jitter scenario's
+`grid.delay_twin` names the delay-only scenario with the same mean RTT (`Gv6j50` → `Gv6d200`). A generated ID that equals or looks like a core ID (`C0`, `S1`–`S6`, `X1`, or any
 `C`/`S`/`X` + digits) is rejected by the generator and by the loader.
 
 ### `timestamps`
@@ -236,6 +243,24 @@ the log side is defined explicitly for Chromium:
 | `client_peak_rss_kib` | integer or null | `ru_maxrss` returned by `wait4` for the client command: the peak resident memory of the **largest single process** among the client command and its reaped descendants, in KiB. Not a sum over processes, so for Chromium it is not the browser's total memory. Nothing is sampled while the client runs, so the timed connection is not disturbed. |
 | `client_peak_rss_scope` | string | That definition, stored with the value |
 
+### Verify modes: point and band
+
+`src/lab/verify.sh` checks each family's link before every run. The **point** check is the default
+and is unchanged: an RTT target passes when there is no loss and the median of 10 pings is within
+max(2 ms, 10 %) of it; `blackhole` passes on 100 % loss with no ICMP errors. A point check cannot
+verify partial loss or jitter, so those scenarios declare a **band** in their `verify_target`
+(computed by `src/runner/scenario_grid.py`, never hand-written):
+
+| Band | Scenario fields | verify.sh argument | Passes when (over `pings` pings, 0.02 s apart) |
+|---|---|---|---|
+| loss | `expect_loss_pct`, `tolerance_pct`, `rtt_ms`, `pings` | `band:loss:E:T:R:N` | round-trip ping loss within E ± T percentage points, no ICMP errors, reply median within the point tolerance of R |
+| jitter | `median_ms: [lo, hi]`, `sd_ms: [lo, hi]`, `pings` | `band:jitter:MLO:MHI:SLO:SHI:N` | no loss, median RTT and RTT standard deviation inside their bands |
+
+E is 1 − (1 − p)² for per-direction loss p (a ping crosses the link twice). Bands are 4 standard
+errors wide (binomial for loss; for jitter, median 1.2533·σ/√N, at least 2 ms, and SD σ/√(2(N−1))
+with σ = J·√2, the RTT spread of two independent netem directions). A correct link should fail
+about 1 check in 16 000. The observed values are kept in `scenario.verify_observed`.
+
 ### `adaptive` (0.3, optional; runner decision)
 
 Written only when the orchestrator runs with `--reps-adaptive MIN MAX --ci-width-ms W`. Records
@@ -255,7 +280,15 @@ The final stopping reason and CI per scenario are in the last record of the sess
 | `after_this_run.decision` | string | `continue` or `stop` |
 | `after_this_run.reason` | string or null | On a stop: `ci_width_reached` or `max_reps_reached`. Null on `continue`. |
 
-The rule (`analysis.metrics.adaptive_decision`) never looks at the median's value, only at the CI
-width and the run count. `summarise.py` recomputes it from the setup times and refuses a session
+| `win_ci_width` | number | 0.5, optional (`--win-ci-width F`): also require the 95 % Wilson CI on the fraction of runs IPv6 won to be no wider than F |
+| `after_this_run.win` | object | 0.5 (always written by 0.5 adaptive sessions): `{family: "v6", wins, n, fraction, ci}`, `ci` = `{lo, hi, width, level, n, method}` (Wilson score). Winning family is packet-level; a run with no winner counts as not won. Required when `win_ci_width` is set. |
+
+Without `win_ci_width` the rule decides on the median CI alone, and the win fraction is carried
+for information only. When the fraction is then not settled (some runs won by each family), the
+orchestrator prints a NOTE and writes it into the session's `_adaptive.json` entry, so a stop at
+20 is never silent about it; `src/analysis/syn_retransmit.py` repeats it per cell.
+
+The rule (`analysis.metrics.adaptive_decision`) never looks at the median's value or the win
+fraction itself, only at interval widths and the run count. `summarise.py` recomputes it from the setup times and refuses a session
 whose recorded decisions do not replay identically.
 

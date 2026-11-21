@@ -21,8 +21,8 @@ Scenarios
 ---------
 CORE_SCENARIOS (C0 and S1-S6) are the baseline and PS-028's six required scenarios, defined in
 src/config/scenarios.yaml. Generated scenarios (src/config/scenarios_generated.yaml, written by
-src/runner/scenario_grid.py) are extensions with IDs like Gv6d200 (IPv6 +200 ms RTT) or Gv6l5 (IPv6 5%
-loss): always a "G" prefix, so they cannot be confused with the core set.
+src/runner/scenario_grid.py) are extensions with IDs like Gv6d200 (IPv6 +200 ms RTT), Gv6l10 (IPv6 10%
+loss) or Gv6j50 (IPv6 jitter 50 ms): always a "G" prefix, so they cannot be confused with the core set.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ FILE_TOKEN_PATTERN = rf"curl(?:-{VARIANT_PATTERN})?|chromium"
 
 CORE_SCENARIOS = ("C0", "S1", "S2", "S3", "S4", "S5", "S6")
 OTHER_DEFINED_SCENARIOS = ("X1", "harness-test")   # reserved IDs that are not generated
-GENERATED_ID_PATTERN = r"G(?:v4|v6)(?:d|l)[1-9]\d*"
+GENERATED_ID_PATTERN = r"G(?:v4|v6)(?:d|l|j|c)[1-9]\d*"   # d delay, l loss, j jitter, c loss with the other family blackholed
 _GENERATED_ID_RE = re.compile(GENERATED_ID_PATTERN)
 _CORE_LIKE_RE = re.compile(r"[CSX]\d+")
 

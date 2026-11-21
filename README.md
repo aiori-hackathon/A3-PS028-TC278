@@ -132,7 +132,7 @@ measurements. The netem values were validated by pilot runs and are specific to 
 | X1 | Compound stress (optional in our proposal) | **Not run.** PS-028 asks for six scenarios and does not mention X1; our proposal listed it as an optional extra, to run only if time allowed. It was never configured in `scenarios.yaml`, and the orchestrator does not accept it. | — |
 
 Definitions are in [`src/config/scenarios.yaml`](src/config/scenarios.yaml). Extension scenarios (an IPv6
-latency sweep, IDs such as `Gv6d200`) are generated separately and are not part of the core dataset; see
+latency sweep, partial loss and jitter, IDs such as `Gv6d200`, `Gv6l10`, `Gv6j50`) are generated separately and are not part of the core dataset; see
 [`docs/client_variants.md`](docs/client_variants.md), which also covers curl variants such as `curl@he200`.
 The RTTs measured
 before the dataset's runs were 20.35–21.4 ms on baseline links, 171.0 ms for S3 and 621.0 ms for

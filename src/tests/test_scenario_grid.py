@@ -106,10 +106,14 @@ def test_the_rule_reproduces_the_hand_written_core_delays():
                {k: CORE[core_id][k] for k in ("v4", "v6", "verify_target")}
 
 
-def test_loss_scenario_and_its_unverifiable_target():
-    sid, sc = sg.scenario_for("v6", "loss", 5, BASE)
-    assert sid == "Gv6l5"
-    assert sc["v6"] == {"delay_ms_each_way": 10, "loss_pct": 5} and sc["verify_target"] == {"v4": 20, "v6": "loss:5"}
+def test_loss_scenario_declares_a_loss_band():
+    sid, sc = sg.scenario_for("v6", "loss", 10, BASE)
+    assert sid == "Gv6l10"
+    assert sc["v6"] == {"delay_ms_each_way": 10, "loss_pct": 10}
+    # a ping crosses the link twice: 1 - 0.9^2 = 19 %; 4 binomial SEs over 200 pings = 11.1 -> 12
+    assert sc["verify_target"] == {"v4": 20, "v6": {"band": "loss", "expect_loss_pct": 19.0, "tolerance_pct": 12,
+                                                     "rtt_ms": 20, "pings": 200}}
+    assert o.verify_arg(sc["verify_target"]["v6"]) == "band:loss:19:12:20:200"
 
 
 @pytest.mark.parametrize("grid, msg", [
@@ -118,11 +122,13 @@ def test_loss_scenario_and_its_unverifiable_target():
     ({"grids": [{"family": "v6", "kind": "loss", "values": [100]}]}, "core blackhole"),
     ({"grids": [{"family": "v6", "kind": "loss", "values": [0]}]}, "1-99"),
     ({"grids": [{"family": "v5", "kind": "delay", "values": [100]}]}, "family must be"),
-    ({"grids": [{"family": "v6", "kind": "jitter", "values": [10]}]}, "kind must be"),
+    ({"grids": [{"family": "v6", "kind": "spike", "values": [10]}]}, "kind must be"),
+    ({"grids": [{"family": "v6", "kind": "delay", "values": [100], "delay_twin": True}]}, "for jitter only"),
+    ({"grids": [{"family": "v6", "kind": "jitter", "values": [0]}]}, "must be > 0"),
     ({"grids": [{"family": "v6", "kind": "delay", "values": [100.5]}]}, "whole numbers"),
     ({"grids": [{"family": "v6", "kind": "delay", "values": []}]}, "whole numbers"),
     ({"grids": [{"family": "v6", "kind": "delay", "values": [100], "id": "S1"}]}, "exactly family, kind and values"),
-    ({"grids": [{"family": "v6", "kind": "delay", "values": [100, 100]}]}, "generated twice"),
+    ({"grids": [{"family": "v6", "kind": "delay", "values": [100, 100]}]}, "listed twice"),
     ({"grids": []}, "non-empty 'grids'"),
 ])
 def test_bad_grids_are_refused(grid, msg):
@@ -183,8 +189,9 @@ def test_orchestrator_dry_run_of_a_generated_scenario(capsys):
     assert "netem.sh v6 110 0" in out and "verify.sh up 20 220" in out and "_Gv6d200_curl_r01" in out
 
 
-def test_orchestrator_refuses_a_partial_loss_scenario_before_touching_the_lab(tmp_path, monkeypatch):
+def test_orchestrator_refuses_an_unverifiable_target_before_touching_the_lab(tmp_path, monkeypatch):
     _, sc = sg.scenario_for("v6", "loss", 5, BASE)
+    sc["verify_target"]["v6"] = "loss:5"               # the old placeholder form: not a lab target
     gen = _gen_file(tmp_path, {"Gv6l5": sc})
     monkeypatch.setitem(o.SUPPORTED, "curl", o.SUPPORTED["curl"] + ("Gv6l5",))
     with pytest.raises(o.OrchestratorError, match="cannot be checked by src/lab/verify.sh"):

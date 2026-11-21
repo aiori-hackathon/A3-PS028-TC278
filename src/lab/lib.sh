@@ -38,7 +38,11 @@ hl_gai_conf() {
     printf '# Intentionally has no rules: the glibc built-in default address-selection policy applies.\n'
 }
 
-# hl_set_link FAMILY DELAY_MS LOSS_PCT
+# hl_set_link FAMILY DELAY_MS LOSS_PCT [JITTER_MS]
+# JITTER_MS (optional, default 0) adds netem delay variation with the distribution named
+# explicitly ("distribution normal"; tc-netem(8): JITTER is the spread around DELAY), so the
+# result never depends on netem's default. With JITTER_MS 0 or absent the netem arguments are
+# exactly what they were before jitter existed (C0 and S1-S6 are pinned by a test).
 # Impair one link (v4 or v6) equally in both directions, without touching the client:
 #   server->client: netem on the server end's egress (hl-v4s / hl-v6s)
 #   client->server: netem on the ifb device that receives the server end's ingress
@@ -46,7 +50,7 @@ hl_gai_conf() {
 # the client sends, at the time it sends it (egress qdiscs act before tcpdump sees a packet).
 # Arguments are validated before anything is changed; exit 2 on bad input.
 hl_set_link() {
-    local family=$1 delay=$2 loss=$3 dev ifb
+    local family=$1 delay=$2 loss=$3 jitter=${4:-0} dev ifb
     case $family in
         v4) dev=$V4_IF_S ifb=$V4_IFB ;;
         v6) dev=$V6_IF_S ifb=$V6_IFB ;;
@@ -58,19 +62,26 @@ hl_set_link() {
     if [[ ! $loss =~ ^[0-9]+$ ]] || ((loss > 100)); then
         echo "error: loss must be 0-100 (%), got '$loss'" >&2; return 2
     fi
+    if [[ ! $jitter =~ ^[0-9]+$ ]]; then
+        echo "error: jitter must be whole ms, got '$jitter'" >&2; return 2
+    fi
     local netem=(netem delay "${delay}ms")
+    if ((jitter > 0)); then netem+=("${jitter}ms" distribution normal); fi
     if ((loss > 0)); then netem+=(loss "${loss}%"); fi
     run tc -n "$NS_SERVER" qdisc replace dev "$dev" root "${netem[@]}"
     run tc -n "$NS_SERVER" qdisc replace dev "$ifb" root "${netem[@]}"
 }
 
+# hl_rtt_stats [sd]
 # Read iputils ping output on stdin. Print one line:
 #   median_ms=X min_ms=X max_ms=X loss_pct=X sent=N received=N errors=N
 # (median/min/max are NA when no replies arrived). Exit 1 if there is no summary line.
+# With the argument "sd" (band verify only), " sd_ms=X" (population standard deviation of the
+# RTT samples, NA with fewer than 2) is appended; without it the line is exactly as before.
 # Loss is computed from the transmitted/received counts, not ping's own percentage.
 # errors counts ICMP errors such as "Destination Host Unreachable" (0 for a silent blackhole).
 hl_rtt_stats() {
-    awk '
+    awk -v want_sd="${1:-}" '
         match($0, /time=[0-9.]+/) { t[++n] = substr($0, RSTART + 5, RLENGTH - 5) + 0 }
         /packets transmitted/ {
             sent = $1 + 0
@@ -92,14 +103,40 @@ hl_rtt_stats() {
                 med = (n % 2) ? t[(n + 1) / 2] : (t[n / 2] + t[n / 2 + 1]) / 2
                 printf "median_ms=%.2f min_ms=%.2f max_ms=%.2f", med, t[1], t[n]
             }
-            printf " loss_pct=%g sent=%d received=%d errors=%d\n", 100 * (sent - recv) / sent, sent, recv, errs
+            printf " loss_pct=%g sent=%d received=%d errors=%d", 100 * (sent - recv) / sent, sent, recv, errs
+            if (want_sd == "sd") {
+                if (n < 2) printf " sd_ms=NA"
+                else {
+                    for (i = 1; i <= n; i++) sum += t[i]
+                    mean = sum / n
+                    for (i = 1; i <= n; i++) ss += (t[i] - mean) ^ 2
+                    printf " sd_ms=%.2f", sqrt(ss / n)
+                }
+            }
+            printf "\n"
         }'
+}
+
+# hl_band_pings TARGET: number of pings a band target asks for (its last field); empty otherwise.
+hl_band_pings() {
+    case $1 in
+        band:loss:*|band:jitter:*) printf '%s\n' "${1##*:}" ;;
+    esac
 }
 
 # hl_rtt_check TARGET STATS
 # TARGET is an RTT in ms, "blackhole" (100% loss and no ICMP errors: a silent drop)
 # or "max:N" (below N ms, no loss).
 # A numeric target passes when loss is 0 and |median - target| <= max(2 ms, 10% of target).
+# This point check is the default and is unchanged. Band targets are for links where a point
+# check is meaningless; the scenario declares the band (src/runner/scenario_grid.py):
+#   band:loss:EXPECT_PCT:TOL_PCT:RTT_MS:N   round-trip ping loss within EXPECT +/- TOL percentage
+#       points, no ICMP errors, and the median of the replies within the numeric tolerance of RTT
+#   band:jitter:MED_LO:MED_HI:SD_LO:SD_HI:N   no loss, median RTT in [MED_LO, MED_HI] and the
+#       RTT standard deviation (needs STATS from "hl_rtt_stats sd") in [SD_LO, SD_HI]
+# N is the number of pings (used by verify.sh, not here). Every verdict prints the observed values.
+# Verdict keys must never reuse a hl_rtt_stats key (median_ms, sd_ms, ...): verify.sh prints both on
+# one line and the orchestrator's parser keeps the last value of a key.
 # Prints the target and verdict; exit 0 on PASS, 1 on FAIL, 2 on a bad TARGET.
 hl_rtt_check() {
     awk -v target="$1" -v stats="$2" '
@@ -118,6 +155,30 @@ hl_rtt_check() {
                 lim = substr(target, 5) + 0
                 if (loss == 0 && med != "NA" && med + 0 < lim) { printf "target_ms=<%g PASS\n", lim; exit 0 }
                 printf "target_ms=<%g FAIL (median %s, loss %g%%)\n", lim, med, loss; exit 1
+            }
+            num = "[0-9]+(\\.[0-9]+)?"
+            if (target ~ ("^band:loss:" num ":" num ":" num ":[0-9]+$")) {
+                split(target, b, ":"); exp_l = b[3] + 0; tl = b[4] + 0; rt = b[5] + 0
+                errs = s["errors"] + 0
+                rtol = rt * 0.10; if (rtol < 2) rtol = 2
+                head = sprintf("target=band:loss expect_loss_pct=%g tol_pct=%g rtt_ms=%g rtt_tol_ms=%.1f observed_loss_pct=%g observed_median_ms=%s", exp_l, tl, rt, rtol, loss, med)
+                dl = loss - exp_l; if (dl < 0) dl = -dl
+                if (dl > tl) { printf "%s FAIL (loss outside %g-%g%%)\n", head, exp_l - tl, exp_l + tl; exit 1 }
+                if (errs != 0) { printf "%s FAIL (%d ICMP errors: drops are not silent)\n", head, errs; exit 1 }
+                if (med == "NA") { printf "%s FAIL (no replies)\n", head; exit 1 }
+                dr = med - rt; if (dr < 0) dr = -dr
+                if (dr > rtol) { printf "%s FAIL (median outside %.1f-%.1f)\n", head, rt - rtol, rt + rtol; exit 1 }
+                printf "%s PASS\n", head; exit 0
+            }
+            if (target ~ ("^band:jitter:" num ":" num ":" num ":" num ":[0-9]+$")) {
+                split(target, b, ":"); mlo = b[3] + 0; mhi = b[4] + 0; slo = b[5] + 0; shi = b[6] + 0
+                sd = s["sd_ms"]
+                head = sprintf("target=band:jitter band_median_ms=%g-%g band_sd_ms=%g-%g observed_median_ms=%s observed_sd_ms=%s observed_loss_pct=%g", mlo, mhi, slo, shi, med, sd, loss)
+                if (loss != 0) { printf "%s FAIL (loss %g%%)\n", head, loss; exit 1 }
+                if (med == "NA" || sd == "" || sd == "NA") { printf "%s FAIL (no median or spread)\n", head; exit 1 }
+                if (med + 0 < mlo || med + 0 > mhi) { printf "%s FAIL (median outside band)\n", head; exit 1 }
+                if (sd + 0 < slo || sd + 0 > shi) { printf "%s FAIL (spread outside band)\n", head; exit 1 }
+                printf "%s PASS\n", head; exit 0
             }
             if (target !~ /^[0-9]+(\.[0-9]+)?$/) { printf "error: bad target %s\n", target; exit 2 }
             t = target + 0

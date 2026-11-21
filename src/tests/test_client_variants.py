@@ -143,7 +143,7 @@ def _record(client="curl@he200"):
 
 def test_variant_record_keeps_implementation_and_variant_apart_and_validates():
     r = _record()
-    assert r["schema_version"] == "0.4"
+    assert r["schema_version"] == "0.5"
     assert r["client"]["name"] == "curl" and r["client"]["variant"] == "he200"
     assert label_of(r["client"]) == "curl@he200"
     assert "_curl-he200_" in r["run_id"]
