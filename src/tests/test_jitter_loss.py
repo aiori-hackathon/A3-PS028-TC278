@@ -413,3 +413,112 @@ def test_band_pilot_plan_restores_and_verifies_the_baseline_last():
     assert [s[1] for s in steps[-3:]] == ["restore", "restore", "verify"]
     assert steps[-1][2][2:] == ["20", "20"]
     assert not any("tcpdump" in " ".join(s[2]) or "curl" in s[2][0] for s in steps)   # apply and verify only
+
+
+# --- runs without a winner: kept in the median and in the outcomes ----------------------
+
+from analysis.metrics import (FAILED_RANKED, FAILURE_RATE_CAVEAT, bootstrap_median_ci,  # noqa: E402
+                              bootstrap_median_ci_ranked)
+
+
+def test_ranked_ci_is_identical_without_failures():
+    xs = [220.0 + (i * 7) % 5 for i in range(25)]
+    a, b = bootstrap_median_ci(xs), bootstrap_median_ci_ranked(xs)
+    assert {k: b[k] for k in a} == a and b["unbounded"] is False and b["n_without_value"] == 0
+
+
+def test_failed_runs_are_ranked_not_dropped():
+    # 6 of 20 runs time out; the 14 successes are tight around 20 ms
+    xs = [20.0 + i * 0.01 for i in range(14)] + [None] * 6
+    legacy = adaptive_decision(xs, 20, 50, 25.0)
+    ranked = adaptive_decision(xs, 20, 50, 25.0, failed_runs=FAILED_RANKED)
+    assert legacy["decision"] == "stop" and legacy["median_ms"] < 20.1          # excluded: biased low, stops
+    assert ranked["median_ms"] == legacy["median_ms"] or ranked["median_ms"] > legacy["median_ms"]
+    assert ranked["ci"]["unbounded"] is True and ranked["ci"]["hi"] is None and ranked["ci"]["width"] is None
+    assert ranked["decision"] == "continue"                                     # unbounded CI never stops it
+    majority = adaptive_decision([20.0] * 9 + [None] * 11, 20, 50, 25.0, failed_runs=FAILED_RANKED)
+    assert majority["median_ms"] is None                                        # above every observed value
+
+
+def test_three_outcomes_cover_every_run():
+    st = adaptive_decision([20.0, None, 220.0, None, 21.0], 1, 50, 25.0, winners=["v6", None, "v4", None, "v6"],
+                           failed_runs=FAILED_RANKED)
+    oc = st["win"]["outcomes"]
+    assert (oc["v6"]["n"], oc["v4"]["n"], oc["none"]["n"]) == (2, 1, 2) and st["win"]["n"] == 5
+    assert oc["none"]["ci"] == wilson_ci(2, 5)
+
+
+def test_orchestrator_uses_the_ranked_rule_and_the_record_validates():
+    from tests.test_client_variants import _record as variant_record
+    r = variant_record("curl")
+    prev, prev_w = [None] * 12 + [20.0] * 7, [None] * 12 + ["v6"] * 7
+    r["adaptive"] = o.adaptive_block(prev, r, 20, 50, 25.0, 0.3, prev_w)
+    st = r["adaptive"]["after_this_run"]
+    assert r["adaptive"]["failed_runs"] == FAILED_RANKED and st["failed_runs"] == FAILED_RANKED
+    assert st["ci"]["unbounded"] and st["median_ms"] is None and st["decision"] == "continue"
+    assert validate(r) == []
+    st["win"]["outcomes"]["none"]["n"] -= 1                                     # a dropped run is refused
+    assert any("no run may be dropped" in e for e in validate(r))
+
+
+def test_summary_line_carries_the_caveat_when_a_run_had_no_winner():
+    st = adaptive_decision([20.0] * 19 + [None], 20, 50, 25.0, winners=["v6"] * 19 + [None], failed_runs=FAILED_RANKED)
+    line = o.adaptive_summary_line("Gv6c30", st, 0.3)
+    assert "no winner 1" in line and "CAVEAT" in line and "ranked highest" in line
+    st = adaptive_decision([20.0] * 20, 20, 50, 25.0, winners=["v6"] * 20, failed_runs=FAILED_RANKED)
+    assert "CAVEAT" not in o.adaptive_summary_line("Gv6c30", st, 0.3)
+
+
+def test_caveat_states_the_runner_limits_actually_set():
+    from runner import client_chromium
+    from runner.clients import CURL_MAX_TIME_S, curl_argv
+    argv = curl_argv()
+    assert argv[argv.index("--max-time") + 1] == str(CURL_MAX_TIME_S)
+    assert f"curl --max-time {CURL_MAX_TIME_S} s" in FAILURE_RATE_CAVEAT
+    assert f"navigation timeout {client_chromium.NAV_TIMEOUT_MS // 1000} s" in FAILURE_RATE_CAVEAT
+
+
+def test_analysis_keeps_a_no_winner_run_and_says_why_rates_differ(tmp_path):
+    lost = [(T0, g.ip_tcp(g.C6, g.S6, 42000, 80, g.SYN, seq=1))]                # nothing answered
+    recs = [_record(tmp_path, 1, _retransmitted_v6(T0), "v6", 1020.0),
+            _record(tmp_path, 2, lost, None, None)]
+    recs[1]["packet_observations"]["winning_family"] = {"status": "not_observed", "value": None}
+    recs[1]["metrics"]["tcp_setup_time_ms"] = {"status": "not_observed", "value": None}
+    c = sr.analyse_cell(recs, repo=tmp_path)
+    assert c["win"]["none"]["wins"] == 1 and c["n_runs"] == 2 and c["runs_without_setup_time"] == 1
+    assert c["median_all_runs_ms"] is None                                       # 1 of 2 runs has no value
+    text = sr.report([c])
+    assert "no winner 1/2" in text and "CAVEAT" in text
+
+
+CAMPAIGN = ",".join(f"{s}:{c}" for s in ("Gv6l10", "Gv6l30", "Gv6l50", "Gv6j50", "Gv6j70", "Gv6d200", "Gv6d280",
+                                         "Gv6c30") for c in ("curl", "chromium"))
+
+
+def test_run_matrix_runs_an_only_list_in_order():
+    from runner import run_matrix as rm
+    todo = rm.select(rm.PLAN, 1, CAMPAIGN)
+    assert [n for n, _, _ in todo] == list(range(1, 17))
+    assert todo[0][1:] == ("Gv6l10", "curl") and todo[-1][1:] == ("Gv6c30", "chromium")
+    assert rm.select(rm.PLAN, 1, "Gv6l10:curl,Gv6nope:curl") == []
+    assert rm.select(rm.PLAN, 1, "Gv6l10:curl,Gv6l10:curl") == []
+    assert rm.select(rm.PLAN, 1, "Gv6d200:curl") == [(0, "Gv6d200", "curl")]      # single extra: unchanged
+
+
+def test_run_matrix_resume_command_keeps_the_settings():
+    from runner import run_matrix as rm
+    todo = rm.select(rm.PLAN, 1, CAMPAIGN)
+    args = ["--only", CAMPAIGN, "--reps-adaptive", "20", "50", "--ci-width-ms", "25", "--win-ci-width", "0.3"]
+    cmd = rm.resume_command(todo, 14, True, args)
+    assert cmd == ("sudo .venv/bin/python src/runner/run_matrix.py --only Gv6c30:curl,Gv6c30:chromium "
+                   "--reps-adaptive 20 50 --ci-width-ms 25 --win-ci-width 0.3")
+    assert rm.resume_command(todo, 16, True, args) == "(nothing left in the --only list)"
+    assert rm.resume_command(rm.select(rm.PLAN), 3, False, []).endswith("--from 4")
+
+
+def test_run_matrix_dry_run_of_the_campaign(capsys):
+    from runner import run_matrix as rm
+    assert rm.main(["--dry-run", "--only", CAMPAIGN, "--reps-adaptive", "20", "50", "--ci-width-ms", "25",
+                    "--win-ci-width", "0.3"]) == 0
+    out = capsys.readouterr().out
+    assert "16 batches from the --only list" in out and out.count("--win-ci-width 0.3") == 16

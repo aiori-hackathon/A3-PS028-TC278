@@ -106,12 +106,43 @@ Expected, from the configuration only (prediction): a SYN round succeeds when bo
 its SYN-ACK get through, with probability 0.7² = 0.49. The kernel retransmits a SYN after 1 s and
 doubles the timeout each time, so the SYNs on one socket would go out at about 0, 1, 3 and 7 s,
 and setup times would group near 20, 1020, 3020 and 7020 ms (about 49%, 25%, 13% and 6% of runs).
-About 7% of curl runs would fail at curl's `--max-time 10` before a fifth SYN. The server's own
+About 7% of curl runs would end with no winner at curl's `--max-time 10` before a fifth SYN
+(see the time limits below; this rate is not comparable with Chromium's). The server's own
 SYN-ACK retransmissions (when a SYN arrived but its SYN-ACK was lost) can also complete a
 handshake, and they are reported separately. Chromium may open further attempts on new source
 ports; those are new attempts, not retransmissions, and are reported apart from them.
 Raising `TAIL_WAIT_S` is not needed here: the retransmitted SYN is part of the winning handshake,
 so it falls inside the window.
+
+### Time limits of the two clients (configuration, recorded in each run's `client.config.run_time_limit`)
+
+| Client | Limit set by the runner | Effect in `Gv6c30` (prediction) |
+|---|---|---|
+| curl 8.5.0 | `--max-time 10` (whole transfer, connection attempts included; exit 28 when reached) | SYN rounds at about 0, 1, 3, 7 s fit; a fifth at about 15 s does not |
+| Chromium (Playwright 1.64.1) | `page.goto` timeout 15 000 ms (`NAV_TIMEOUT_MS`); the runner kills the process at 60 s. Chromium's own connection timeouts are not overridden and are not relied on | SYN rounds at about 0, 1, 3, 7 s fit; one at about 15 s meets the limit |
+
+Beneath both, the kernel gives up on a connecting socket after `net.ipv4.tcp_syn_retries` SYN
+retransmissions: **6 in hl-client** (read by the band pilot, 2026-11-21), so about 127 s in total
+with the 1 s initial timeout doubling. That is far above both runner limits, so in this lab the
+runner limits end a run first. On the server side `net.ipv4.tcp_synack_retries` is **5 in
+hl-server**, so the server can repeat a SYN-ACK several times within either client's limit;
+`syn_retransmit.py` reports those repeats separately from the client's SYN retransmissions.
+
+**Caveat, wherever a no-winner (failure) rate is reported:** a run without a winner ends at the
+client's own time limit, and the two limits differ (10 s against 15 s). The no-winner rates of
+curl and Chromium on `Gv6c30` are therefore **not comparable**, and their difference says
+**nothing about Happy Eyeballs**. `syn_retransmit.py` and the orchestrator's adaptive summary print
+this caveat with every non-zero no-winner count (`analysis.metrics.FAILURE_RATE_CAVEAT`).
+
+### Runs without a winner are kept
+
+Every run counts. Outcomes are reported three ways over all runs: IPv6 won, IPv4 won, no winner,
+each with a 95% Wilson interval. The stopping rule's median (from schema 0.5,
+`adaptive.failed_runs: ranked_highest`) keeps runs without a setup time and ranks them above every
+observed value, because such a run took longer than the client allowed. Dropping them, which is
+what the 0.3/0.4 rule did, would bias the median low and could stop a cell early. A median CI that
+reaches those runs is unbounded and never counts as narrow enough. The cluster table lists
+successes only and says how many runs it leaves out.
 
 ## Campaign settings (decided 2026-11-21, not yet run)
 
@@ -124,11 +155,49 @@ Sixteen cells: curl and Chromium × `Gv6l10`, `Gv6l30`, `Gv6l50`, `Gv6j50`, `Gv6
 - 0.3 win-fraction CI width: in the loss and jitter cells the share of runs each family wins is
   the quantity of interest, so it is part of the stopping rule, not only reported.
 - Cap 50. A cell that stops at 50 with either CI still wider than requested is reported as such.
-- A curl run in `Gv6c30` that reaches `--max-time 10` is a recorded failure (no winner): it is
-  left out of the setup-time median and counts as not won by IPv6.
+- A run in `Gv6c30` that reaches its client's time limit is a recorded failure (no winner): it stays
+  in the median (ranked highest) and in the outcome counts, and its rate carries the caveat above.
 
 Before the campaign, `src/runner/band_pilot.py` applies each band scenario and runs verify only
 (no clients, no captures), to check that the loss and jitter bands pass on a correct link.
+
+## Band-verify pilot (2026-11-21, apply and verify only; no client runs)
+
+`src/runner/band_pilot.py`, pilot `20261121T182447Z`, code `7f9b1a0` (clean tree), 5 verify runs per
+scenario, 200 pings each on IPv6 (ICMP echo: packet-level). All 30 band verifies and the baseline
+restore passed. The IPv4 link measured 0% loss in every trial, and 100% in `Gv6c30`, as configured.
+
+| Scenario | Band | Observed (5 trials) |
+|---|---|---|
+| `Gv6l10` | loss 19 ± 12 % | 20.5, 17.5, 21.0, 18.0, 15.5 % (mean 18.5) |
+| `Gv6l30` | loss 51 ± 15 % | 50.0, 53.0, 50.0, 61.5, 52.0 % (mean 53.3) |
+| `Gv6l50` | loss 75 ± 13 % | 74.5, 75.0, 72.5, 72.5, 76.5 % (mean 74.2) |
+| `Gv6c30` | loss 51 ± 15 %, IPv4 blackhole | 46.5, 55.5, 54.5, 49.0, 47.5 % (mean 50.6) |
+| `Gv6j50` | median 194.9–245.1 ms, SD 56.5–84.9 ms | median 211.5–223.0 ms; SD 65.9–69.6 ms |
+| `Gv6j70` | median 264.9–335.1 ms, SD 79.1–118.9 ms | median 293.0–314.0 ms; SD 93.6–104.6 ms |
+
+The median RTT of the replies in the loss scenarios was 20.1–20.9 ms.
+
+Observations, not conclusions (five trials per scenario are too few to calibrate a band):
+- `Gv6l30` trial 4 (61.5%) is about 3 binomial standard errors above the expected 51%. It is
+  inside the 4-SE band. Every campaign run records its own verify values
+  (`scenario.verify_observed`), so the campaign itself will show whether such values recur.
+- **Jitter spread (derived from the verify pings, ICMP; not from client packets).** For
+  independent normal draws each way the RTT SD should be J·√2: 70.7 ms for `Gv6j50` and 99.0 ms
+  for `Gv6j70`. The mean of five measured SDs was 67.6 ms (all five below 70.7) and 100.0 ms.
+  The standard error of a five-trial mean is about 1.6 ms and 2.2 ms. So `Gv6j70` matches its
+  prediction (+0.5 SE), and `Gv6j50` sits about 2 SE below it. Both are inside their bands.
+- **What this does not show: whether negative draws are clamped.** With base delay 10 + 2J, a
+  draw is negative about 1.4% (`Gv6j50`) and 1.6% (`Gv6j70`) of the time in each direction.
+  Clamping those draws at 0 would lower the RTT SD by only about 0.9 ms and 1.4 ms (1.3–1.5%;
+  computed by simulating 400 000 draws). That is smaller than the five-trial standard error, so
+  this pilot cannot tell clamped draws from unclamped ones. The SD agreement is consistent with
+  the design estimate that clamping is rare. It is not evidence that clamping is absent. Settling
+  this would need the individual ping RTTs, which verify.sh does not keep, or many more trials.
+
+Measured verify durations (pilot log timestamps): 8.1–8.2 s for a loss band, 8.5–8.9 s for a
+jitter band, 10.1–10.2 s for `Gv6c30` (blackhole plus loss band). A point verify took 5.8 s in the
+core C0 runs.
 
 ## Results
 

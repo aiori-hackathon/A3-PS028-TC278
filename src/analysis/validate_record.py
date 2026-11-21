@@ -168,9 +168,13 @@ def _check_ci(errors: list[str], path: str, ci: Any) -> None:
         return
     if not _require_keys(errors, path, ci, {"lo", "hi", "width", "level", "n", "resamples", "seed", "method"}):
         return
+    # 0.5 ranked CIs (failed_runs ranked_highest): an end on a run without a setup time is null.
+    unbounded = ci.get("unbounded") is True
     for k in ("lo", "hi", "width", "level"):
-        if not _is_number(ci.get(k)):
+        if not _is_number(ci.get(k)) and not (unbounded and k != "level" and ci.get(k) is None):
             errors.append(f"{path}.{k}: must be a number")
+    if unbounded and ci.get("width") is not None:
+        errors.append(f"{path}.width: must be null for an unbounded interval")
     if _is_number(ci.get("lo")) and _is_number(ci.get("hi")) and ci["hi"] < ci["lo"]:
         errors.append(f"{path}: hi is below lo")
     for k in ("n", "resamples", "seed"):
@@ -179,8 +183,14 @@ def _check_ci(errors: list[str], path: str, ci: Any) -> None:
 
 
 def _check_win(errors: list[str], p: str, win: Any) -> None:
-    if not _require_keys(errors, p, win, {"family", "wins", "n", "fraction", "ci"}):
+    if not _require_keys(errors, p, win, {"family", "wins", "n", "fraction", "ci", "outcomes"}):
         return
+    oc = win.get("outcomes")
+    if not (isinstance(oc, dict) and set(oc) == {"v6", "v4", "none"}
+            and all(isinstance(x, dict) and _is_int(x.get("n")) for x in oc.values())):
+        errors.append(f"{p}.outcomes: needs v6, v4 and none, each with an integer n")
+    elif _is_int(win.get("n")) and sum(x["n"] for x in oc.values()) != win["n"]:
+        errors.append(f"{p}.outcomes: v6 + v4 + none must equal n (no run may be dropped)")
     if win.get("family") not in FAMILIES:
         errors.append(f"{p}.family: must be v4 or v6")
     k, n = win.get("wins"), win.get("n")
@@ -206,7 +216,12 @@ def _check_adaptive(errors: list[str], ad: Any, version: str | None = None) -> N
             errors.append("adaptive.win_ci_width: only in schema 0.5 records")
         elif not (_is_number(win_w) and 0 < win_w < 1):
             errors.append("adaptive.win_ci_width: must be between 0 and 1")
-    extra = ad.keys() - keys - {"win_ci_width"}
+    if "failed_runs" in ad:
+        if version != "0.5":
+            errors.append("adaptive.failed_runs: only in schema 0.5 records")
+        elif ad["failed_runs"] not in ("excluded", "ranked_highest"):
+            errors.append("adaptive.failed_runs: must be 'excluded' or 'ranked_highest'")
+    extra = ad.keys() - keys - {"win_ci_width", "failed_runs"}
     if extra:
         errors.append(f"adaptive: unexpected keys {sorted(extra)}")
     lo, hi = ad.get("min_reps"), ad.get("max_reps")
@@ -226,6 +241,8 @@ def _check_adaptive(errors: list[str], ad: Any, version: str | None = None) -> N
     if st.get("median_ms") is not None and not _is_number(st["median_ms"]):
         errors.append(f"{p}.median_ms: must be a number or null")
     _check_ci(errors, f"{p}.ci", st.get("ci"))
+    if st.get("failed_runs", "excluded") != ad.get("failed_runs", "excluded"):
+        errors.append(f"{p}.failed_runs: must match adaptive.failed_runs")
     if "win" in st:
         if version != "0.5":
             errors.append(f"{p}.win: only in schema 0.5 records")
