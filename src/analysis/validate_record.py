@@ -21,12 +21,16 @@ if __package__ in (None, ""):  # run as a script: make src/ importable
 from analysis.names import (FILE_TOKEN_PATTERN, GENERATED_ID_PATTERN, InvalidName, file_token,  # noqa: E402
                             is_generated_id, label_of, parse_client)
 
-SCHEMA_VERSION = "0.4"
+SCHEMA_VERSION = "0.5"
 # 0.1 records (Milestone 1 harness runs) stay valid; 0.2 adds the required cross_checks block;
 # 0.3 adds two optional blocks: profile (measurement cost) and adaptive (stopping-rule state);
-# 0.4 adds the optional client.variant (curl@he<N>) and allows generated extension scenario IDs.
-SUPPORTED_VERSIONS = {"0.1", "0.2", "0.3", "0.4"}
-SINCE_0_3 = {"0.3", "0.4"}
+# 0.4 adds the optional client.variant (curl@he<N>) and allows generated extension scenario IDs;
+# 0.5 adds scenario.verify_observed (what the pre-run verify measured, point or band mode) and the
+# optional win-fraction fields of the adaptive block (win_ci_width, after_this_run.win).
+SUPPORTED_VERSIONS = {"0.1", "0.2", "0.3", "0.4", "0.5"}
+SINCE_0_3 = {"0.3", "0.4", "0.5"}
+SINCE_0_4 = {"0.4", "0.5"}
+VERIFY_MODES = {"point", "band"}
 OPTIONAL_KEYS_0_3 = {"profile", "adaptive"}
 ADAPTIVE_DECISIONS = {"continue", "stop"}
 ADAPTIVE_REASONS = {"ci_width_reached", "max_reps_reached"}
@@ -174,12 +178,35 @@ def _check_ci(errors: list[str], path: str, ci: Any) -> None:
             errors.append(f"{path}.{k}: must be an integer")
 
 
-def _check_adaptive(errors: list[str], ad: Any) -> None:
+def _check_win(errors: list[str], p: str, win: Any) -> None:
+    if not _require_keys(errors, p, win, {"family", "wins", "n", "fraction", "ci"}):
+        return
+    if win.get("family") not in FAMILIES:
+        errors.append(f"{p}.family: must be v4 or v6")
+    k, n = win.get("wins"), win.get("n")
+    if not (_is_int(k) and _is_int(n) and 0 <= k <= n):
+        errors.append(f"{p}: need integers 0 <= wins <= n")
+    fr = win.get("fraction")
+    if fr is not None and not (_is_number(fr) and 0 <= fr <= 1):
+        errors.append(f"{p}.fraction: must be between 0 and 1 or null")
+    ci = win.get("ci")
+    if ci is not None and _require_keys(errors, f"{p}.ci", ci, {"lo", "hi", "width", "level", "n", "method"}):
+        if not (_is_number(ci.get("lo")) and _is_number(ci.get("hi")) and 0 <= ci["lo"] <= ci["hi"] <= 1):
+            errors.append(f"{p}.ci: need 0 <= lo <= hi <= 1")
+
+
+def _check_adaptive(errors: list[str], ad: Any, version: str | None = None) -> None:
     """Adaptive-repetition settings and the stopping-rule state after this run."""
     keys = {"min_reps", "max_reps", "ci_width_ms", "metric", "after_this_run"}
     if not _require_keys(errors, "adaptive", ad, keys):
         return
-    extra = ad.keys() - keys
+    win_w = ad.get("win_ci_width")
+    if "win_ci_width" in ad:
+        if version != "0.5":
+            errors.append("adaptive.win_ci_width: only in schema 0.5 records")
+        elif not (_is_number(win_w) and 0 < win_w < 1):
+            errors.append("adaptive.win_ci_width: must be between 0 and 1")
+    extra = ad.keys() - keys - {"win_ci_width"}
     if extra:
         errors.append(f"adaptive: unexpected keys {sorted(extra)}")
     lo, hi = ad.get("min_reps"), ad.get("max_reps")
@@ -199,6 +226,13 @@ def _check_adaptive(errors: list[str], ad: Any) -> None:
     if st.get("median_ms") is not None and not _is_number(st["median_ms"]):
         errors.append(f"{p}.median_ms: must be a number or null")
     _check_ci(errors, f"{p}.ci", st.get("ci"))
+    if "win" in st:
+        if version != "0.5":
+            errors.append(f"{p}.win: only in schema 0.5 records")
+        else:
+            _check_win(errors, f"{p}.win", st["win"])
+    elif "win_ci_width" in ad:
+        errors.append(f"{p}.win: required when adaptive.win_ci_width is set")
     if st.get("decision") not in ADAPTIVE_DECISIONS:
         errors.append(f"{p}.decision: must be one of {sorted(ADAPTIVE_DECISIONS)}")
     reason = st.get("reason")
@@ -209,6 +243,34 @@ def _check_adaptive(errors: list[str], ad: Any) -> None:
     rep_n = st.get("n_runs")
     if _is_int(rep_n) and _is_int(hi) and rep_n > hi:
         errors.append(f"{p}.n_runs: above max_reps")
+
+
+def _check_verify_observed(errors: list[str], vo: Any) -> None:
+    """scenario.verify_observed (0.5): per family, the target, the mode and what ping measured."""
+    if not isinstance(vo, dict) or not vo or set(vo) - FAMILIES:
+        errors.append("scenario.verify_observed: must map v4/v6 to objects")
+        return
+    for fam, e in vo.items():
+        p = f"scenario.verify_observed.{fam}"
+        if not _require_keys(errors, p, e, {"mode", "target", "verify_arg", "verdict", "observed"}):
+            continue
+        if e.get("mode") not in VERIFY_MODES:
+            errors.append(f"{p}.mode: must be one of {sorted(VERIFY_MODES)}")
+        if (e.get("mode") == "band") != isinstance(e.get("target"), dict):
+            errors.append(f"{p}: band mode goes with a band target (an object), point mode with a number or 'blackhole'")
+        if not (isinstance(e.get("verify_arg"), str) and e["verify_arg"]):
+            errors.append(f"{p}.verify_arg: must be a non-empty string")
+        if e.get("verdict") not in ("PASS", "FAIL", None):
+            errors.append(f"{p}.verdict: must be PASS, FAIL or null")
+        obs = e.get("observed")
+        if obs is None:
+            continue
+        if not isinstance(obs, dict):
+            errors.append(f"{p}.observed: must be an object or null")
+            continue
+        for k, v in obs.items():
+            if v is not None and not (_is_number(v) and v >= 0):
+                errors.append(f"{p}.observed.{k}: must be a non-negative number or null")
 
 
 def _check_variant(errors: list[str], cl: dict) -> None:
@@ -260,15 +322,20 @@ def validate(record: Any) -> list[str]:
         if "profile" in record:
             _check_profile(errors, record["profile"])
         if "adaptive" in record:
-            _check_adaptive(errors, record["adaptive"])
+            _check_adaptive(errors, record["adaptive"], version)
 
     # scenario
     sc = record.get("scenario")
     if _require_keys(errors, "scenario", sc,
                      {"id", "label", "repetition", "netem", "dns", "measured_rtt_ms"}):
-        if sc.get("id") not in SCENARIO_IDS and not (version == "0.4" and is_generated_id(sc.get("id"))):
+        if sc.get("id") not in SCENARIO_IDS and not (version in SINCE_0_4 and is_generated_id(sc.get("id"))):
             errors.append(f"scenario.id: {sc.get('id')!r} not in {sorted(SCENARIO_IDS)}"
-                          + (" or a generated extension ID" if version == "0.4" else ""))
+                          + (" or a generated extension ID" if version in SINCE_0_4 else ""))
+        if "verify_observed" in sc:
+            if version != "0.5":
+                errors.append("scenario.verify_observed: only in schema 0.5 records")
+            else:
+                _check_verify_observed(errors, sc["verify_observed"])
         if not isinstance(sc.get("label"), str):
             errors.append("scenario.label: must be a string")
         rep = sc.get("repetition")
@@ -290,7 +357,7 @@ def validate(record: Any) -> list[str]:
     if _require_keys(errors, "client", cl, {"name", "version", "argv", "config"}):
         if cl.get("name") not in CLIENT_NAMES:
             errors.append(f"client.name: must be one of {sorted(CLIENT_NAMES)}")
-        extra_cl = cl.keys() - {"name", "version", "argv", "config"} - ({"variant"} if version == "0.4" else set())
+        extra_cl = cl.keys() - {"name", "version", "argv", "config"} - ({"variant"} if version in SINCE_0_4 else set())
         if extra_cl:
             errors.append(f"client: unexpected keys {sorted(extra_cl)}")
         _check_variant(errors, cl)

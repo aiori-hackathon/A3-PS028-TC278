@@ -99,15 +99,54 @@ def load_lab_env(path: Path = LAB / "lab.env") -> dict[str, str]:
     return env
 
 
-LAB_VERIFY_TARGET_RE = re.compile(r"blackhole|\d+(\.\d+)?")   # what src/lab/verify.sh accepts
+LAB_VERIFY_TARGET_RE = re.compile(r"blackhole|\d+(\.\d+)?")   # point targets src/lab/verify.sh accepts
+BAND_KEYS = {"loss": {"band", "expect_loss_pct", "tolerance_pct", "rtt_ms", "pings"},
+             "jitter": {"band", "median_ms", "sd_ms", "pings"}}
+
+
+def _num(x) -> bool:
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and x >= 0
+
+
+def _g(x) -> str:
+    return f"{x:g}"
+
+
+def verify_arg(target) -> str:
+    """The verify.sh argument for one family's verify target.
+
+    A number or "blackhole" is the point check, passed through unchanged (as str() always did).
+    A band mapping (generated loss and jitter scenarios, src/runner/scenario_grid.py) becomes
+    band:loss:EXPECT:TOL:RTT:N or band:jitter:MED_LO:MED_HI:SD_LO:SD_HI:N (src/lab/lib.sh).
+    Anything else raises OrchestratorError.
+    """
+    if not isinstance(target, dict):
+        if not LAB_VERIFY_TARGET_RE.fullmatch(str(target)):
+            raise OrchestratorError(f"verify target {target!r} cannot be checked by src/lab/verify.sh")
+        return str(target)
+    kind = target.get("band")
+    if kind not in BAND_KEYS or set(target) != BAND_KEYS[kind]:
+        raise OrchestratorError(f"band verify target {target!r}: needs exactly {sorted(BAND_KEYS.get(kind, {'band'}))}")
+    n = target["pings"]
+    if not (isinstance(n, int) and not isinstance(n, bool) and n >= 20):
+        raise OrchestratorError(f"band verify target {target!r}: pings must be a whole number >= 20")
+    if kind == "loss":
+        vals = [target["expect_loss_pct"], target["tolerance_pct"], target["rtt_ms"]]
+        if not all(_num(v) for v in vals):
+            raise OrchestratorError(f"band verify target {target!r}: values must be non-negative numbers")
+        return "band:loss:" + ":".join(_g(v) for v in vals) + f":{n}"
+    bands = [target["median_ms"], target["sd_ms"]]
+    if not all(isinstance(b, list) and len(b) == 2 and all(_num(v) for v in b) and b[0] <= b[1] for b in bands):
+        raise OrchestratorError(f"band verify target {target!r}: median_ms and sd_ms must be [low, high]")
+    return "band:jitter:" + ":".join(_g(v) for b in bands for v in b) + f":{n}"
 
 
 def load_scenarios(ids: list[str], path: Path = SCENARIOS_FILE, client: str = "curl",
                    generated=AUTO) -> dict[str, dict]:
     """Definitions of the given scenarios (scenarios.yaml plus the generated extensions).
 
-    A scenario whose verify target the lab's verify.sh cannot check (a generated partial-loss
-    scenario, target "loss:N") is refused here, before anything in the lab is changed.
+    A scenario whose verify target the lab's verify.sh cannot check is refused here, before
+    anything in the lab is changed (verify_arg).
     """
     cfg = load_config(path, generated)
     out = {}
@@ -120,11 +159,10 @@ def load_scenarios(ids: list[str], path: Path = SCENARIOS_FILE, client: str = "c
             raise OrchestratorError(f"scenario {sid} missing from {path}")
         sc = cfg["scenarios"][sid]
         for fam, target in sc["verify_target"].items():
-            if not LAB_VERIFY_TARGET_RE.fullmatch(str(target)):
-                raise OrchestratorError(
-                    f"scenario {sid}: verify target {target!r} for {fam} cannot be checked by src/lab/verify.sh "
-                    "(it checks an RTT or 'blackhole' only); partial-loss scenarios need a reviewed verify "
-                    "extension before they can run")
+            try:
+                verify_arg(target)
+            except OrchestratorError as exc:
+                raise OrchestratorError(f"scenario {sid}, {fam}: {exc}") from exc
         out[sid] = sc
     out["_baseline"] = cfg["baseline"]
     return out
@@ -137,12 +175,19 @@ def in_ns_as_user(ns: str, user: str, argv: list[str]) -> list[str]:
     return ["ip", "netns", "exec", ns, "runuser", "-u", user, "--", *argv]
 
 
-def cmd_netem(family: str, delay_ms: int, loss_pct: int) -> list[str]:
-    return [str(LAB / "netem.sh"), family, str(delay_ms), str(loss_pct)]
+def cmd_netem(family: str, delay_ms: int, loss_pct: int, jitter_ms: int = 0) -> list[str]:
+    """netem.sh arguments; the jitter argument is added only when there is jitter, so every
+    scenario without it (C0, S1-S6 among them) gets exactly the three arguments it always had."""
+    return [str(LAB / "netem.sh"), family, str(delay_ms), str(loss_pct)] + ([str(jitter_ms)] if jitter_ms else [])
+
+
+def netem_for(family: str, link: dict) -> list[str]:
+    """cmd_netem for one family's scenario definition."""
+    return cmd_netem(family, link["delay_ms_each_way"], link["loss_pct"], link.get("jitter_ms_each_way", 0))
 
 
 def cmd_verify(v4_target, v6_target) -> list[str]:
-    return [str(LAB / "verify.sh"), "up", str(v4_target), str(v6_target)]
+    return [str(LAB / "verify.sh"), "up", verify_arg(v4_target), verify_arg(v6_target)]
 
 
 def cmd_tcpdump(ns: str, pcap: Path, user: str) -> list[str]:
@@ -208,6 +253,33 @@ def measured_rtt_field(rtt: dict | None, target) -> dict:
                 "note": f"median of {rtt.get('sent')} pings, loss {rtt.get('loss_pct')}% (verify.sh {rtt['verdict']})"}
     except (KeyError, ValueError):
         return {"value": None, "status": "not_observed", "note": f"no replies: {rtt}"}
+
+
+_OBS_FLOAT = ("median_ms", "min_ms", "max_ms", "sd_ms", "loss_pct")
+_OBS_INT = ("sent", "received", "errors")
+
+
+def _as(conv, v):
+    try:
+        return conv(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def verify_observed(pre_rtt: dict, targets: dict) -> dict:
+    """What the pre-run verify measured per family, with the target it was checked against.
+
+    mode is "point" (an RTT or 'blackhole', the default check) or "band" (a declared loss or jitter
+    band). The observed values come from the ping summary (packet-level: ICMP), so a band verify
+    records what it saw, not only whether it passed. sd_ms is measured in band mode only."""
+    out = {}
+    for fam, target in targets.items():
+        r = pre_rtt.get(fam)
+        obs = None if not r else {**{k: _as(float, r.get(k)) for k in _OBS_FLOAT},
+                                  **{k: _as(int, r.get(k)) for k in _OBS_INT}}
+        out[fam] = {"mode": "band" if isinstance(target, dict) else "point", "target": target,
+                    "verify_arg": verify_arg(target), "verdict": r["verdict"] if r else None, "observed": obs}
+    return out
 
 
 def parse_ifindex_map(ip_link_output: str) -> dict[str, str]:
@@ -276,6 +348,7 @@ def build_record(*, run_id: str, scenario_id: str, sc: dict, repetition: int, ru
             "dns": sc["dns"],
             "measured_rtt_ms": {"v4": measured_rtt_field(pre_rtt.get("v4"), v4_t),
                                 "v6": measured_rtt_field(pre_rtt.get("v6"), v6_t)},
+            "verify_observed": verify_observed(pre_rtt, {"v4": v4_t, "v6": v6_t}),
         },
         "client": {
             "name": spec.name, **({"variant": spec.variant} if spec.variant else {}),
@@ -397,19 +470,61 @@ def setup_value(record: dict) -> float | None:
     return f["value"] if f["status"] == "computed" else None
 
 
+def winner_value(record: dict) -> str | None:
+    f = record["packet_observations"]["winning_family"]
+    return f["value"] if f["status"] == "computed" else None
+
+
+def adaptive_settings(adaptive: tuple) -> tuple[int, int, float, float | None]:
+    """(min, max, ci_width_ms, win_ci_width): a 3-tuple means no win-fraction criterion."""
+    lo, hi, w, *rest = adaptive
+    return lo, hi, w, (rest[0] if rest else None)
+
+
 def adaptive_block(previous: list[float | None], record: dict, min_reps: int, max_reps: int,
-                   ci_width_ms: float) -> dict:
-    """The stopping rule's state after this run (this run's setup time added to the earlier ones)."""
-    return {"min_reps": min_reps, "max_reps": max_reps, "ci_width_ms": ci_width_ms,
-            "metric": "tcp_setup_time_ms",
-            "after_this_run": adaptive_decision([*previous, setup_value(record)], min_reps, max_reps, ci_width_ms)}
+                   ci_width_ms: float, win_ci_width: float | None = None,
+                   previous_winners: list[str | None] | None = None) -> dict:
+    """The stopping rule's state after this run (this run's setup time added to the earlier ones).
+
+    With previous_winners (the orchestrator always passes them) the state also carries the IPv6
+    win fraction and its Wilson interval; win_ci_width makes that interval part of the rule."""
+    winners = None if previous_winners is None else [*previous_winners, winner_value(record)]
+    block = {"min_reps": min_reps, "max_reps": max_reps, "ci_width_ms": ci_width_ms}
+    if win_ci_width is not None:
+        block["win_ci_width"] = win_ci_width
+    block["metric"] = "tcp_setup_time_ms"
+    block["after_this_run"] = adaptive_decision([*previous, setup_value(record)], min_reps, max_reps, ci_width_ms,
+                                                winners=winners, win_ci_width=win_ci_width)
+    return block
 
 
-def adaptive_summary_line(sid: str, state: dict) -> str:
+def win_note(state: dict, win_ci_width: float | None) -> str | None:
+    """Say so when the stop leaves the win fraction poorly determined (never stop quietly on it)."""
+    win = state.get("win")
+    if not win or not win["ci"]:
+        return None
+    width = win["ci"]["width"]
+    if win_ci_width is None and 0 < win["wins"] < win["n"]:
+        return (f"NOTE: the rule decided on the median CI alone; the IPv6 win fraction is not determined by it "
+                f"(95% CI width {width})")
+    if win_ci_width is not None and width > win_ci_width:
+        return (f"NOTE: stopped at the maximum with the IPv6 win fraction's 95% CI {width} wide, above the "
+                f"requested {win_ci_width}: the fraction is still poorly determined")
+    return None
+
+
+def adaptive_summary_line(sid: str, state: dict, win_ci_width: float | None = None) -> str:
     ci = state["ci"]
     ci_txt = f"CI [{ci['lo']}, {ci['hi']}] width {ci['width']} ms" if ci else "no CI"
-    return (f"ADAPTIVE {sid}: stopped after {state['n_runs']} run(s), reason {state['reason']}; "
+    line = (f"ADAPTIVE {sid}: stopped after {state['n_runs']} run(s), reason {state['reason']}; "
             f"median {state['median_ms']} ms, {ci_txt} ({state['n_values']} setup times)")
+    win = state.get("win")
+    if win:
+        wci = win["ci"]
+        line += (f"; IPv6 won {win['wins']}/{win['n']}"
+                 + (f", 95% CI [{wci['lo']}, {wci['hi']}] width {wci['width']}" if wci else ""))
+    note = win_note(state, win_ci_width)
+    return line + (f"\n  {note}" if note else "")
 
 
 def check_environment(dry_run: bool) -> tuple[str, int, int]:
@@ -573,8 +688,8 @@ def run_one(ctx: Ctx, client: str, sid: str, sc: dict, rep: int, base: dict, cli
     try:
         # 1-2. apply scenario, verify against its targets
         applied = True
-        sh(ctx, cmd_netem("v4", sc["v4"]["delay_ms_each_way"], sc["v4"]["loss_pct"]), log)
-        sh(ctx, cmd_netem("v6", sc["v6"]["delay_ms_each_way"], sc["v6"]["loss_pct"]), log)
+        sh(ctx, netem_for("v4", sc["v4"]), log)
+        sh(ctx, netem_for("v6", sc["v6"]), log)
         pre = sh(ctx, cmd_verify(v4_t, v6_t), log, check=False)
         pre_ok, pre_rtt = pre.returncode == 0, parse_verify_rtt(pre.stdout)
         if not pre_ok:
@@ -680,15 +795,16 @@ def summary_line(r: dict, wall_s: float | None = None) -> str:
 
 
 def dry_run(scenarios: dict, reps: int, user: str, lab: dict, client: str = "curl",
-            adaptive: tuple[int, int, float] | None = None) -> None:
+            adaptive: tuple | None = None) -> None:
     spec = get_client(client)
     base = scenarios["_baseline"]
     print(f"DRY RUN (nothing is executed). Client {client}. "
           f"Session would run as root and drop to '{user}' for clients and services.")
     if adaptive:
-        lo, hi, w = adaptive
+        lo, hi, w, f = adaptive_settings(adaptive)
         print(f"Adaptive repetitions per scenario: at least {lo}, at most {hi}; stop once the 95% bootstrap CI "
-              f"on the median TCP setup time is no wider than {w} ms.")
+              f"on the median TCP setup time is no wider than {w} ms"
+              + (f" and the 95% Wilson CI on the IPv6 win fraction is no wider than {f:g}." if f else "."))
         reps = hi
     print(f"session start: {shlex.join(in_ns_as_user(lab['NS_CLIENT'], user, spec.version_argv()))}")
     print(f"session start: {shlex.join(cmd_dns(lab, user, {}))}")
@@ -701,8 +817,8 @@ def dry_run(scenarios: dict, reps: int, user: str, lab: dict, client: str = "cur
         print(f"\n# {sid} ({sc['label']}), repetition 1 of {'up to ' if adaptive else ''}{reps}, run_id like {rid}")
         steps = [
             ("dns", cmd_dns(lab, user, sc["dns"]["delay_ms"])),
-            ("apply", cmd_netem("v4", sc["v4"]["delay_ms_each_way"], sc["v4"]["loss_pct"])),
-            ("apply", cmd_netem("v6", sc["v6"]["delay_ms_each_way"], sc["v6"]["loss_pct"])),
+            ("apply", netem_for("v4", sc["v4"])),
+            ("apply", netem_for("v6", sc["v6"])),
             ("verify", cmd_verify(*verify_targets(sc))),
             ("ifmap", ["ip", "-n", lab["NS_CLIENT"], "-o", "link", "show"]),
             ("capture", cmd_tcpdump(lab["NS_CLIENT"], pcap, user)),
@@ -729,6 +845,9 @@ def main(argv: list[str] | None = None) -> int:
                    help="adaptive repetitions per scenario: at least MIN, at most MAX (needs --ci-width-ms)")
     p.add_argument("--ci-width-ms", type=float,
                    help="stop once the 95%% bootstrap CI on the median TCP setup time is no wider than this")
+    p.add_argument("--win-ci-width", type=float,
+                   help="with --reps-adaptive: also require the 95%% Wilson CI on the fraction of runs IPv6 won "
+                        "to be no wider than this (0-1)")
     p.add_argument("--first-rep", type=int, default=1,
                    help="number of the first repetition (to complete a batch that stopped early)")
     p.add_argument("--dry-run", action="store_true", help="print the commands, execute nothing (no sudo needed)")
@@ -748,9 +867,12 @@ def main(argv: list[str] | None = None) -> int:
             p.error("--reps-adaptive needs a positive --ci-width-ms")
         if args.first_rep != 1:
             p.error("--first-rep cannot be used with --reps-adaptive (an adaptive batch is never resumed; re-run it)")
-        adaptive = (lo, hi, args.ci_width_ms)
-    elif args.ci_width_ms is not None:
-        p.error("--ci-width-ms only applies with --reps-adaptive")
+        if args.win_ci_width is not None and not 0 < args.win_ci_width < 1:
+            p.error("--win-ci-width must be between 0 and 1")
+        adaptive = ((lo, hi, args.ci_width_ms) if args.win_ci_width is None
+                    else (lo, hi, args.ci_width_ms, args.win_ci_width))
+    elif args.ci_width_ms is not None or args.win_ci_width is not None:
+        p.error("--ci-width-ms and --win-ci-width only apply with --reps-adaptive")
     if args.reps is None:
         args.reps = 1
     if args.reps < 1:
@@ -773,7 +895,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl", first_rep: int = 1,
-                adaptive: tuple[int, int, float] | None = None) -> int:
+                adaptive: tuple | None = None) -> int:
     if not Path(f"/run/netns/{lab['NS_CLIENT']}").exists():
         raise OrchestratorError("lab is not up: run sudo src/lab/setup.sh first")
     env, removed = child_env_with_removed()
@@ -817,12 +939,14 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl",
         for sid in ids:
             sc = scenarios[sid]
             setups: list[float | None] = []
+            winners: list[str | None] = []
             entry = None
             if adaptive:
-                lo, hi, width = adaptive
+                lo, hi, width, win_w = adaptive_settings(adaptive)
                 entry = {"client": client, "scenario": sid, "session": session_id, "min_reps": lo,
-                         "max_reps": hi, "ci_width_ms": width, "metric": "tcp_setup_time_ms",
-                         "status": "running", "run_ids": [], "final": None}
+                         "max_reps": hi, "ci_width_ms": width,
+                         **({"win_ci_width": win_w} if win_w is not None else {}),
+                         "metric": "tcp_setup_time_ms", "status": "running", "run_ids": [], "final": None}
                 adaptive_out.append(entry)
             rep = first_rep
             while True:
@@ -833,8 +957,8 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl",
                 services.ensure_nginx(session_log)
                 annotate = None
                 if adaptive:
-                    def annotate(rec, prev=list(setups)):
-                        rec["adaptive"] = adaptive_block(prev, rec, *adaptive)
+                    def annotate(rec, prev=list(setups), prev_w=list(winners)):
+                        rec["adaptive"] = adaptive_block(prev, rec, lo, hi, width, win_w, prev_w)
                 record = run_one(ctx, client, sid, sc, rep, base, client_version, client_info,
                                  environment, dirs, t0=t0, annotate=annotate)
                 walls.append(time.monotonic() - t0)
@@ -849,11 +973,15 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl",
                         print(f"  CONFLICT {c['field']}: log={c['log_value']!r} pcap={c['pcap_value']!r}  {c['note']}")
                 if adaptive:
                     setups.append(setup_value(record))
+                    winners.append(winner_value(record))
                     entry["run_ids"].append(record["run_id"])
                     state = record["adaptive"]["after_this_run"]
                     if state["decision"] == "stop":
                         entry["status"], entry["final"] = "stopped_by_rule", state
-                        line = adaptive_summary_line(sid, state)
+                        note = win_note(state, win_w)
+                        if note:
+                            entry["note"] = note
+                        line = adaptive_summary_line(sid, state, win_w)
                         session_log.write(line)
                         print(line, flush=True)
                         write_adaptive_file(adaptive_path, adaptive_out)

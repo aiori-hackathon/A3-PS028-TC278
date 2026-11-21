@@ -44,7 +44,9 @@ def small_runs(tmp_path, reps=2):
 
 def test_scenario_ids_come_from_scenarios_yaml_in_file_order():
     # hand-written core scenarios first, then the generated extensions, each file in its own order
-    assert scenario_ids() == ("C0", "S1", "S2", "S3", "S4", "S5", "S6") + tuple(f"Gv6d{n}" for n in (100, 200, 250, 300, 350, 400))
+    assert scenario_ids() == (("C0", "S1", "S2", "S3", "S4", "S5", "S6")
+                              + tuple(f"Gv6d{n}" for n in (100, 200, 250, 300, 350, 400))
+                              + ("Gv6l10", "Gv6l30", "Gv6l50", "Gv6j50", "Gv6j70", "Gv6d280", "Gv6c30"))
     assert scenario_ids(generated=None) == ("C0", "S1", "S2", "S3", "S4", "S5", "S6")
 
 

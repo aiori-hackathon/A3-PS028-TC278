@@ -104,8 +104,8 @@ def adaptive_rec(decision="continue", reason=None):
                                "ci": bootstrap_median_ci(NARROW, **FAST), "decision": decision, "reason": reason}}
 
 
-def test_schema_version_is_0_4_and_older_records_still_validate():
-    assert SCHEMA_VERSION == "0.4"   # 0.4 (client variants, generated scenarios) builds on 0.3
+def test_schema_version_is_0_5_and_older_records_still_validate():
+    assert SCHEMA_VERSION == "0.5"   # 0.5 (verify_observed, win fraction) builds on 0.4 and 0.3
     assert validate(json.loads(EXAMPLE.read_text())) == []      # a 0.2 record from the dataset
 
 
@@ -327,10 +327,10 @@ def test_fixed_reps_session_is_refused_by_an_adaptive_manifest(tmp_path):
 
 
 @pytest.mark.parametrize("reps, message", [
-    ("{min: 3, max: 6}", "exactly min, max and ci_width_ms"),
+    ("{min: 3, max: 6}", "must have min, max and ci_width_ms"),
     ("{min: 7, max: 6, ci_width_ms: 1}", "1 <= min <= max"),
     ("{min: 3, max: 6, ci_width_ms: 0}", "positive number"),
-    ("{min: 3, max: 6, ci_width_ms: 1, extra: 2}", "exactly min, max and ci_width_ms"),
+    ("{min: 3, max: 6, ci_width_ms: 1, extra: 2}", "must have min, max and ci_width_ms"),
 ])
 def test_bad_adaptive_header_is_refused(tmp_path, reps, message):
     doc = manifest(tmp_path, f"clients: [curl]\nscenarios: [C0, S3]\nreps: {reps}\n", ROWS)

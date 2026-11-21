@@ -768,7 +768,8 @@ def _lede_scope(ds: dict, clients, scenarios, reps: int, code: str) -> str:
         return (f"{ds['runs']} runs: 2 clients × 7 scenarios × 20 repetitions, from the 14 sessions listed in\n"
                 f"<code>{_e(ds['source'])}</code> (full matrix, 2026-10-26, code version <code>{_e(code)}</code>).")
     ad = ds["shape"].get("adaptive")
-    reps_txt = (f"{ad['min']}–{ad['max']} adaptive repetitions (stop at a 95% CI width of {ad['ci_width_ms']:g} ms)"
+    win_txt = (f" and an IPv6 win-fraction 95% CI width of {ad['win_ci_width']:g}" if ad and "win_ci_width" in ad else "")
+    reps_txt = (f"{ad['min']}–{ad['max']} adaptive repetitions (stop at a 95% CI width of {ad['ci_width_ms']:g} ms{win_txt})"
                 if ad else f"{reps} repetitions")
     return (f"{ds['runs']} runs: {_clients_text(clients)} × {len(scenarios)} scenario(s) ({_e(', '.join(scenarios))}) "
             f"× {reps_txt}, from the {len(ds['sessions'])} sessions listed in <code>{_e(ds['source'])}</code> "

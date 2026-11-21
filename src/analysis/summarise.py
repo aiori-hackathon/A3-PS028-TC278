@@ -96,7 +96,7 @@ class Shape:
     clients: tuple[str, ...]
     scenarios: tuple[str, ...]
     reps: int
-    adaptive: tuple[int, int, float] | None = None
+    adaptive: tuple | None = None
 
     @property
     def cells(self) -> list[tuple[str, str]]:
@@ -173,14 +173,21 @@ def _shape_from_header(doc: Path, h: dict) -> Shape:
     return Shape(tuple(clients), tuple(scenarios), reps)
 
 
-def _adaptive_reps(doc: Path, reps: dict) -> tuple[int, tuple[int, int, float]]:
-    if set(reps) != {"min", "max", "ci_width_ms"}:
-        raise DatasetError(f"{doc}: adaptive reps must have exactly min, max and ci_width_ms; got {sorted(reps)}")
+def _adaptive_reps(doc: Path, reps: dict) -> tuple[int, tuple]:
+    """(max, (min, max, ci_width_ms)) or, with win_ci_width, (max, (min, max, ci_width_ms, win_ci_width))."""
+    if not {"min", "max", "ci_width_ms"} <= set(reps) or set(reps) - {"min", "max", "ci_width_ms", "win_ci_width"}:
+        raise DatasetError(f"{doc}: adaptive reps must have min, max and ci_width_ms (and optionally "
+                           f"win_ci_width); got {sorted(reps)}")
     lo, hi, w = reps["min"], reps["max"], reps["ci_width_ms"]
     if not all(isinstance(x, int) and not isinstance(x, bool) for x in (lo, hi)) or not 1 <= lo <= hi:
         raise DatasetError(f"{doc}: adaptive reps need whole numbers 1 <= min <= max; got {lo!r}, {hi!r}")
     if isinstance(w, bool) or not isinstance(w, (int, float)) or w <= 0:
         raise DatasetError(f"{doc}: adaptive ci_width_ms must be a positive number; got {w!r}")
+    if "win_ci_width" in reps:
+        f = reps["win_ci_width"]
+        if isinstance(f, bool) or not isinstance(f, (int, float)) or not 0 < f < 1:
+            raise DatasetError(f"{doc}: adaptive win_ci_width must be between 0 and 1; got {f!r}")
+        return hi, (lo, hi, float(w), float(f))
     return hi, (lo, hi, float(w))
 
 
@@ -399,9 +406,10 @@ def _rtt_summary(runs: list[Run]) -> dict | None:
     return out
 
 
-def _check_adaptive_session(recs: list[dict], adaptive: tuple[int, int, float]) -> list[str]:
+def _check_adaptive_session(recs: list[dict], adaptive: tuple) -> list[str]:
     """An adaptive session must have stopped by its own rule, and the rule must replay identically."""
-    lo, hi, w = adaptive
+    lo, hi, w, *rest = adaptive
+    win_w = rest[0] if rest else None
     recs = sorted(recs, key=lambda r: r["scenario"]["repetition"])
     n = len(recs)
     problems = []
@@ -410,21 +418,26 @@ def _check_adaptive_session(recs: list[dict], adaptive: tuple[int, int, float]) 
     if [r["scenario"]["repetition"] for r in recs] != list(range(1, n + 1)):
         problems.append("repetitions are not exactly 1..%d" % n)
     setups: list[float | None] = []
+    winners: list[str | None] = []
     for i, r in enumerate(recs, 1):
         ad = r.get("adaptive")
         if not ad:
             problems.append(f"{r['run_id']} has no adaptive block")
             continue
-        if (ad["min_reps"], ad["max_reps"], float(ad["ci_width_ms"])) != (lo, hi, w):
+        rec_win_w = ad.get("win_ci_width")
+        if (ad["min_reps"], ad["max_reps"], float(ad["ci_width_ms"]), rec_win_w) != (lo, hi, w, win_w):
             problems.append(f"{r['run_id']} adaptive settings {ad['min_reps']}-{ad['max_reps']}/"
-                            f"{ad['ci_width_ms']} differ from the manifest {lo}-{hi}/{w}")
+                            f"{ad['ci_width_ms']}/win {rec_win_w} differ from the manifest {lo}-{hi}/{w}/win {win_w}")
         f = r["metrics"]["tcp_setup_time_ms"]
         setups.append(f["value"] if f["status"] == "computed" else None)
+        wf = r["packet_observations"]["winning_family"]
+        winners.append(wf["value"] if wf["status"] == "computed" else None)
         want = "stop" if i == n else "continue"
         got = ad["after_this_run"]["decision"]
         if got != want:
             problems.append(f"{r['run_id']} decision {got!r}, expected {want!r} at run {i} of {n}")
-        replay = adaptive_decision(setups, lo, hi, w)
+        tracked = "win" in ad["after_this_run"]   # 0.5 sessions carry the win fraction in every state
+        replay = adaptive_decision(setups, lo, hi, w, winners=winners if tracked else None, win_ci_width=win_w)
         if replay["decision"] != got or replay["reason"] != ad["after_this_run"]["reason"]:
             problems.append(f"{r['run_id']}: stopping rule replays as {replay['decision']}/{replay['reason']}, "
                             f"record says {got}/{ad['after_this_run']['reason']}")
@@ -433,7 +446,7 @@ def _check_adaptive_session(recs: list[dict], adaptive: tuple[int, int, float]) 
 
 def load_runs(sessions: list[tuple[str, str, str]], runs_dir: Path = RUNS_DIR,
               expected: int = EXPECTED_REPS, repo: Path | None = REPO, dns_scenarios=("S6",),
-              provenance: dict | None = None, adaptive: tuple[int, int, float] | None = None,
+              provenance: dict | None = None, adaptive: tuple | None = None,
               lab_dir: Path = LAB_DIR) -> list[Run]:
     """With repo set, the pcaps of runs in dns_scenarios are re-parsed (after a hash check) for
     per-type DNS answer times; repo=None skips that (unit tests on synthetic records).
@@ -889,8 +902,9 @@ def build(doc: Path = DATASET_DOC, runs_dir: Path = RUNS_DIR, manifest: Manifest
         summary["dataset"]["shape"] = {"clients": list(shape.clients), "scenarios": list(shape.scenarios),
                                        "reps": shape.reps}
         if shape.adaptive:
-            lo, hi, w = shape.adaptive
-            summary["dataset"]["shape"]["adaptive"] = {"min": lo, "max": hi, "ci_width_ms": w}
+            lo, hi, w, *rest = shape.adaptive
+            summary["dataset"]["shape"]["adaptive"] = {"min": lo, "max": hi, "ci_width_ms": w,
+                                                       **({"win_ci_width": rest[0]} if rest else {})}
     return sessions, runs, summary
 
 

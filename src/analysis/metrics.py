@@ -28,6 +28,7 @@ by cross_check() and left for a person to resolve.
 from __future__ import annotations
 
 import ipaddress
+import math
 import random
 import statistics
 from dataclasses import dataclass, field
@@ -312,35 +313,81 @@ STOP_CI = "ci_width_reached"
 STOP_MAX = "max_reps_reached"
 
 
+WILSON_Z = 1.959963984540054   # two-sided 95%
+WIN_FAMILY = "v6"              # the win fraction is the share of runs IPv6 won (no winner counts as not won)
+
+
+def wilson_ci(k: int, n: int, z: float = WILSON_Z) -> dict | None:
+    """95% Wilson score interval for k successes in n trials (None for n = 0).
+
+    Used for the fraction of runs a family won. Unlike the normal approximation it stays inside
+    [0, 1] and is not zero-width at k = 0 or k = n. A description of precision, not a test.
+    """
+    if n <= 0:
+        return None
+    p = k / n
+    den = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / den
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / den
+    lo, hi = max(0.0, centre - half), min(1.0, centre + half)
+    return {"lo": round(lo, 4), "hi": round(hi, 4), "width": round(hi - lo, 4), "level": 0.95, "n": n,
+            "method": "Wilson score interval"}
+
+
+def win_state(winners: list[str | None], family: str = WIN_FAMILY) -> dict:
+    """Runs won by one family so far, with the Wilson interval on the fraction."""
+    n, k = len(winners), sum(1 for w in winners if w == family)
+    return {"family": family, "wins": k, "n": n, "fraction": round(k / n, 4) if n else None, "ci": wilson_ci(k, n)}
+
+
 def adaptive_decision(setup_times_ms: list[float | None], min_reps: int, max_reps: int, ci_width_ms: float,
-                      resamples: int = BOOT_RESAMPLES, seed: int = BOOT_SEED) -> dict:
+                      resamples: int = BOOT_RESAMPLES, seed: int = BOOT_SEED,
+                      winners: list[str | None] | None = None, win_ci_width: float | None = None) -> dict:
     """Stopping rule after the runs so far (one entry per run; None where no TCP setup time was observed).
 
     - fewer than min_reps runs: continue
-    - CI on the median of the observed setup times no wider than ci_width_ms: stop (ci_width_reached)
+    - CI on the median of the observed setup times no wider than ci_width_ms, and, if win_ci_width
+      is given, the Wilson CI on the fraction of runs IPv6 won no wider than win_ci_width:
+      stop (ci_width_reached)
     - otherwise, max_reps runs reached: stop (max_reps_reached)
     - otherwise: continue
-    The rule looks only at the CI width, never at the median's value, so it cannot stop on a
-    convenient result. Runs without a setup time count towards max_reps but not towards the CI.
+    The rule looks only at interval widths and the run count, never at the median's value or the
+    fraction itself, so it cannot stop on a convenient result. Runs without a setup time count
+    towards max_reps but not towards the median CI. With winners (the winning family per run) the
+    state also carries the win fraction, whether or not win_ci_width is used to decide; without
+    winners and win_ci_width the rule and its output are exactly what they were before.
     """
     if not (1 <= min_reps <= max_reps):
         raise ValueError(f"need 1 <= min_reps <= max_reps, got {min_reps}, {max_reps}")
     if not ci_width_ms > 0:
         raise ValueError(f"ci_width_ms must be positive, got {ci_width_ms}")
+    if win_ci_width is not None:
+        if not 0 < win_ci_width < 1:
+            raise ValueError(f"win_ci_width must be between 0 and 1, got {win_ci_width}")
+        if winners is None:
+            raise ValueError("win_ci_width needs the winning family of every run")
+    if winners is not None and len(winners) != len(setup_times_ms):
+        raise ValueError("winners and setup times must have one entry per run")
     n_runs = len(setup_times_ms)
     values = [x for x in setup_times_ms if x is not None]
     ci = bootstrap_median_ci(values, resamples=resamples, seed=seed)
+    win = win_state(winners) if winners is not None else None
+    median_ok = ci is not None and ci["width"] <= ci_width_ms
+    win_ok = win_ci_width is None or (win["ci"] is not None and win["ci"]["width"] <= win_ci_width)
     if n_runs < min_reps:
         decision, reason = "continue", None
-    elif ci is not None and ci["width"] <= ci_width_ms:
+    elif median_ok and win_ok:
         decision, reason = "stop", STOP_CI
     elif n_runs >= max_reps:
         decision, reason = "stop", STOP_MAX
     else:
         decision, reason = "continue", None
-    return {"n_runs": n_runs, "n_values": len(values),
-            "median_ms": round(statistics.median(values), 3) if values else None,
-            "ci": ci, "decision": decision, "reason": reason}
+    out = {"n_runs": n_runs, "n_values": len(values),
+           "median_ms": round(statistics.median(values), 3) if values else None,
+           "ci": ci, "decision": decision, "reason": reason}
+    if win is not None:
+        out["win"] = win
+    return out
 
 
 def cross_check(outcome: dict, client_report: dict | None, m: RunMetrics) -> dict:
