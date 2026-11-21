@@ -2,6 +2,7 @@
 
     .venv/bin/python src/analysis/summarise.py                  # the core dataset (docs/dataset.md)
     .venv/bin/python src/analysis/summarise.py --dataset NAME   # docs/datasets/NAME.md
+    .venv/bin/python src/analysis/summarise.py --cost           # measurement cost per cell
 
 The core dataset is the 14 sessions (2 clients x C0-S6 x 20 reps) in docs/dataset.md; its output goes
 to data/generated/summary/. Any other dataset is a manifest in docs/datasets/ that declares its own
@@ -14,7 +15,8 @@ Evidence levels, kept apart throughout:
   interpretation   statements built from the above; always labelled as interpretation
 
 Per client x scenario cell:
-  - TCP setup time (packet): median, quartiles, min, max
+  - TCP setup time (packet): median, quartiles, min, max, and a 95% percentile-bootstrap CI on the
+    median (metrics.bootstrap_median_ci; seeded). No mean or standard deviation is reported.
   - scenario penalty: the client's median setup time minus its own C0 median (CLAUDE.md definition)
   - winning family counts (packet)
   - inter-family attempt delay (packet): reported as observed / not observed COUNTS; statistics
@@ -31,6 +33,14 @@ Per client x scenario cell:
     measured RTT (lab verify ping), cost of racing = TCP setup (packet) minus that; statistics only
     over runs where it was computed, with the other statuses counted
   - NetLog connect jobs and resolver order (client, Chromium only)
+  - measurement cost (runner): runs, wall time, pcap bytes, client peak RSS where recorded.
+    Records from schema 0.3 carry a profile block; for older records the wall time comes from the
+    session log (wall_s=) and the pcap size from the file on disk, and the source is stated.
+
+Adaptive datasets declare reps as {min, max, ci_width_ms} instead of a number. Each session must
+then hold between min and max runs whose adaptive blocks match those settings, with "continue"
+on every run but the last and "stop" on the last; the stopping rule is recomputed from the setup
+times and must give the same decisions.
 """
 
 from __future__ import annotations
@@ -50,15 +60,18 @@ if __package__ in (None, ""):
 
 import yaml  # noqa: E402
 
-from analysis.metrics import ORACLE_EVIDENCE, TARGET_NAME, oracle_baseline, scenario_penalty  # noqa: E402
+from analysis.metrics import (ORACLE_EVIDENCE, TARGET_NAME, adaptive_decision,  # noqa: E402
+                              bootstrap_median_ci, oracle_baseline, scenario_penalty)
 from analysis.parse_pcap import parse  # noqa: E402
 from analysis.scenario_config import scenario_ids  # noqa: E402
+from analysis.summarise_session import parse_walls  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 DATASET_DOC = REPO / "docs" / "dataset.md"          # the frozen core dataset
 DATASETS_DIR = REPO / "docs" / "datasets"           # further datasets: <name>.md manifests
 CORE_DATASET = "core"
 RUNS_DIR = REPO / "data" / "generated" / "runs"
+LAB_DIR = REPO / "data" / "generated" / "lab"        # session logs (per-run wall_s for pre-0.3 records)
 OUT_DIR = REPO / "data" / "generated" / "summary"
 # Shape of the frozen core dataset (docs/dataset.md has no header; this is its declared shape).
 CLIENTS = ("curl", "chromium")
@@ -74,10 +87,14 @@ class DatasetError(Exception):
 
 @dataclass(frozen=True)
 class Shape:
-    """What a dataset declares it contains: every client x every scenario, reps runs each."""
+    """What a dataset declares it contains: every client x every scenario, reps runs each.
+
+    For an adaptive dataset, reps is the maximum and adaptive is (min, max, ci_width_ms).
+    """
     clients: tuple[str, ...]
     scenarios: tuple[str, ...]
     reps: int
+    adaptive: tuple[int, int, float] | None = None
 
     @property
     def cells(self) -> list[tuple[str, str]]:
@@ -145,9 +162,23 @@ def _shape_from_header(doc: Path, h: dict) -> Shape:
     if bad_s:
         raise DatasetError(f"{doc}: scenario(s) {bad_s} are not defined in src/config/scenarios.yaml "
                            f"(defined: {list(valid)})")
+    if isinstance(reps, dict):
+        return Shape(tuple(clients), tuple(scenarios), *_adaptive_reps(doc, reps))
     if isinstance(reps, bool) or not isinstance(reps, int) or reps < 1:
-        raise DatasetError(f"{doc}: header reps must be a whole number of at least 1, got {reps!r}")
+        raise DatasetError(f"{doc}: header reps must be a whole number of at least 1, or "
+                           f"{{min, max, ci_width_ms}} for adaptive repetitions; got {reps!r}")
     return Shape(tuple(clients), tuple(scenarios), reps)
+
+
+def _adaptive_reps(doc: Path, reps: dict) -> tuple[int, tuple[int, int, float]]:
+    if set(reps) != {"min", "max", "ci_width_ms"}:
+        raise DatasetError(f"{doc}: adaptive reps must have exactly min, max and ci_width_ms; got {sorted(reps)}")
+    lo, hi, w = reps["min"], reps["max"], reps["ci_width_ms"]
+    if not all(isinstance(x, int) and not isinstance(x, bool) for x in (lo, hi)) or not 1 <= lo <= hi:
+        raise DatasetError(f"{doc}: adaptive reps need whole numbers 1 <= min <= max; got {lo!r}, {hi!r}")
+    if isinstance(w, bool) or not isinstance(w, (int, float)) or w <= 0:
+        raise DatasetError(f"{doc}: adaptive ci_width_ms must be a positive number; got {w!r}")
+    return hi, (lo, hi, float(w))
 
 
 def load_manifest(doc: Path = DATASET_DOC, require_header: bool = False) -> Manifest:
@@ -260,6 +291,11 @@ class Run:
     oracle_note: str | None = None
     single_family: bool | None = None
     dns_delay_ms: dict[str, float] | None = None   # configured DNS answer delay per type (scenario config)
+    # measurement cost (runner): from the record's profile block, else session log / pcap on disk
+    wall_s: float | None = None
+    pcap_bytes: int | None = None
+    peak_rss_kib: int | None = None
+    cost_source: str = "not recorded"
 
     @property
     def shape(self) -> str:
@@ -327,7 +363,22 @@ def run_from_record(r: dict) -> Run:
     run.oracle_status = o["cost_of_racing_ms"]["status"]
     run.oracle_note = o["cost_of_racing_ms"].get("note")
     run.single_family = o["single_family"]
+    pr = r.get("profile")
+    if pr:
+        run.wall_s, run.pcap_bytes, run.peak_rss_kib = pr["wall_time_s"], pr["pcap_bytes"], pr["client_peak_rss_kib"]
+        run.cost_source = "record profile"
     return run
+
+
+def _fill_cost(run: Run, r: dict, repo: Path, walls: dict[str, float]) -> None:
+    """Pre-0.3 records: wall time from the session log, pcap size from the file on disk."""
+    if run.cost_source != "not recorded":
+        return
+    run.wall_s = walls.get(run.run_id)
+    pcap = repo / r["evidence"]["pcap_path"] if r["evidence"].get("pcap_path") else None
+    run.pcap_bytes = pcap.stat().st_size if pcap and pcap.is_file() else None
+    if run.wall_s is not None or run.pcap_bytes is not None:
+        run.cost_source = "session log and pcap on disk"
 
 
 def _rtt_summary(runs: list[Run]) -> dict | None:
@@ -345,9 +396,42 @@ def _rtt_summary(runs: list[Run]) -> dict | None:
     return out
 
 
+def _check_adaptive_session(recs: list[dict], adaptive: tuple[int, int, float]) -> list[str]:
+    """An adaptive session must have stopped by its own rule, and the rule must replay identically."""
+    lo, hi, w = adaptive
+    recs = sorted(recs, key=lambda r: r["scenario"]["repetition"])
+    n = len(recs)
+    problems = []
+    if not lo <= n <= hi:
+        problems.append(f"{n} records, adaptive range is {lo}-{hi}")
+    if [r["scenario"]["repetition"] for r in recs] != list(range(1, n + 1)):
+        problems.append("repetitions are not exactly 1..%d" % n)
+    setups: list[float | None] = []
+    for i, r in enumerate(recs, 1):
+        ad = r.get("adaptive")
+        if not ad:
+            problems.append(f"{r['run_id']} has no adaptive block")
+            continue
+        if (ad["min_reps"], ad["max_reps"], float(ad["ci_width_ms"])) != (lo, hi, w):
+            problems.append(f"{r['run_id']} adaptive settings {ad['min_reps']}-{ad['max_reps']}/"
+                            f"{ad['ci_width_ms']} differ from the manifest {lo}-{hi}/{w}")
+        f = r["metrics"]["tcp_setup_time_ms"]
+        setups.append(f["value"] if f["status"] == "computed" else None)
+        want = "stop" if i == n else "continue"
+        got = ad["after_this_run"]["decision"]
+        if got != want:
+            problems.append(f"{r['run_id']} decision {got!r}, expected {want!r} at run {i} of {n}")
+        replay = adaptive_decision(setups, lo, hi, w)
+        if replay["decision"] != got or replay["reason"] != ad["after_this_run"]["reason"]:
+            problems.append(f"{r['run_id']}: stopping rule replays as {replay['decision']}/{replay['reason']}, "
+                            f"record says {got}/{ad['after_this_run']['reason']}")
+    return problems
+
+
 def load_runs(sessions: list[tuple[str, str, str]], runs_dir: Path = RUNS_DIR,
               expected: int = EXPECTED_REPS, repo: Path | None = REPO, dns_scenarios=("S6",),
-              provenance: dict | None = None) -> list[Run]:
+              provenance: dict | None = None, adaptive: tuple[int, int, float] | None = None,
+              lab_dir: Path = LAB_DIR) -> list[Run]:
     """With repo set, the pcaps of runs in dns_scenarios are re-parsed (after a hash check) for
     per-type DNS answer times; repo=None skips that (unit tests on synthetic records).
     If a provenance dict is given, the distinct client versions, client configs and code versions
@@ -362,10 +446,13 @@ def load_runs(sessions: list[tuple[str, str, str]], runs_dir: Path = RUNS_DIR,
     for client, scenario, sid in sessions:
         recs = by_session.get(sid, [])
         problems = []
-        if len(recs) != expected:
-            problems.append(f"{len(recs)} records, expected {expected}")
-        if sorted(r["scenario"]["repetition"] for r in recs) != list(range(1, expected + 1)):
-            problems.append("repetitions are not exactly 1..%d" % expected)
+        if adaptive:
+            problems += _check_adaptive_session(recs, adaptive)
+        else:
+            if len(recs) != expected:
+                problems.append(f"{len(recs)} records, expected {expected}")
+            if sorted(r["scenario"]["repetition"] for r in recs) != list(range(1, expected + 1)):
+                problems.append("repetitions are not exactly 1..%d" % expected)
         for r in recs:
             if (r["client"]["name"], r["scenario"]["id"]) != (client, scenario):
                 problems.append(f"{r['run_id']} is not {client}/{scenario}")
@@ -375,8 +462,14 @@ def load_runs(sessions: list[tuple[str, str, str]], runs_dir: Path = RUNS_DIR,
                 problems.append(f"{r['run_id']} lab verify did not pass")
         if problems:
             raise DatasetError(f"session {sid} ({client}/{scenario}): " + "; ".join(problems))
+        walls: dict[str, float] = {}
+        if repo is not None:
+            log = lab_dir / f"{sid}_session.log"
+            walls = parse_walls(log.read_text(encoding="utf-8")) if log.is_file() else {}
         for r in sorted(recs, key=lambda r: r["scenario"]["repetition"]):
             run = run_from_record(r)
+            if repo is not None:
+                _fill_cost(run, r, repo, walls)
             if provenance is not None:
                 p = provenance.setdefault(client, {"versions": set(), "configs": set(), "code": set()})
                 p["versions"].add(r["client"].get("version"))
@@ -421,6 +514,23 @@ def oracle_cell(runs: list[Run]) -> dict:
     }
 
 
+def cost_cell(runs: list[Run]) -> dict:
+    """Measurement cost of a cell (runner measurements). Totals only over runs where it was recorded."""
+    walls = [r.wall_s for r in runs if r.wall_s is not None]
+    sizes = [r.pcap_bytes for r in runs if r.pcap_bytes is not None]
+    rss = [r.peak_rss_kib for r in runs if r.peak_rss_kib is not None]
+    return {
+        "runs": len(runs),
+        "wall_time_s": None if not walls else {"n": len(walls), "total": round(sum(walls), 2),
+                                               "median": round(statistics.median(walls), 2)},
+        "pcap_bytes": None if not sizes else {"n": len(sizes), "total": sum(sizes),
+                                              "median": statistics.median(sizes)},
+        "client_peak_rss_kib": None if not rss else {"n": len(rss), "median": statistics.median(rss),
+                                                     "max": max(rss)},
+        "source": dict(Counter(r.cost_source for r in runs)),
+    }
+
+
 def summarise_cell(runs: list[Run]) -> dict:
     setups = [r.setup_ms for r in runs if r.setup_ms is not None]
     observed = [r.inter_family_ms for r in runs if r.inter_family_ms is not None]
@@ -438,6 +548,7 @@ def summarise_cell(runs: list[Run]) -> dict:
         "winning_family": dict(Counter(r.winner or "none" for r in runs)),
         "first_syn_family": dict(Counter(r.attempts[0]["family"] if r.attempts else "none" for r in runs)),
         "tcp_setup_ms": _stats(setups),
+        "tcp_setup_median_ci95": bootstrap_median_ci(setups),
         "setup_not_observed": len(runs) - len(setups),
         "inter_family": {
             "observed": len(observed),
@@ -453,6 +564,7 @@ def summarise_cell(runs: list[Run]) -> dict:
         "syn_retransmits_total": sum(a["syn_retransmits"] for r in runs for a in r.attempts),
         "dns_ms": _stats([r.dns_ms for r in runs if r.dns_ms is not None]),
         "oracle": oracle_cell(runs),
+        "cost": cost_cell(runs),
         "dns_answer_by_type_ms": None if not any(r.dns_answers_ms for r in runs) else {
             **{f"{t} answer": _stats([r.dns_answers_ms[t] for r in runs if r.dns_answers_ms and t in r.dns_answers_ms])
                for t in sorted({t for r in runs for t in (r.dns_answers_ms or {})})},
@@ -692,6 +804,13 @@ def text_report(summary: dict) -> str:
                 f"{_fmt_stats(x['tcp_setup_ms']):26} {x['scenario_penalty_ms']!s:>9}  {inter_txt:30} "
                 f"{json.dumps(x['failed_or_abandoned_per_run']):20} {json.dumps(x['attempt_shape']):22} "
                 f"{x['dns_ms']['median'] if x['dns_ms'] else '-'}")
+    lines.append("\nMEDIAN TCP SETUP TIME, 95% CI (packet-level; percentile bootstrap of the median, "
+                 "10 000 resamples, seed 0; a description of spread, not a significance test)")
+    for c, by_scenario in summary["cells"].items():
+        for s, x in by_scenario.items():
+            ci, st = x["tcp_setup_median_ci95"], x["tcp_setup_ms"]
+            lines.append(f"  {c:9} {s:4} median {st['median'] if st else '-':>9}  "
+                         + (f"CI [{ci['lo']}, {ci['hi']}] width {ci['width']} (n={ci['n']})" if ci else "no CI (n < 2)"))
     lines.append("\nORACLE BASELINE (derived: pcap TCP setup minus the winning family's pre-run ping RTT)")
     lines.append(f"  {'client':9} {'scn':4} {'oracle median':>13} {'cost median [IQR] ms':26} statuses / notes")
     for c, by_scenario in summary["cells"].items():
@@ -712,12 +831,34 @@ def text_report(summary: dict) -> str:
     return "\n".join(lines)
 
 
+def cost_report(summary: dict) -> str:
+    """Measurement cost per cell (runner measurements, not packet evidence)."""
+    lines = ["MEASUREMENT COST PER CELL (runner measurements: wall time per run, pcap size, client peak RSS)",
+             f"  {'client':9} {'scn':4} {'runs':>4} {'wall total s':>12} {'wall median s':>13} "
+             f"{'pcap total B':>12} {'pcap median B':>13} {'peak RSS median/max KiB':>24}  source"]
+    tot_w = tot_b = tot_n = 0
+    for c, by_scenario in summary["cells"].items():
+        for s, x in by_scenario.items():
+            k = x["cost"]
+            w, b, m = k["wall_time_s"], k["pcap_bytes"], k["client_peak_rss_kib"]
+            tot_n += k["runs"]
+            tot_w += w["total"] if w else 0
+            tot_b += b["total"] if b else 0
+            lines.append(f"  {c:9} {s:4} {k['runs']:>4} {w['total'] if w else '-':>12} {w['median'] if w else '-':>13} "
+                         f"{b['total'] if b else '-':>12} {b['median'] if b else '-':>13} "
+                         f"{(str(m['median']) + ' / ' + str(m['max'])) if m else 'not recorded':>24}  "
+                         + ", ".join(f"{src} {n}" for src, n in k["source"].items()))
+    lines.append(f"  total: {tot_n} runs, {round(tot_w, 1)} s wall time ({round(tot_w / 60, 1)} min), "
+                 f"{tot_b} pcap bytes ({round(tot_b / 1e6, 2)} MB)")
+    return "\n".join(lines)
+
+
 def build(doc: Path = DATASET_DOC, runs_dir: Path = RUNS_DIR, manifest: Manifest | None = None,
           repo: Path | None = REPO) -> tuple[list[tuple[str, str, str]], list[Run], dict]:
     m = manifest or load_manifest(doc)
     doc, sessions, shape = m.path, m.sessions, m.shape
     prov: dict = {}
-    runs = load_runs(sessions, runs_dir, expected=shape.reps, repo=repo, provenance=prov)
+    runs = load_runs(sessions, runs_dir, expected=shape.reps, repo=repo, provenance=prov, adaptive=shape.adaptive)
     summary = summarise(runs, shape)
     summary["dataset"] = {"source": str(doc.relative_to(REPO)) if doc.is_relative_to(REPO) else str(doc),
                           "sessions": [{"client": c, "scenario": s, "session": sid} for c, s, sid in sessions],
@@ -729,6 +870,9 @@ def build(doc: Path = DATASET_DOC, runs_dir: Path = RUNS_DIR, manifest: Manifest
     if doc != DATASET_DOC:  # a named dataset records the shape it declared (core output stays as it was)
         summary["dataset"]["shape"] = {"clients": list(shape.clients), "scenarios": list(shape.scenarios),
                                        "reps": shape.reps}
+        if shape.adaptive:
+            lo, hi, w = shape.adaptive
+            summary["dataset"]["shape"]["adaptive"] = {"min": lo, "max": hi, "ci_width_ms": w}
     return sessions, runs, summary
 
 
@@ -738,6 +882,7 @@ def main(argv: list[str] | None = None) -> int:
                     help="dataset name: 'core' (docs/dataset.md, the default) or NAME for docs/datasets/NAME.md")
     ap.add_argument("--out", type=Path, default=None,
                     help="output folder (default: data/generated/summary/, or .../summary/NAME/ for a named dataset)")
+    ap.add_argument("--cost", action="store_true", help="print the measurement cost per cell instead of the tables")
     a = ap.parse_args(argv)
     try:
         _, runs, summary = build(manifest=load_dataset(a.dataset))
@@ -748,7 +893,7 @@ def main(argv: list[str] | None = None) -> int:
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     (a.out / "runs.json").write_text(json.dumps([r.__dict__ for r in runs], indent=1) + "\n", encoding="utf-8")
-    print(text_report(summary))
+    print(cost_report(summary) if a.cost else text_report(summary))
     print(f"\nwrote {a.out / 'summary.json'} and runs.json ({len(runs)} runs)")
     return 0
 

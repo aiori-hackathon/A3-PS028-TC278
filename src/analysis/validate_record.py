@@ -1,4 +1,4 @@
-"""Validate HappyLab run records against schema version 0.1.
+"""Validate HappyLab run records against schema versions 0.1-0.3.
 
 The schema is documented in docs/run_record_schema.md. Standard library only.
 
@@ -15,9 +15,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "0.2"
-# 0.1 records (Milestone 1 harness runs) stay valid; 0.2 adds the required cross_checks block.
-SUPPORTED_VERSIONS = {"0.1", "0.2"}
+SCHEMA_VERSION = "0.3"
+# 0.1 records (Milestone 1 harness runs) stay valid; 0.2 adds the required cross_checks block;
+# 0.3 adds two optional blocks: profile (measurement cost) and adaptive (stopping-rule state).
+SUPPORTED_VERSIONS = {"0.1", "0.2", "0.3"}
+OPTIONAL_KEYS_0_3 = {"profile", "adaptive"}
+ADAPTIVE_DECISIONS = {"continue", "stop"}
+ADAPTIVE_REASONS = {"ci_width_reached", "max_reps_reached"}
 CROSS_CHECK_STATUSES = {"agree", "conflict", "not_yet_computed", "not_applicable"}
 
 STATUSES = {"computed", "not_yet_computed", "not_observed", "not_applicable"}
@@ -124,6 +128,78 @@ def _check_cross_checks(errors: list[str], cc: Any) -> None:
                     errors.append(f"{p}.{k}: must be a string")
 
 
+def _check_profile(errors: list[str], pr: Any) -> None:
+    """Measurement cost of one run (runner measurements, not packet evidence)."""
+    keys = {"wall_time_s", "wall_time_scope", "pcap_bytes", "client_peak_rss_kib", "client_peak_rss_scope"}
+    if not _require_keys(errors, "profile", pr, keys):
+        return
+    extra = pr.keys() - keys
+    if extra:
+        errors.append(f"profile: unexpected keys {sorted(extra)}")
+    if not (_is_number(pr.get("wall_time_s")) and pr["wall_time_s"] >= 0):
+        errors.append("profile.wall_time_s: must be a non-negative number")
+    if not (_is_int(pr.get("pcap_bytes")) and pr["pcap_bytes"] >= 0):
+        errors.append("profile.pcap_bytes: must be a non-negative integer")
+    rss = pr.get("client_peak_rss_kib")
+    if rss is not None and not (_is_int(rss) and rss >= 0):
+        errors.append("profile.client_peak_rss_kib: must be a non-negative integer or null")
+    for k in ("wall_time_scope", "client_peak_rss_scope"):
+        if k in pr and not (isinstance(pr[k], str) and pr[k]):
+            errors.append(f"profile.{k}: must be a non-empty string")
+
+
+def _check_ci(errors: list[str], path: str, ci: Any) -> None:
+    if ci is None:
+        return
+    if not _require_keys(errors, path, ci, {"lo", "hi", "width", "level", "n", "resamples", "seed", "method"}):
+        return
+    for k in ("lo", "hi", "width", "level"):
+        if not _is_number(ci.get(k)):
+            errors.append(f"{path}.{k}: must be a number")
+    if _is_number(ci.get("lo")) and _is_number(ci.get("hi")) and ci["hi"] < ci["lo"]:
+        errors.append(f"{path}: hi is below lo")
+    for k in ("n", "resamples", "seed"):
+        if not _is_int(ci.get(k)):
+            errors.append(f"{path}.{k}: must be an integer")
+
+
+def _check_adaptive(errors: list[str], ad: Any) -> None:
+    """Adaptive-repetition settings and the stopping-rule state after this run."""
+    keys = {"min_reps", "max_reps", "ci_width_ms", "metric", "after_this_run"}
+    if not _require_keys(errors, "adaptive", ad, keys):
+        return
+    extra = ad.keys() - keys
+    if extra:
+        errors.append(f"adaptive: unexpected keys {sorted(extra)}")
+    lo, hi = ad.get("min_reps"), ad.get("max_reps")
+    if not (_is_int(lo) and _is_int(hi) and 1 <= lo <= hi):
+        errors.append("adaptive: need integers 1 <= min_reps <= max_reps")
+    if not (_is_number(ad.get("ci_width_ms")) and ad["ci_width_ms"] > 0):
+        errors.append("adaptive.ci_width_ms: must be a positive number")
+    if ad.get("metric") != "tcp_setup_time_ms":
+        errors.append("adaptive.metric: must be 'tcp_setup_time_ms'")
+    st = ad.get("after_this_run")
+    p = "adaptive.after_this_run"
+    if not _require_keys(errors, p, st, {"n_runs", "n_values", "median_ms", "ci", "decision", "reason"}):
+        return
+    for k in ("n_runs", "n_values"):
+        if not (_is_int(st.get(k)) and st[k] >= 0):
+            errors.append(f"{p}.{k}: must be a non-negative integer")
+    if st.get("median_ms") is not None and not _is_number(st["median_ms"]):
+        errors.append(f"{p}.median_ms: must be a number or null")
+    _check_ci(errors, f"{p}.ci", st.get("ci"))
+    if st.get("decision") not in ADAPTIVE_DECISIONS:
+        errors.append(f"{p}.decision: must be one of {sorted(ADAPTIVE_DECISIONS)}")
+    reason = st.get("reason")
+    if st.get("decision") == "stop" and reason not in ADAPTIVE_REASONS:
+        errors.append(f"{p}.reason: a stop needs one of {sorted(ADAPTIVE_REASONS)}")
+    if st.get("decision") == "continue" and reason is not None:
+        errors.append(f"{p}.reason: must be null when the decision is 'continue'")
+    rep_n = st.get("n_runs")
+    if _is_int(rep_n) and _is_int(hi) and rep_n > hi:
+        errors.append(f"{p}.n_runs: above max_reps")
+
+
 def validate(record: Any) -> list[str]:
     """Return a list of human-readable problems; an empty list means the record is valid."""
     errors: list[str] = []
@@ -137,11 +213,17 @@ def validate(record: Any) -> list[str]:
     missing = top_keys - record.keys()
     if missing:
         errors.append(f"record: missing {sorted(missing)}")
-    extra = record.keys() - top_keys
+    allowed = top_keys | (OPTIONAL_KEYS_0_3 if version == "0.3" else set())
+    extra = record.keys() - allowed
     if extra:
         errors.append(f"record: unexpected keys {sorted(extra)}")
     if "cross_checks" in top_keys and "cross_checks" in record:
         _check_cross_checks(errors, record["cross_checks"])
+    if version == "0.3":
+        if "profile" in record:
+            _check_profile(errors, record["profile"])
+        if "adaptive" in record:
+            _check_adaptive(errors, record["adaptive"])
 
     # scenario
     sc = record.get("scenario")

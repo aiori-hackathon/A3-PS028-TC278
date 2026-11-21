@@ -28,6 +28,7 @@ by cross_check() and left for a person to resolve.
 from __future__ import annotations
 
 import ipaddress
+import random
 import statistics
 from dataclasses import dataclass, field
 
@@ -274,6 +275,72 @@ def oracle_baseline(winning_family: str | None, tcp_setup_time_ms: float | None,
         return out(oracle, _wrapped(None, "not_observed", "no TCP setup time in this run"))
     cost = _wrapped(round(tcp_setup_time_ms - float(rtt["value"]), 3), note="; ".join(notes) or None)
     return out(oracle, cost)
+
+
+# --- bootstrap CI on the median and the adaptive stopping rule -----------------------------
+
+BOOT_LEVEL = 0.95
+BOOT_RESAMPLES = 10_000
+BOOT_SEED = 0          # fixed, so a CI can be recomputed exactly from the same values
+BOOT_METHOD = "percentile bootstrap of the median"
+
+
+def bootstrap_median_ci(values: list[float], level: float = BOOT_LEVEL, resamples: int = BOOT_RESAMPLES,
+                        seed: int = BOOT_SEED) -> dict | None:
+    """Percentile bootstrap confidence interval for the median. None with fewer than 2 values.
+
+    Resamples the values with replacement `resamples` times (seeded, so it is reproducible), takes
+    each resample's median, and returns the (1-level)/2 and (1+level)/2 percentiles of those medians.
+    With few values (about 10 or fewer) a percentile bootstrap tends to give intervals that are too
+    narrow, and the interval can only take values near the observed order statistics; read it as a
+    description of spread, not an exact coverage guarantee. It is not a significance test.
+    """
+    v = [float(x) for x in values if x is not None]
+    if len(v) < 2:
+        return None
+    rng = random.Random(seed)
+    n = len(v)
+    meds = sorted(statistics.median(rng.choices(v, k=n)) for _ in range(resamples))
+    lo_i = int((1 - level) / 2 * resamples)
+    hi_i = min(resamples - 1, int((1 + level) / 2 * resamples) - 1)
+    lo, hi = meds[lo_i], meds[hi_i]
+    return {"lo": round(lo, 3), "hi": round(hi, 3), "width": round(hi - lo, 3), "level": level, "n": n,
+            "resamples": resamples, "seed": seed, "method": BOOT_METHOD}
+
+
+STOP_CI = "ci_width_reached"
+STOP_MAX = "max_reps_reached"
+
+
+def adaptive_decision(setup_times_ms: list[float | None], min_reps: int, max_reps: int, ci_width_ms: float,
+                      resamples: int = BOOT_RESAMPLES, seed: int = BOOT_SEED) -> dict:
+    """Stopping rule after the runs so far (one entry per run; None where no TCP setup time was observed).
+
+    - fewer than min_reps runs: continue
+    - CI on the median of the observed setup times no wider than ci_width_ms: stop (ci_width_reached)
+    - otherwise, max_reps runs reached: stop (max_reps_reached)
+    - otherwise: continue
+    The rule looks only at the CI width, never at the median's value, so it cannot stop on a
+    convenient result. Runs without a setup time count towards max_reps but not towards the CI.
+    """
+    if not (1 <= min_reps <= max_reps):
+        raise ValueError(f"need 1 <= min_reps <= max_reps, got {min_reps}, {max_reps}")
+    if not ci_width_ms > 0:
+        raise ValueError(f"ci_width_ms must be positive, got {ci_width_ms}")
+    n_runs = len(setup_times_ms)
+    values = [x for x in setup_times_ms if x is not None]
+    ci = bootstrap_median_ci(values, resamples=resamples, seed=seed)
+    if n_runs < min_reps:
+        decision, reason = "continue", None
+    elif ci is not None and ci["width"] <= ci_width_ms:
+        decision, reason = "stop", STOP_CI
+    elif n_runs >= max_reps:
+        decision, reason = "stop", STOP_MAX
+    else:
+        decision, reason = "continue", None
+    return {"n_runs": n_runs, "n_values": len(values),
+            "median_ms": round(statistics.median(values), 3) if values else None,
+            "ci": ci, "decision": decision, "reason": reason}
 
 
 def cross_check(outcome: dict, client_report: dict | None, m: RunMetrics) -> dict:

@@ -19,6 +19,8 @@ description: what this dataset is for  # optional
 clients: [curl, chromium]              # required, from: curl, chromium
 scenarios: [C0, X1]                    # required, each defined in src/config/scenarios.yaml
 reps: 20                               # required, repetitions per session (at least 1)
+# or, for sessions run with --reps-adaptive MIN MAX --ci-width-ms W:
+# reps: {min: 10, max: 20, ci_width_ms: 0.5}
 ---
 # Example extra scenario
 
@@ -44,7 +46,11 @@ The manifest is checked against its own declared shape, and its runs against the
   `scenarios.yaml`, the single source of scenario IDs (`src/analysis/scenario_config.py`).
 - The table must have exactly one session per declared client × scenario. A missing, duplicated
   or undeclared cell, or a row that cannot be read, is refused.
-- Each session must have exactly `reps` records, repetitions 1..`reps` each once, the right client
+- With adaptive `reps`, each session must hold between `min` and `max` records, repetitions 1..n,
+  each with an `adaptive` block whose settings match the header, `continue` on every run but the
+  last and `stop` on the last. The stopping rule is recomputed from the setup times and must give
+  the same decisions; a session that ran past its stop, or was edited afterwards, is refused.
+- Otherwise each session must have exactly `reps` records, repetitions 1..`reps` each once, the right client
   and scenario, cross-checks `agree`, and lab verify passed before and after every run. For S6, the
   pcap hash must also match the record.
 
