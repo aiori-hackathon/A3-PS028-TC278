@@ -60,7 +60,7 @@ if __package__ in (None, ""):
 
 import yaml  # noqa: E402
 
-from analysis.metrics import (ORACLE_EVIDENCE, TARGET_NAME, adaptive_decision,  # noqa: E402
+from analysis.metrics import (FAILED_EXCLUDED, ORACLE_EVIDENCE, TARGET_NAME, adaptive_decision,  # noqa: E402
                               bootstrap_median_ci, oracle_baseline, scenario_penalty)
 from analysis.names import (CLIENT_LABEL_PATTERN, InvalidName, group_by_implementation,  # noqa: E402
                             label_of, parse_client)
@@ -437,7 +437,8 @@ def _check_adaptive_session(recs: list[dict], adaptive: tuple) -> list[str]:
         if got != want:
             problems.append(f"{r['run_id']} decision {got!r}, expected {want!r} at run {i} of {n}")
         tracked = "win" in ad["after_this_run"]   # 0.5 sessions carry the win fraction in every state
-        replay = adaptive_decision(setups, lo, hi, w, winners=winners if tracked else None, win_ci_width=win_w)
+        replay = adaptive_decision(setups, lo, hi, w, winners=winners if tracked else None, win_ci_width=win_w,
+                                   failed_runs=ad.get("failed_runs", FAILED_EXCLUDED))
         if replay["decision"] != got or replay["reason"] != ad["after_this_run"]["reason"]:
             problems.append(f"{r['run_id']}: stopping rule replays as {replay['decision']}/{replay['reason']}, "
                             f"record says {got}/{ad['after_this_run']['reason']}")

@@ -281,7 +281,8 @@ The final stopping reason and CI per scenario are in the last record of the sess
 | `after_this_run.reason` | string or null | On a stop: `ci_width_reached` or `max_reps_reached`. Null on `continue`. |
 
 | `win_ci_width` | number | 0.5, optional (`--win-ci-width F`): also require the 95 % Wilson CI on the fraction of runs IPv6 won to be no wider than F |
-| `after_this_run.win` | object | 0.5 (always written by 0.5 adaptive sessions): `{family: "v6", wins, n, fraction, ci}`, `ci` = `{lo, hi, width, level, n, method}` (Wilson score). Winning family is packet-level; a run with no winner counts as not won. Required when `win_ci_width` is set. |
+| `after_this_run.win` | object | 0.5 (always written by 0.5 adaptive sessions): `{family: "v6", wins, n, fraction, ci, outcomes}`, `ci` = `{lo, hi, width, level, n, method}` (Wilson score). `outcomes` = `{v6, v4, none}`, each `{n, ci}`, summing to `n`: every run is counted, a run with no winner under `none`. Winning family is packet-level. Required when `win_ci_width` is set. |
+| `failed_runs` | string | 0.5 (written by 0.5 sessions): `ranked_highest`. A run without a TCP setup time stays in the median and its CI, ranked above every observed value. Absent means `excluded` (the 0.3/0.4 rule: such runs dropped, which biases the median low). The same value is repeated in `after_this_run.failed_runs`. With `ranked_highest`, `after_this_run.median_ms` is null when half or more of the runs have no setup time, and the CI has `unbounded: true` with `hi` (and possibly `lo`) and `width` null when it reaches such runs; an unbounded CI never satisfies `ci_width_ms`. |
 
 Without `win_ci_width` the rule decides on the median CI alone, and the win fraction is carried
 for information only. When the fraction is then not settled (some runs won by each family), the

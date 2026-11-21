@@ -312,6 +312,48 @@ def bootstrap_median_ci(values: list[float], level: float = BOOT_LEVEL, resample
 STOP_CI = "ci_width_reached"
 STOP_MAX = "max_reps_reached"
 
+# How the stopping rule treats a run with no TCP setup time (no winning handshake, e.g. the client
+# hit its own time limit). EXCLUDED is the original 0.3/0.4 rule and is kept so that those sessions
+# replay exactly; it drops the slowest runs, so it biases the median low and can stop early.
+# RANKED (0.5 sessions) keeps every run: a run without a setup time is ranked above every observed
+# one (it took longer than the client allowed), so the median and its CI cover all runs.
+# Wherever a no-winner (failure) count or rate is reported. The rate depends on each client's own
+# time limit (curl --max-time, Playwright's navigation timeout), which the runner sets differently.
+FAILURE_RATE_CAVEAT = ("no-winner runs end at the client's own time limit, which differs between clients "
+                       "(curl --max-time 10 s, Chromium: Playwright navigation timeout 15 s); the no-winner "
+                       "rate is therefore not comparable between clients and says nothing about Happy Eyeballs")
+FAILED_EXCLUDED = "excluded"
+FAILED_RANKED = "ranked_highest"
+FAILED_MODES = (FAILED_EXCLUDED, FAILED_RANKED)
+
+
+def _finite(x: float) -> float | None:
+    return None if math.isinf(x) else round(x, 3)
+
+
+def bootstrap_median_ci_ranked(values: list[float | None], level: float = BOOT_LEVEL,
+                               resamples: int = BOOT_RESAMPLES, seed: int = BOOT_SEED) -> dict | None:
+    """bootstrap_median_ci over every run, a run without a value (None) ranked above all values.
+
+    The same seeded resampling as bootstrap_median_ci, so with no None the numbers are identical.
+    An end of the interval that falls on an unranked run has no value: it is null, the width is
+    null and "unbounded" is true, so the interval can never count as narrow enough.
+    None with fewer than 2 runs.
+    """
+    v = [math.inf if x is None else float(x) for x in values]
+    if len(v) < 2:
+        return None
+    rng = random.Random(seed)
+    n = len(v)
+    meds = sorted(statistics.median(rng.choices(v, k=n)) for _ in range(resamples))
+    lo_i = int((1 - level) / 2 * resamples)
+    hi_i = min(resamples - 1, int((1 + level) / 2 * resamples) - 1)
+    lo, hi = meds[lo_i], meds[hi_i]
+    bounded = not (math.isinf(lo) or math.isinf(hi))
+    return {"lo": _finite(lo), "hi": _finite(hi), "width": round(hi - lo, 3) if bounded else None,
+            "level": level, "n": n, "resamples": resamples, "seed": seed, "method": BOOT_METHOD,
+            "unbounded": not bounded, "n_without_value": sum(1 for x in values if x is None)}
+
 
 WILSON_Z = 1.959963984540054   # two-sided 95%
 WIN_FAMILY = "v6"              # the win fraction is the share of runs IPv6 won (no winner counts as not won)
@@ -335,14 +377,21 @@ def wilson_ci(k: int, n: int, z: float = WILSON_Z) -> dict | None:
 
 
 def win_state(winners: list[str | None], family: str = WIN_FAMILY) -> dict:
-    """Runs won by one family so far, with the Wilson interval on the fraction."""
+    """Runs won by one family so far, with the Wilson interval on the fraction.
+
+    Every run is in the denominator. outcomes splits all n runs three ways (IPv6 won, IPv4 won,
+    no winner), each with its own Wilson interval; a run with no winner is never dropped."""
     n, k = len(winners), sum(1 for w in winners if w == family)
-    return {"family": family, "wins": k, "n": n, "fraction": round(k / n, 4) if n else None, "ci": wilson_ci(k, n)}
+    counts = {"v6": sum(1 for w in winners if w == "v6"), "v4": sum(1 for w in winners if w == "v4"),
+              "none": sum(1 for w in winners if w is None)}
+    return {"family": family, "wins": k, "n": n, "fraction": round(k / n, 4) if n else None, "ci": wilson_ci(k, n),
+            "outcomes": {o: {"n": c, "ci": wilson_ci(c, n)} for o, c in counts.items()}}
 
 
 def adaptive_decision(setup_times_ms: list[float | None], min_reps: int, max_reps: int, ci_width_ms: float,
                       resamples: int = BOOT_RESAMPLES, seed: int = BOOT_SEED,
-                      winners: list[str | None] | None = None, win_ci_width: float | None = None) -> dict:
+                      winners: list[str | None] | None = None, win_ci_width: float | None = None,
+                      failed_runs: str = FAILED_EXCLUDED) -> dict:
     """Stopping rule after the runs so far (one entry per run; None where no TCP setup time was observed).
 
     - fewer than min_reps runs: continue
@@ -356,7 +405,13 @@ def adaptive_decision(setup_times_ms: list[float | None], min_reps: int, max_rep
     towards max_reps but not towards the median CI. With winners (the winning family per run) the
     state also carries the win fraction, whether or not win_ci_width is used to decide; without
     winners and win_ci_width the rule and its output are exactly what they were before.
+
+    failed_runs says how runs without a setup time enter the median (FAILED_EXCLUDED: dropped, the
+    original rule; FAILED_RANKED: kept and ranked above every observed value, so a median CI that
+    reaches them is unbounded and the rule does not stop on it).
     """
+    if failed_runs not in FAILED_MODES:
+        raise ValueError(f"failed_runs must be one of {FAILED_MODES}, got {failed_runs!r}")
     if not (1 <= min_reps <= max_reps):
         raise ValueError(f"need 1 <= min_reps <= max_reps, got {min_reps}, {max_reps}")
     if not ci_width_ms > 0:
@@ -370,9 +425,15 @@ def adaptive_decision(setup_times_ms: list[float | None], min_reps: int, max_rep
         raise ValueError("winners and setup times must have one entry per run")
     n_runs = len(setup_times_ms)
     values = [x for x in setup_times_ms if x is not None]
-    ci = bootstrap_median_ci(values, resamples=resamples, seed=seed)
+    if failed_runs == FAILED_RANKED:
+        ci = bootstrap_median_ci_ranked(setup_times_ms, resamples=resamples, seed=seed)
+        ranked = [math.inf if x is None else x for x in setup_times_ms]
+        median = _finite(statistics.median(ranked)) if ranked else None
+    else:
+        ci = bootstrap_median_ci(values, resamples=resamples, seed=seed)
+        median = round(statistics.median(values), 3) if values else None
     win = win_state(winners) if winners is not None else None
-    median_ok = ci is not None and ci["width"] <= ci_width_ms
+    median_ok = ci is not None and ci["width"] is not None and ci["width"] <= ci_width_ms
     win_ok = win_ci_width is None or (win["ci"] is not None and win["ci"]["width"] <= win_ci_width)
     if n_runs < min_reps:
         decision, reason = "continue", None
@@ -382,9 +443,10 @@ def adaptive_decision(setup_times_ms: list[float | None], min_reps: int, max_rep
         decision, reason = "stop", STOP_MAX
     else:
         decision, reason = "continue", None
-    out = {"n_runs": n_runs, "n_values": len(values),
-           "median_ms": round(statistics.median(values), 3) if values else None,
+    out = {"n_runs": n_runs, "n_values": len(values), "median_ms": median,
            "ci": ci, "decision": decision, "reason": reason}
+    if failed_runs == FAILED_RANKED:
+        out["failed_runs"] = FAILED_RANKED   # median_ms null: half or more of the runs had no setup time
     if win is not None:
         out["win"] = win
     return out

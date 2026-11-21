@@ -106,12 +106,40 @@ Expected, from the configuration only (prediction): a SYN round succeeds when bo
 its SYN-ACK get through, with probability 0.7² = 0.49. The kernel retransmits a SYN after 1 s and
 doubles the timeout each time, so the SYNs on one socket would go out at about 0, 1, 3 and 7 s,
 and setup times would group near 20, 1020, 3020 and 7020 ms (about 49%, 25%, 13% and 6% of runs).
-About 7% of curl runs would fail at curl's `--max-time 10` before a fifth SYN. The server's own
+About 7% of curl runs would end with no winner at curl's `--max-time 10` before a fifth SYN
+(see the time limits below; this rate is not comparable with Chromium's). The server's own
 SYN-ACK retransmissions (when a SYN arrived but its SYN-ACK was lost) can also complete a
 handshake, and they are reported separately. Chromium may open further attempts on new source
 ports; those are new attempts, not retransmissions, and are reported apart from them.
 Raising `TAIL_WAIT_S` is not needed here: the retransmitted SYN is part of the winning handshake,
 so it falls inside the window.
+
+### Time limits of the two clients (configuration, recorded in each run's `client.config.run_time_limit`)
+
+| Client | Limit set by the runner | Effect in `Gv6c30` (prediction) |
+|---|---|---|
+| curl 8.5.0 | `--max-time 10` (whole transfer, connection attempts included; exit 28 when reached) | SYN rounds at about 0, 1, 3, 7 s fit; a fifth at about 15 s does not |
+| Chromium (Playwright 1.64.1) | `page.goto` timeout 15 000 ms (`NAV_TIMEOUT_MS`); the runner kills the process at 60 s. Chromium's own connection timeouts are not overridden and are not relied on | SYN rounds at about 0, 1, 3, 7 s fit; one at about 15 s meets the limit |
+
+Beneath both, the kernel gives up on a connecting socket after `net.ipv4.tcp_syn_retries` SYN
+retransmissions (6 on the host, about 127 s in total; the band pilot reads the hl-client value).
+That is far above both runner limits, so in this lab the runner limits end a run first.
+
+**Caveat, wherever a no-winner (failure) rate is reported:** a run without a winner ends at the
+client's own time limit, and the two limits differ (10 s against 15 s). The no-winner rates of
+curl and Chromium on `Gv6c30` are therefore **not comparable**, and their difference says
+**nothing about Happy Eyeballs**. `syn_retransmit.py` and the orchestrator's adaptive summary print
+this caveat with every non-zero no-winner count (`analysis.metrics.FAILURE_RATE_CAVEAT`).
+
+### Runs without a winner are kept
+
+Every run counts. Outcomes are reported three ways over all runs: IPv6 won, IPv4 won, no winner,
+each with a 95% Wilson interval. The stopping rule's median (from schema 0.5,
+`adaptive.failed_runs: ranked_highest`) keeps runs without a setup time and ranks them above every
+observed value, because such a run took longer than the client allowed. Dropping them, which is
+what the 0.3/0.4 rule did, would bias the median low and could stop a cell early. A median CI that
+reaches those runs is unbounded and never counts as narrow enough. The cluster table lists
+successes only and says how many runs it leaves out.
 
 ## Campaign settings (decided 2026-11-21, not yet run)
 
@@ -124,8 +152,8 @@ Sixteen cells: curl and Chromium × `Gv6l10`, `Gv6l30`, `Gv6l50`, `Gv6j50`, `Gv6
 - 0.3 win-fraction CI width: in the loss and jitter cells the share of runs each family wins is
   the quantity of interest, so it is part of the stopping rule, not only reported.
 - Cap 50. A cell that stops at 50 with either CI still wider than requested is reported as such.
-- A curl run in `Gv6c30` that reaches `--max-time 10` is a recorded failure (no winner): it is
-  left out of the setup-time median and counts as not won by IPv6.
+- A run in `Gv6c30` that reaches its client's time limit is a recorded failure (no winner): it stays
+  in the median (ranked highest) and in the outcome counts, and its rate carries the caveat above.
 
 Before the campaign, `src/runner/band_pilot.py` applies each band scenario and runs verify only
 (no clients, no captures), to check that the loss and jitter bands pass on a correct link.
