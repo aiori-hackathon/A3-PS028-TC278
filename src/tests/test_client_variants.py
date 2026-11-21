@@ -261,18 +261,27 @@ def test_control_reports_a_trivial_delta_when_cis_overlap():
     ref = _side("curl", [222.1, 222.0, 222.2, 222.3, 222.4])
     cmp = vc.compare(v, ref)
     assert cmp["delta_ms"] == pytest.approx(-0.1) and cmp["ci_overlap"] and cmp["non_trivial"] is False
-    assert cmp["same_kernel"] and "LIMITATION" not in vc.report(v, [(ref, cmp)])
+    assert cmp["same_kernel"] and "LIMITATION" not in vc.report([v, ref], [(vc.FLAG, v, ref, cmp)])
 
 
-def test_control_flags_a_non_trivial_delta_and_proposes_a_limitation_without_adjusting():
-    v = _side("curl@he200", [225.0, 225.1, 225.2, 224.9, 225.0])
-    ref = _side("curl S1 (core dataset)", [222.2, 222.1, 222.3, 222.2, 222.0], kernel="7.0.0-38-generic")
-    cmp = vc.compare(v, ref)
+def test_control_flags_a_non_trivial_cross_kernel_delta_and_proposes_a_limitation_without_adjusting():
+    plain = _side("curl S1 (this dataset)", [225.0, 225.1, 225.2, 224.9, 225.0])
+    core = _side("curl S1 (core dataset)", [222.2, 222.1, 222.3, 222.2, 222.0], kernel="7.0.0-38-generic")
+    cmp = vc.compare(plain, core)
     assert cmp["delta_ms"] == pytest.approx(2.8) and cmp["non_trivial"] is True and cmp["same_kernel"] is False
-    text = vc.report(v, [(ref, cmp)])
-    assert "DIFFERENT kernels" in text and "LIMITATION (proposed" in text
-    assert "+2.800 ms" in text and "The cause is not established" in text
-    assert v["median_ms"] == 225.0 and ref["median_ms"] == 222.2         # reported as measured
+    text = vc.report([plain, core], [(vc.CROSS_KERNEL, plain, core, cmp)])
+    assert "[cross-kernel" in text and "DIFFERENT kernels" in text and "LIMITATION (proposed" in text
+    assert "Cross-kernel comparison: curl S1 (this dataset) differed from curl S1 (core dataset) by +2.800 ms" in text
+    assert "on kernel 7.0.0-43-generic against 7.0.0-38-generic" in text and "The cause is not established" in text
+    assert plain["median_ms"] == 225.0 and core["median_ms"] == 222.2         # reported as measured
+
+
+def test_flag_limitation_names_the_default():
+    v = _side("curl@he200 S1", [230.0, 230.1, 230.2, 229.9, 230.0])
+    ref = _side("curl S1", [222.2, 222.1, 222.3, 222.2, 222.0])
+    line = vc.limitation_line(v, ref, vc.compare(v, ref), vc.FLAG)
+    assert line.startswith("Validation control: curl@he200 S1 (an explicit 200 ms, curl's documented default)")
+    assert "on the same kernel" in line
 
 
 def test_control_loads_the_variant_and_the_same_dataset_reference(tmp_path):

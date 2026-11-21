@@ -3,15 +3,18 @@
     .venv/bin/python src/analysis/variant_control.py --dataset NAME [--variant curl@he200] [--scenario S1]
 
 200 ms is curl's documented default Happy Eyeballs timeout (curl man page, --happy-eyeballs-timeout-ms),
-so setting it explicitly should change nothing: curl@he200 should behave like plain curl. This
-compares the median TCP setup time (packet-level) of the variant's session in dataset NAME with:
+so setting it explicitly should change nothing: curl@he200 should behave like plain curl. Up to
+three deltas of median TCP setup time (packet-level), each "first minus second":
 
-1. plain curl, same scenario, in the same dataset, if the dataset has that session. Same code and
-   (normally) the same kernel, so this isolates the flag.
-2. plain curl, same scenario, in the frozen core dataset (2026-10-26). The core runs were made on an
-   earlier kernel, so a difference here mixes the flag with the kernel and anything else that changed
-   on the host; the kernels of both sides are printed. That is why comparison 1 is the control
-   proper and comparison 2 doubles as a cross-kernel comparison.
+1. flag: curl@he200 minus plain curl, both in dataset NAME. Same code and (normally) the same
+   kernel, so this isolates the flag. This is the control proper.
+2. cross-kernel: plain curl in dataset NAME minus plain curl in the frozen core dataset
+   (2026-10-26, an earlier kernel). No flag on either side, so a difference comes from what changed
+   on the host (kernel and anything else), not from the flag.
+3. variant vs core: curl@he200 minus core plain curl. Flag and host change together; printed for
+   completeness, it separates neither.
+
+The kernels and client versions of every side are read from the records and printed.
 
 The delta is reported as measured. A delta is called non-trivial when the two medians' 95% bootstrap
 CIs (analysis.metrics.bootstrap_median_ci) do not overlap. That is a descriptive flag, not a
@@ -44,7 +47,7 @@ def side(name: str, setup_ms: list[float], kernels: list[str], versions: list[st
 
 
 def compare(variant: dict, reference: dict) -> dict:
-    """Delta of the variant's median minus the reference's, and whether their CIs overlap."""
+    """Delta of one side's median minus the other's, and whether their CIs overlap."""
     if variant["median_ms"] is None or reference["median_ms"] is None:
         return {"reference": reference["name"], "delta_ms": None, "ci_overlap": None, "non_trivial": None,
                 "same_kernel": None, "note": "no TCP setup time on one side"}
@@ -55,14 +58,24 @@ def compare(variant: dict, reference: dict) -> dict:
             "same_kernel": variant["kernels"] == reference["kernels"]}
 
 
-def limitation_line(variant: dict, reference: dict, cmp: dict) -> str:
-    kern = ("same kernel" if cmp["same_kernel"]
-            else f"kernel {', '.join(variant['kernels'])} against {', '.join(reference['kernels'])}")
-    return (f"Validation control: {variant['name']} (explicit 200 ms, curl's documented default) differed from "
-            f"{reference['name']} by {cmp['delta_ms']:+.3f} ms in median TCP setup time "
-            f"({variant['median_ms']} ms, 95% CI {variant['ci']['lo']}-{variant['ci']['hi']}, n={variant['n']}, "
-            f"against {reference['median_ms']} ms, 95% CI {reference['ci']['lo']}-{reference['ci']['hi']}, "
-            f"n={reference['n']}; {kern}). The intervals do not overlap. The cause is not established by these data.")
+FLAG = "flag"            # variant against plain curl, same dataset: the control proper
+CROSS_KERNEL = "kernel"  # plain curl in this dataset against plain curl in the core dataset
+VARIANT_CORE = "variant_core"  # variant against core plain curl: flag and kernel together
+PURPOSE = {FLAG: "flag (same dataset)", CROSS_KERNEL: "cross-kernel (plain curl, this dataset vs core)",
+           VARIANT_CORE: "variant vs core (flag and kernel not separated)"}
+
+
+def limitation_line(a: dict, b: dict, cmp: dict, purpose: str = FLAG) -> str:
+    kern = ("on the same kernel" if cmp["same_kernel"]
+            else f"on kernel {', '.join(a['kernels'])} against {', '.join(b['kernels'])}")
+    what = {FLAG: (f"Validation control: {a['name']} (an explicit 200 ms, curl's documented default) differed "
+                   f"from {b['name']}"),
+            CROSS_KERNEL: f"Cross-kernel comparison: {a['name']} differed from {b['name']}",
+            VARIANT_CORE: f"{a['name']} differed from {b['name']}"}[purpose]
+    return (f"{what} by {cmp['delta_ms']:+.3f} ms in median TCP setup time "
+            f"({a['median_ms']} ms, 95% CI {a['ci']['lo']}-{a['ci']['hi']}, n={a['n']}, "
+            f"against {b['median_ms']} ms, 95% CI {b['ci']['lo']}-{b['ci']['hi']}, n={b['n']}; {kern}). "
+            "The intervals do not overlap. The cause is not established by these data.")
 
 
 def _records_by_session(sessions: set[str], runs_dir: Path) -> dict[str, list[dict]]:
@@ -91,32 +104,36 @@ def load_side(m: Manifest, client: str, scenario: str, name: str, runs_dir: Path
                 [r["client"].get("version", "?") for r in recs], sid)
 
 
-def report(variant: dict, refs: list[tuple[dict, dict]]) -> str:
-    def fmt(s: dict) -> str:
-        ci = s["ci"]
-        ci_txt = f"95% CI [{ci['lo']}, {ci['hi']}]" if ci else "no CI"
-        return (f"  {s['name']:44} n={s['n']:>3} median {s['median_ms']} ms  {ci_txt}  kernel {', '.join(s['kernels'])}"
-                f"  session {s['session']}")
-    lines = ["VALIDATION CONTROL (packet-level TCP setup time; CIs describe precision, they are not significance tests)",
-             fmt(variant)]
-    for ref, cmp in refs:
-        lines.append(fmt(ref))
-    for ref, cmp in refs:
+def _fmt_side(s: dict) -> str:
+    ci = s["ci"]
+    ci_txt = f"95% CI [{ci['lo']}, {ci['hi']}]" if ci else "no CI"
+    return (f"  {s['name']:44} n={s['n']:>3} median {s['median_ms']} ms  {ci_txt}  kernel {', '.join(s['kernels'])}"
+            f"  {', '.join(s['client_versions'])}  session {s['session']}")
+
+
+def report(sides: list[dict], pairs: list[tuple[str, dict, dict, dict]]) -> str:
+    """pairs: (purpose, a, b, compare(a, b)); each delta is a minus b."""
+    lines = ["VALIDATION CONTROL (packet-level TCP setup time; CIs describe precision, they are not significance tests)"]
+    lines += [_fmt_side(s) for s in sides]
+    for purpose, a, b, cmp in pairs:
+        head = f"  [{PURPOSE[purpose]}] {a['name']} minus {b['name']}"
         if cmp["delta_ms"] is None:
-            lines.append(f"  delta against {ref['name']}: not computed ({cmp['note']})")
+            lines.append(f"{head}: not computed ({cmp['note']})")
             continue
-        kern = "same kernel" if cmp["same_kernel"] else "DIFFERENT kernels: flag and kernel are not separated"
+        kern = "same kernel" if cmp["same_kernel"] else "DIFFERENT kernels"
         verdict = ("non-trivial (CIs do not overlap)" if cmp["non_trivial"]
                    else "trivial (CIs overlap)" if cmp["non_trivial"] is False else "no CI on one side")
-        lines.append(f"  delta {variant['name']} minus {ref['name']}: {cmp['delta_ms']:+.3f} ms; {verdict}; {kern}")
+        lines.append(f"{head}: {cmp['delta_ms']:+.3f} ms; {verdict}; {kern}")
         if cmp["non_trivial"]:
-            lines.append("  LIMITATION (proposed line for the report; not written automatically):")
-            lines.append("    " + limitation_line(variant, ref, cmp))
+            lines.append("    LIMITATION (proposed line for the report; not written automatically):")
+            lines.append("      " + limitation_line(a, b, cmp, purpose))
     return "\n".join(lines)
 
 
 def run(dataset: str, variant_label: str = "curl@he200", scenario: str = "S1",
         runs_dir: Path = RUNS_DIR, repo: Path | None = REPO) -> dict:
+    """Up to three deltas: the flag (variant minus plain curl, same dataset), cross-kernel (plain curl
+    in this dataset minus core plain curl), and variant minus core plain curl (both effects together)."""
     cn = parse_client(variant_label)
     if not cn.variant or cn.implementation != "curl":
         raise DatasetError(f"{variant_label}: the control compares a curl variant with plain curl")
@@ -124,16 +141,20 @@ def run(dataset: str, variant_label: str = "curl@he200", scenario: str = "S1",
     variant = load_side(m, variant_label, scenario, f"{variant_label} {scenario} ({dataset})", runs_dir, repo)
     if variant is None:
         raise DatasetError(f"dataset {dataset} has no {variant_label}/{scenario} session")
-    refs = []
-    same = load_side(m, "curl", scenario, f"curl {scenario} ({dataset}, same dataset)", runs_dir, repo)
-    if same is not None:
-        refs.append(same)
+    same = load_side(m, "curl", scenario, f"curl {scenario} ({dataset})", runs_dir, repo)
     core = load_side(load_dataset(CORE_DATASET), "curl", scenario, f"curl {scenario} (core dataset)", runs_dir, repo)
+    pairs = []
+    if same is not None:
+        pairs.append((FLAG, variant, same))
+        if core is not None:
+            pairs.append((CROSS_KERNEL, same, core))
     if core is not None:
-        refs.append(core)
-    pairs = [(ref, compare(variant, ref)) for ref in refs]
-    return {"variant": variant, "comparisons": [dict(cmp, reference_side=ref) for ref, cmp in pairs],
-            "text": report(variant, pairs)}
+        pairs.append((VARIANT_CORE, variant, core))
+    done = [(p, a, b, compare(a, b)) for p, a, b in pairs]
+    sides = [x for x in (variant, same, core) if x is not None]
+    return {"sides": sides,
+            "comparisons": [dict(cmp, purpose=p, a=a["name"], b=b["name"]) for p, a, b, cmp in done],
+            "text": report(sides, done)}
 
 
 def main(argv: list[str] | None = None) -> int:
