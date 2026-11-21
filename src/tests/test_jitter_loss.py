@@ -489,3 +489,36 @@ def test_analysis_keeps_a_no_winner_run_and_says_why_rates_differ(tmp_path):
     assert c["median_all_runs_ms"] is None                                       # 1 of 2 runs has no value
     text = sr.report([c])
     assert "no winner 1/2" in text and "CAVEAT" in text
+
+
+CAMPAIGN = ",".join(f"{s}:{c}" for s in ("Gv6l10", "Gv6l30", "Gv6l50", "Gv6j50", "Gv6j70", "Gv6d200", "Gv6d280",
+                                         "Gv6c30") for c in ("curl", "chromium"))
+
+
+def test_run_matrix_runs_an_only_list_in_order():
+    from runner import run_matrix as rm
+    todo = rm.select(rm.PLAN, 1, CAMPAIGN)
+    assert [n for n, _, _ in todo] == list(range(1, 17))
+    assert todo[0][1:] == ("Gv6l10", "curl") and todo[-1][1:] == ("Gv6c30", "chromium")
+    assert rm.select(rm.PLAN, 1, "Gv6l10:curl,Gv6nope:curl") == []
+    assert rm.select(rm.PLAN, 1, "Gv6l10:curl,Gv6l10:curl") == []
+    assert rm.select(rm.PLAN, 1, "Gv6d200:curl") == [(0, "Gv6d200", "curl")]      # single extra: unchanged
+
+
+def test_run_matrix_resume_command_keeps_the_settings():
+    from runner import run_matrix as rm
+    todo = rm.select(rm.PLAN, 1, CAMPAIGN)
+    args = ["--only", CAMPAIGN, "--reps-adaptive", "20", "50", "--ci-width-ms", "25", "--win-ci-width", "0.3"]
+    cmd = rm.resume_command(todo, 14, True, args)
+    assert cmd == ("sudo .venv/bin/python src/runner/run_matrix.py --only Gv6c30:curl,Gv6c30:chromium "
+                   "--reps-adaptive 20 50 --ci-width-ms 25 --win-ci-width 0.3")
+    assert rm.resume_command(todo, 16, True, args) == "(nothing left in the --only list)"
+    assert rm.resume_command(rm.select(rm.PLAN), 3, False, []).endswith("--from 4")
+
+
+def test_run_matrix_dry_run_of_the_campaign(capsys):
+    from runner import run_matrix as rm
+    assert rm.main(["--dry-run", "--only", CAMPAIGN, "--reps-adaptive", "20", "50", "--ci-width-ms", "25",
+                    "--win-ci-width", "0.3"]) == 0
+    out = capsys.readouterr().out
+    assert "16 batches from the --only list" in out and out.count("--win-ci-width 0.3") == 16

@@ -182,9 +182,18 @@ Observations, not conclusions (five trials per scenario are too few to calibrate
 - `Gv6l30` trial 4 (61.5%) is about 3 binomial standard errors above the expected 51%. It is
   inside the 4-SE band. Every campaign run records its own verify values
   (`scenario.verify_observed`), so the campaign itself will show whether such values recur.
-- All five `Gv6j50` SDs are below the expected J·√2 = 70.7 ms (mean 67.6 ms), while `Gv6j70`
-  is close to its expected 99.0 ms (mean 100.0 ms). Both are inside their bands. No cause is
-  claimed.
+- **Jitter spread (derived from the verify pings, ICMP; not from client packets).** For
+  independent normal draws each way the RTT SD should be J·√2: 70.7 ms for `Gv6j50` and 99.0 ms
+  for `Gv6j70`. The mean of five measured SDs was 67.6 ms (all five below 70.7) and 100.0 ms.
+  The standard error of a five-trial mean is about 1.6 ms and 2.2 ms. So `Gv6j70` matches its
+  prediction (+0.5 SE), and `Gv6j50` sits about 2 SE below it. Both are inside their bands.
+- **What this does not show: whether negative draws are clamped.** With base delay 10 + 2J, a
+  draw is negative about 1.4% (`Gv6j50`) and 1.6% (`Gv6j70`) of the time in each direction.
+  Clamping those draws at 0 would lower the RTT SD by only about 0.9 ms and 1.4 ms (1.3–1.5%;
+  computed by simulating 400 000 draws). That is smaller than the five-trial standard error, so
+  this pilot cannot tell clamped draws from unclamped ones. The SD agreement is consistent with
+  the design estimate that clamping is rare. It is not evidence that clamping is absent. Settling
+  this would need the individual ping RTTs, which verify.sh does not keep, or many more trials.
 
 Measured verify durations (pilot log timestamps): 8.1–8.2 s for a loss band, 8.5–8.9 s for a
 jitter band, 10.1–10.2 s for `Gv6c30` (blackhole plus loss band). A point verify took 5.8 s in the

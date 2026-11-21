@@ -85,10 +85,28 @@ def session_id(output: str) -> str | None:
     return m.group(1) if m else None
 
 
+def select_list(only: str) -> list[tuple[int, str, str]] | None:
+    """--only A:B,C:D,...: the listed batches in that order, numbered 1..k within the list.
+    None if any item is not a runnable batch (unknown scenario or client)."""
+    items = [x.strip() for x in only.split(",") if x.strip()]
+    out = []
+    for i, item in enumerate(items, 1):
+        one = select(PLAN, 1, item)
+        if not one:
+            return None
+        out.append((i, one[0][1], one[0][2]))
+    if len({(s, c) for _, s, c in out}) != len(out):
+        return None
+    return out
+
+
 def select(plan: list[tuple[str, str]], start: int = 1, only: str | None = None) -> list[tuple[int, str, str]]:
     """Batches to run. --only SCENARIO:CLIENT picks one batch of the plan, or, for a client variant
-    (curl@he<N>) or a generated scenario, one extra batch outside the plan, numbered 0."""
+    (curl@he<N>) or a generated scenario, one extra batch outside the plan, numbered 0.
+    A comma-separated --only is a list of batches (select_list)."""
     numbered = [(i, s, c) for i, (s, c) in enumerate(plan, start=1)]
+    if only and "," in only:
+        return select_list(only) or []
     if only:
         scenario, _, client = only.partition(":")
         hit = [x for x in numbered if x[1] == scenario and x[2] == client]
@@ -114,11 +132,11 @@ class Log:
 
 
 def run_batch(n: int, scenario: str, client: str, out_dir: Path, log: Log,
-              adaptive: tuple | None = None) -> tuple[int, str, str | None]:
+              adaptive: tuple | None = None, total: int | None = None) -> tuple[int, str, str | None]:
     cmd = orchestrator_cmd(scenario, client, adaptive=adaptive)
     path = out_dir / f"{n:02d}_{scenario}_{file_token(client)}.log"
     reps_txt = f"adaptive {adaptive[0]}-{adaptive[1]}" if adaptive else f"x{REPS}"
-    where = f"{n}/{len(PLAN)}" if n else "extra batch, outside the plan"
+    where = f"{n}/{total or len(PLAN)}" + (" of the --only list" if total else "") if n else "extra batch, outside the plan"
     log(f"\n[{where}] {client} {scenario} {reps_txt}: {' '.join(cmd)}")
     t0 = time.monotonic()
     captured = []
@@ -137,6 +155,27 @@ def run_batch(n: int, scenario: str, client: str, out_dir: Path, log: Log,
     return proc.returncode, str(path), session_id("".join(captured))
 
 
+def resume_command(todo: list[tuple[int, str, str]], n: int, listed: bool, args: list[str]) -> str:
+    """The command that continues after batch n (for a list: the remaining batches, same settings)."""
+    base = "sudo .venv/bin/python src/runner/run_matrix.py"
+    if not listed:
+        return f"{base} --from {n + 1}"
+    rest = [f"{s}:{c}" for i, s, c in todo if i > n]
+    if not rest:
+        return "(nothing left in the --only list)"
+    keep, skip = [], False
+    for x in args:
+        if skip:
+            skip = False
+            continue
+        if x == "--only":
+            skip = True
+            continue
+        if not x.startswith("--only="):
+            keep.append(x)
+    return " ".join([base, "--only", ",".join(rest), *keep])
+
+
 def chown_tree(path: Path, user: str) -> None:
     pw = pwd.getpwnam(user)
     for p in [path, *path.rglob("*")]:
@@ -151,7 +190,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--from", dest="start", type=int, default=1, help="first batch number to run (1-14)")
     ap.add_argument("--only", help="run just one batch, e.g. S3:chromium, or an extra one such as "
-                                   "S1:curl@he200 or Gv6d200:curl")
+                                   "S1:curl@he200 or Gv6d200:curl; or a comma-separated list of batches, "
+                                   "run in that order (e.g. Gv6l10:curl,Gv6l10:chromium)")
     ap.add_argument("--reps-adaptive", type=int, nargs=2, metavar=("MIN", "MAX"),
                     help="adaptive repetitions per batch (needs --ci-width-ms); default: fixed 20")
     ap.add_argument("--ci-width-ms", type=float)
@@ -168,15 +208,20 @@ def main(argv: list[str] | None = None) -> int:
             (a.win_ci_width,) if a.win_ci_width is not None else ())
     elif a.ci_width_ms is not None or a.win_ci_width is not None:
         ap.error("--ci-width-ms and --win-ci-width only apply with --reps-adaptive")
+    listed = bool(a.only and "," in a.only)
+    if listed and a.start != 1:
+        ap.error("--from does not apply to an --only list; to resume, pass the remaining batches to --only")
     todo = select(PLAN, a.start, a.only)
     if not todo:
-        ap.error("nothing selected")
+        ap.error("nothing selected" + (" (an --only list item is unknown or repeated)" if listed else ""))
+    total = len(todo) if listed else None
 
     if a.dry_run:
         reps_txt = (f"adaptive {adaptive[0]}-{adaptive[1]} reps (CI width {adaptive[2]:g} ms"
                     + (f", IPv6 win-fraction CI width {adaptive[3]:g}" if len(adaptive) > 3 else "") + ")" if adaptive
                     else f"{REPS} reps")
-        scope = (f"{len(todo)} of {len(PLAN)} batches" if all(n for n, _, _ in todo)
+        scope = (f"{len(todo)} batches from the --only list" if listed
+                 else f"{len(todo)} of {len(PLAN)} batches" if all(n for n, _, _ in todo)
                  else "1 extra batch outside the 14-batch plan")
         print(f"Plan: {scope}, {reps_txt} each, one at a time; "
               "batch check after each; stop on any failure.")
@@ -202,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
     t_all = time.monotonic()
     try:
         for n, scenario, client in todo:
-            code, _, sid = run_batch(n, scenario, client, out_dir, log, adaptive)
+            code, _, sid = run_batch(n, scenario, client, out_dir, log, adaptive, total)
             if sid is None:
                 log(f"  STOP: no session ID in the orchestrator output (exit {code}); see the batch output")
                 status = 1
@@ -224,7 +269,7 @@ def main(argv: list[str] | None = None) -> int:
                     f"batch check {'PASS' if res.ok else 'FAIL'}.")
                 log("Review the flagged runs above. To complete this batch use the command(s) printed "
                     "by the check, then resume with:")
-                log(f"  sudo .venv/bin/python src/runner/run_matrix.py --from {n + 1}")
+                log("  " + resume_command(todo, n, listed, sys.argv[1:]))
                 status = 1
                 break
     except KeyboardInterrupt:
