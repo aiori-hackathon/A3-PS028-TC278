@@ -30,10 +30,12 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from analysis.names import FILE_TOKEN_PATTERN, InvalidName, label_from_file_token, parse_client  # noqa: E402
 from analysis.validate_record import validate  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
-_RUN_RE = re.compile(r"^(?P<ts>\d{8}T\d{6}Z)_(?P<scenario>\w+?)_(?P<client>curl|chromium)_r(?P<rep>\d+)$")
+_RUN_RE = re.compile(rf"^(?P<ts>\d{{8}}T\d{{6}}Z)_(?P<scenario>[A-Za-z0-9-]+?)_(?P<client>{FILE_TOKEN_PATTERN})"
+                     rf"_r(?P<rep>\d+)$")
 
 
 @dataclass
@@ -92,8 +94,9 @@ def check_run(run_id: str, client: str, scenario: str, runs: Path, captures: Pat
     """Returns (check, has_record, has_pcap)."""
     m = _RUN_RE.match(run_id)
     rc = RunCheck(run_id=run_id, rep=int(m["rep"]) if m else 0)
-    if m and (m["client"], m["scenario"]) != (client, scenario):
-        rc.problems.append(f"run is {m['client']}/{m['scenario']}, not {client}/{scenario}")
+    run_client = label_from_file_token(m["client"]) if m else None   # run IDs write '@' as '-'
+    if m and (run_client, m["scenario"]) != (client, scenario):
+        rc.problems.append(f"run is {run_client}/{m['scenario']}, not {client}/{scenario}")
     pcap = captures / f"{run_id}.pcap"
     rec_path = runs / f"{run_id}.json"
     has_pcap, has_record = pcap.exists(), rec_path.exists()
@@ -187,11 +190,15 @@ def report(res: BatchResult) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--client", required=True, choices=["curl", "chromium"])
+    ap.add_argument("--client", required=True, help="curl, chromium or a curl variant such as curl@he200")
     ap.add_argument("--scenario", required=True)
     ap.add_argument("--expect", type=int, default=20)
     ap.add_argument("--session", action="append", required=True, help="session ID (repeatable)")
     a = ap.parse_args(argv)
+    try:
+        parse_client(a.client)
+    except InvalidName as exc:
+        ap.error(str(exc))
     res = check_batch(a.client, a.scenario, a.expect, a.session)
     print(report(res))
     return 0 if res.ok else 1

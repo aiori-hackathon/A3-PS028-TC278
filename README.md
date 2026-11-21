@@ -131,7 +131,10 @@ measurements. The netem values were validated by pilot runs and are specific to 
 | S6 | AAAA delayed | The DNS server holds the AAAA answer for 300 ms; A is immediate | 20 / 20 ms |
 | X1 | Compound stress (optional in our proposal) | **Not run.** PS-028 asks for six scenarios and does not mention X1; our proposal listed it as an optional extra, to run only if time allowed. It was never configured in `scenarios.yaml`, and the orchestrator does not accept it. | — |
 
-Definitions are in [`src/config/scenarios.yaml`](src/config/scenarios.yaml). The RTTs measured
+Definitions are in [`src/config/scenarios.yaml`](src/config/scenarios.yaml). Extension scenarios (an IPv6
+latency sweep, IDs such as `Gv6d200`) are generated separately and are not part of the core dataset; see
+[`docs/client_variants.md`](docs/client_variants.md), which also covers curl variants such as `curl@he200`.
+The RTTs measured
 before the dataset's runs were 20.35–21.4 ms on baseline links, 171.0 ms for S3 and 621.0 ms for
 S2/S5. Both blackholes were confirmed at 100% loss.
 
@@ -327,7 +330,7 @@ sudo src/lab/teardown.sh                  # removes both namespaces and the lab 
 ├── scripts/test.sh           test runner (clean environment)
 ├── src/
 │   ├── lab/                  setup.sh, teardown.sh, verify.sh, netem.sh, lib.sh, lab.env
-│   ├── config/               scenarios.yaml, nginx.conf
+│   ├── config/               scenarios.yaml, scenario_grid.yaml, scenarios_generated.yaml, nginx.conf
 │   ├── dns/                  hl_dns.py: test-zone DNS server with per-type delay
 │   ├── runner/               orchestrate.py, run_matrix.py, client runners, child_env.py
 │   ├── analysis/             parse_pcap.py, metrics.py, summarise.py, dashboard.py, race.py, export_web.py, oracle.py, adaptive_replay.py, check_batch.py, validators

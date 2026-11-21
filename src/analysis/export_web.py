@@ -45,6 +45,7 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from analysis.names import label_of, parse_client  # noqa: E402
 from analysis.summarise import (  # noqa: E402
     CORE_DATASET, DATASET_DOC, EXPECTED_REPS, REPO, RUNS_DIR, Run, dataset_sessions,
     load_dataset, run_from_record)
@@ -151,8 +152,8 @@ def load_cells(sessions: list[tuple[str, str, str]], runs_dir: Path = RUNS_DIR) 
     for client, scenario, sid in sessions:
         cell = cells.setdefault((client, scenario), Cell())
         for r in sorted(by_session.get(sid, []), key=lambda r: r["scenario"]["repetition"]):
-            if (r["client"]["name"], r["scenario"]["id"]) != (client, scenario):
-                cell.excluded.append((r["run_id"], f"is {r['client']['name']}/{r['scenario']['id']}, "
+            if (label_of(r["client"]), r["scenario"]["id"]) != (client, scenario):
+                cell.excluded.append((r["run_id"], f"is {label_of(r['client'])}/{r['scenario']['id']}, "
                                                    f"not {client}/{scenario}"))
                 continue
             why = problem(r)
@@ -340,6 +341,10 @@ class Export:
 def export(page_text: str, sessions: list[tuple[str, str, str]], runs_dir: Path = RUNS_DIR,
            repo: Path = REPO, target: int = EXPECTED_REPS, fixtures: Path = FIXTURES,
            source: str = "docs/dataset.md") -> Export:
+    variants = sorted({c for c, _, _ in sessions if parse_client(c).variant})
+    if variants:
+        raise ExportError(f"the web page has sections for curl and Chromium only, not for the variant(s) "
+                          f"{', '.join(variants)}; show variants with src/analysis/dashboard.py")
     _, block, _ = split_page(page_text)
     old_d, _ = parse_existing(block)  # WIN is parsed only to check it matches D
     cells = load_cells(sessions, runs_dir)

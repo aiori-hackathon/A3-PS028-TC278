@@ -52,16 +52,16 @@ from pathlib import Path
 if __package__ in (None, ""):  # run as a script: make src/ importable
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import yaml  # noqa: E402
 
 from analysis import metrics  # noqa: E402
 from analysis.metrics import adaptive_decision  # noqa: E402
-from analysis.scenario_config import SCENARIOS_FILE  # noqa: E402
+from analysis.names import InvalidName, file_token, parse_client  # noqa: E402
+from analysis.scenario_config import AUTO, SCENARIOS_FILE, load_config  # noqa: E402
 from analysis.parse_pcap import parse  # noqa: E402
 from analysis.validate_record import SCHEMA_VERSION, validate  # noqa: E402
 from runner.child_env import STRIPPED_VARS, child_env_with_removed, describe  # noqa: E402
 from runner.clients import (CLIENTS, CURL_FORMAT, CURL_URL, curl_argv,  # noqa: E402,F401
-                            parse_curl_report)
+                            get_client, parse_curl_report)
 
 REPO = Path(__file__).resolve().parents[2]
 LAB = REPO / "src" / "lab"
@@ -99,17 +99,33 @@ def load_lab_env(path: Path = LAB / "lab.env") -> dict[str, str]:
     return env
 
 
-def load_scenarios(ids: list[str], path: Path = SCENARIOS_FILE, client: str = "curl") -> dict[str, dict]:
-    cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
+LAB_VERIFY_TARGET_RE = re.compile(r"blackhole|\d+(\.\d+)?")   # what src/lab/verify.sh accepts
+
+
+def load_scenarios(ids: list[str], path: Path = SCENARIOS_FILE, client: str = "curl",
+                   generated=AUTO) -> dict[str, dict]:
+    """Definitions of the given scenarios (scenarios.yaml plus the generated extensions).
+
+    A scenario whose verify target the lab's verify.sh cannot check (a generated partial-loss
+    scenario, target "loss:N") is refused here, before anything in the lab is changed.
+    """
+    cfg = load_config(path, generated)
     out = {}
-    supported = SUPPORTED[client]
+    supported = SUPPORTED[parse_client(client).implementation]
     for sid in ids:
         if sid not in supported:
             raise OrchestratorError(f"scenario {sid} is out of scope for {client} for now "
                                     f"(supported: {', '.join(supported)})")
         if sid not in cfg["scenarios"]:
             raise OrchestratorError(f"scenario {sid} missing from {path}")
-        out[sid] = cfg["scenarios"][sid]
+        sc = cfg["scenarios"][sid]
+        for fam, target in sc["verify_target"].items():
+            if not LAB_VERIFY_TARGET_RE.fullmatch(str(target)):
+                raise OrchestratorError(
+                    f"scenario {sid}: verify target {target!r} for {fam} cannot be checked by src/lab/verify.sh "
+                    "(it checks an RTT or 'blackhole' only); partial-loss scenarios need a reviewed verify "
+                    "extension before they can run")
+        out[sid] = sc
     out["_baseline"] = cfg["baseline"]
     return out
 
@@ -154,7 +170,9 @@ def cmd_nginx(lab: dict, user: str, prefix: Path) -> list[str]:
 
 
 def make_run_id(start: datetime, scenario: str, repetition: int, client: str = "curl") -> str:
-    return f"{start:%Y%m%dT%H%M%SZ}_{scenario}_{client}_r{repetition:02d}"
+    """The client part uses the file-name form of the label ('@' -> '-', analysis.names.file_token);
+    pcaps, records, logs and NetLogs are all named after the run ID."""
+    return f"{start:%Y%m%dT%H%M%SZ}_{scenario}_{file_token(client)}_r{repetition:02d}"
 
 
 def verify_targets(sc: dict) -> tuple:
@@ -234,7 +252,7 @@ def build_record(*, run_id: str, scenario_id: str, sc: dict, repetition: int, ru
                  returncode: int, stdout: str, stderr: str, pre_rtt: dict, pre_ok: bool, post_ok: bool,
                  pcap_rel: str, pcap_sha256: str, log_rel: str, timeline, capture_stats: dict,
                  client: str = "curl", client_info: dict | None = None) -> dict:
-    spec = CLIENTS[client]
+    spec = get_client(client)
     outcome = spec.outcome(returncode, stdout, stderr)
     report = outcome["client_report"]
 
@@ -260,7 +278,8 @@ def build_record(*, run_id: str, scenario_id: str, sc: dict, repetition: int, ru
                                 "v6": measured_rtt_field(pre_rtt.get("v6"), v6_t)},
         },
         "client": {
-            "name": spec.name, "version": client_version, "argv": argv,
+            "name": spec.name, **({"variant": spec.variant} if spec.variant else {}),
+            "version": client_version, "argv": argv,
             "config": spec.config(in_ns_as_user("hl-client", user, []), client_info or {}),
         },
         "environment": environment,
@@ -533,7 +552,7 @@ def run_one(ctx: Ctx, client: str, sid: str, sc: dict, rep: int, base: dict, cli
     """One measurement. t0 (time.monotonic()) is when the run started, for the profile's wall time;
     annotate(record) may add blocks (e.g. adaptive) before the record is validated and written."""
     t0 = time.monotonic() if t0 is None else t0
-    spec = CLIENTS[client]
+    spec = get_client(client)
     run_start = datetime.now(timezone.utc)
     run_id = make_run_id(run_start, sid, rep, client)
     record_path = dirs["runs"] / f"{run_id}.json"
@@ -662,7 +681,7 @@ def summary_line(r: dict, wall_s: float | None = None) -> str:
 
 def dry_run(scenarios: dict, reps: int, user: str, lab: dict, client: str = "curl",
             adaptive: tuple[int, int, float] | None = None) -> None:
-    spec = CLIENTS[client]
+    spec = get_client(client)
     base = scenarios["_baseline"]
     print(f"DRY RUN (nothing is executed). Client {client}. "
           f"Session would run as root and drop to '{user}' for clients and services.")
@@ -702,7 +721,8 @@ def dry_run(scenarios: dict, reps: int, user: str, lab: dict, client: str = "cur
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--client", choices=sorted(CLIENTS), default="curl")
+    p.add_argument("--client", default="curl",
+                   help="curl, chromium, or a curl variant curl@he<N> (--happy-eyeballs-timeout-ms N)")
     p.add_argument("--scenario", nargs="+", required=True, choices=ALL_SUPPORTED)
     p.add_argument("--reps", type=int, default=None, help="fixed number of repetitions (default 1)")
     p.add_argument("--reps-adaptive", type=int, nargs=2, metavar=("MIN", "MAX"),
@@ -713,6 +733,10 @@ def main(argv: list[str] | None = None) -> int:
                    help="number of the first repetition (to complete a batch that stopped early)")
     p.add_argument("--dry-run", action="store_true", help="print the commands, execute nothing (no sudo needed)")
     args = p.parse_args(argv)
+    try:
+        parse_client(args.client)
+    except InvalidName as exc:
+        p.error(str(exc))
     adaptive = None
     if args.reps_adaptive:
         lo, hi = args.reps_adaptive
@@ -772,7 +796,7 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl",
     adaptive_out: list[dict] = []
     status = 0
     try:
-        spec = CLIENTS[client]
+        spec = get_client(client)
         out = sh(ctx, in_ns_as_user(lab["NS_CLIENT"], user, spec.version_argv()), session_log,
                  timeout=spec.timeout_s).stdout
         try:

@@ -42,6 +42,8 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from analysis.check_batch import check_batch, report  # noqa: E402
+from analysis.names import InvalidName, file_token, parse_client  # noqa: E402
+from analysis.scenario_config import scenario_ids  # noqa: E402
 from runner.child_env import STRIPPED_VARS, child_env  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
@@ -83,10 +85,19 @@ def session_id(output: str) -> str | None:
 
 
 def select(plan: list[tuple[str, str]], start: int = 1, only: str | None = None) -> list[tuple[int, str, str]]:
+    """Batches to run. --only SCENARIO:CLIENT picks one batch of the plan, or, for a client variant
+    (curl@he<N>) or a generated scenario, one extra batch outside the plan, numbered 0."""
     numbered = [(i, s, c) for i, (s, c) in enumerate(plan, start=1)]
     if only:
         scenario, _, client = only.partition(":")
-        return [x for x in numbered if x[1] == scenario and x[2] == client]
+        hit = [x for x in numbered if x[1] == scenario and x[2] == client]
+        if hit:
+            return hit
+        try:
+            parse_client(client)
+        except InvalidName:
+            return []
+        return [(0, scenario, client)] if scenario in scenario_ids() else []
     return [x for x in numbered if x[0] >= start]
 
 
@@ -104,9 +115,10 @@ class Log:
 def run_batch(n: int, scenario: str, client: str, out_dir: Path, log: Log,
               adaptive: tuple[int, int, float] | None = None) -> tuple[int, str, str | None]:
     cmd = orchestrator_cmd(scenario, client, adaptive=adaptive)
-    path = out_dir / f"{n:02d}_{scenario}_{client}.log"
+    path = out_dir / f"{n:02d}_{scenario}_{file_token(client)}.log"
     reps_txt = f"adaptive {adaptive[0]}-{adaptive[1]}" if adaptive else f"x{REPS}"
-    log(f"\n[{n}/{len(PLAN)}] {client} {scenario} {reps_txt}: {' '.join(cmd)}")
+    where = f"{n}/{len(PLAN)}" if n else "extra batch, outside the plan"
+    log(f"\n[{where}] {client} {scenario} {reps_txt}: {' '.join(cmd)}")
     t0 = time.monotonic()
     captured = []
     with path.open("x", encoding="utf-8") as f:
@@ -137,7 +149,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--from", dest="start", type=int, default=1, help="first batch number to run (1-14)")
-    ap.add_argument("--only", help="run just one batch, e.g. S3:chromium")
+    ap.add_argument("--only", help="run just one batch, e.g. S3:chromium, or an extra one such as "
+                                   "S1:curl@he200 or Gv6d200:curl")
     ap.add_argument("--reps-adaptive", type=int, nargs=2, metavar=("MIN", "MAX"),
                     help="adaptive repetitions per batch (needs --ci-width-ms); default: fixed 20")
     ap.add_argument("--ci-width-ms", type=float)
@@ -156,7 +169,9 @@ def main(argv: list[str] | None = None) -> int:
     if a.dry_run:
         reps_txt = (f"adaptive {adaptive[0]}-{adaptive[1]} reps (CI width {adaptive[2]:g} ms)" if adaptive
                     else f"{REPS} reps")
-        print(f"Plan: {len(todo)} of {len(PLAN)} batches, {reps_txt} each, one at a time; "
+        scope = (f"{len(todo)} of {len(PLAN)} batches" if all(n for n, _, _ in todo)
+                 else "1 extra batch outside the 14-batch plan")
+        print(f"Plan: {scope}, {reps_txt} each, one at a time; "
               "batch check after each; stop on any failure.")
         for n, s, c in todo:
             print(f"  [{n:2d}] {' '.join(orchestrator_cmd(s, c, adaptive=adaptive))}")
