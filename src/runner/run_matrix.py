@@ -173,7 +173,8 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("nothing selected")
 
     if a.dry_run:
-        reps_txt = (f"adaptive {adaptive[0]}-{adaptive[1]} reps (CI width {adaptive[2]:g} ms)" if adaptive
+        reps_txt = (f"adaptive {adaptive[0]}-{adaptive[1]} reps (CI width {adaptive[2]:g} ms"
+                    + (f", IPv6 win-fraction CI width {adaptive[3]:g}" if len(adaptive) > 3 else "") + ")" if adaptive
                     else f"{REPS} reps")
         scope = (f"{len(todo)} of {len(PLAN)} batches" if all(n for n, _, _ in todo)
                  else "1 extra batch outside the 14-batch plan")

@@ -122,8 +122,11 @@ so it falls inside the window.
 | Chromium (Playwright 1.64.1) | `page.goto` timeout 15 000 ms (`NAV_TIMEOUT_MS`); the runner kills the process at 60 s. Chromium's own connection timeouts are not overridden and are not relied on | SYN rounds at about 0, 1, 3, 7 s fit; one at about 15 s meets the limit |
 
 Beneath both, the kernel gives up on a connecting socket after `net.ipv4.tcp_syn_retries` SYN
-retransmissions (6 on the host, about 127 s in total; the band pilot reads the hl-client value).
-That is far above both runner limits, so in this lab the runner limits end a run first.
+retransmissions: **6 in hl-client** (read by the band pilot, 2026-11-21), so about 127 s in total
+with the 1 s initial timeout doubling. That is far above both runner limits, so in this lab the
+runner limits end a run first. On the server side `net.ipv4.tcp_synack_retries` is **5 in
+hl-server**, so the server can repeat a SYN-ACK several times within either client's limit;
+`syn_retransmit.py` reports those repeats separately from the client's SYN retransmissions.
 
 **Caveat, wherever a no-winner (failure) rate is reported:** a run without a winner ends at the
 client's own time limit, and the two limits differ (10 s against 15 s). The no-winner rates of
@@ -157,6 +160,35 @@ Sixteen cells: curl and Chromium × `Gv6l10`, `Gv6l30`, `Gv6l50`, `Gv6j50`, `Gv6
 
 Before the campaign, `src/runner/band_pilot.py` applies each band scenario and runs verify only
 (no clients, no captures), to check that the loss and jitter bands pass on a correct link.
+
+## Band-verify pilot (2026-11-21, apply and verify only; no client runs)
+
+`src/runner/band_pilot.py`, pilot `20261121T182447Z`, code `7f9b1a0` (clean tree), 5 verify runs per
+scenario, 200 pings each on IPv6 (ICMP echo: packet-level). All 30 band verifies and the baseline
+restore passed. The IPv4 link measured 0% loss in every trial, and 100% in `Gv6c30`, as configured.
+
+| Scenario | Band | Observed (5 trials) |
+|---|---|---|
+| `Gv6l10` | loss 19 ± 12 % | 20.5, 17.5, 21.0, 18.0, 15.5 % (mean 18.5) |
+| `Gv6l30` | loss 51 ± 15 % | 50.0, 53.0, 50.0, 61.5, 52.0 % (mean 53.3) |
+| `Gv6l50` | loss 75 ± 13 % | 74.5, 75.0, 72.5, 72.5, 76.5 % (mean 74.2) |
+| `Gv6c30` | loss 51 ± 15 %, IPv4 blackhole | 46.5, 55.5, 54.5, 49.0, 47.5 % (mean 50.6) |
+| `Gv6j50` | median 194.9–245.1 ms, SD 56.5–84.9 ms | median 211.5–223.0 ms; SD 65.9–69.6 ms |
+| `Gv6j70` | median 264.9–335.1 ms, SD 79.1–118.9 ms | median 293.0–314.0 ms; SD 93.6–104.6 ms |
+
+The median RTT of the replies in the loss scenarios was 20.1–20.9 ms.
+
+Observations, not conclusions (five trials per scenario are too few to calibrate a band):
+- `Gv6l30` trial 4 (61.5%) is about 3 binomial standard errors above the expected 51%. It is
+  inside the 4-SE band. Every campaign run records its own verify values
+  (`scenario.verify_observed`), so the campaign itself will show whether such values recur.
+- All five `Gv6j50` SDs are below the expected J·√2 = 70.7 ms (mean 67.6 ms), while `Gv6j70`
+  is close to its expected 99.0 ms (mean 100.0 ms). Both are inside their bands. No cause is
+  claimed.
+
+Measured verify durations (pilot log timestamps): 8.1–8.2 s for a loss band, 8.5–8.9 s for a
+jitter band, 10.1–10.2 s for `Gv6c30` (blackhole plus loss band). A point verify took 5.8 s in the
+core C0 runs.
 
 ## Results
 
