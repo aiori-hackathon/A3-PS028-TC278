@@ -54,7 +54,7 @@ if __package__ in (None, ""):  # run as a script: make src/ importable
 
 
 from analysis import metrics  # noqa: E402
-from analysis.metrics import adaptive_decision  # noqa: E402
+from analysis.metrics import FAILED_EXCLUDED, FAILED_RANKED, FAILURE_RATE_CAVEAT, adaptive_decision  # noqa: E402
 from analysis.names import InvalidName, file_token, parse_client  # noqa: E402
 from analysis.scenario_config import AUTO, SCENARIOS_FILE, load_config  # noqa: E402
 from analysis.parse_pcap import parse  # noqa: E402
@@ -493,8 +493,11 @@ def adaptive_block(previous: list[float | None], record: dict, min_reps: int, ma
     if win_ci_width is not None:
         block["win_ci_width"] = win_ci_width
     block["metric"] = "tcp_setup_time_ms"
+    if winners is not None:   # 0.5 sessions: runs without a setup time stay in the median (ranked highest)
+        block["failed_runs"] = FAILED_RANKED
     block["after_this_run"] = adaptive_decision([*previous, setup_value(record)], min_reps, max_reps, ci_width_ms,
-                                                winners=winners, win_ci_width=win_ci_width)
+                                                winners=winners, win_ci_width=win_ci_width,
+                                                failed_runs=block.get("failed_runs", FAILED_EXCLUDED))
     return block
 
 
@@ -515,14 +518,26 @@ def win_note(state: dict, win_ci_width: float | None) -> str | None:
 
 def adaptive_summary_line(sid: str, state: dict, win_ci_width: float | None = None) -> str:
     ci = state["ci"]
-    ci_txt = f"CI [{ci['lo']}, {ci['hi']}] width {ci['width']} ms" if ci else "no CI"
+    if ci and ci.get("unbounded"):
+        ci_txt = f"CI [{ci['lo']}, {ci['hi']}] unbounded (reaches runs with no setup time)"
+    else:
+        ci_txt = f"CI [{ci['lo']}, {ci['hi']}] width {ci['width']} ms" if ci else "no CI"
+    n_missing = state["n_runs"] - state["n_values"]
+    median_txt = ("above every observed setup time" if state["median_ms"] is None and n_missing
+                  else f"{state['median_ms']} ms")
     line = (f"ADAPTIVE {sid}: stopped after {state['n_runs']} run(s), reason {state['reason']}; "
-            f"median {state['median_ms']} ms, {ci_txt} ({state['n_values']} setup times)")
+            f"median {median_txt}, {ci_txt} ({state['n_values']} setup times"
+            + (f", {n_missing} run(s) without one, {'ranked highest' if state.get('failed_runs') else 'excluded'}"
+               if n_missing else "") + ")")
     win = state.get("win")
     if win:
         wci = win["ci"]
+        oc = win.get("outcomes", {})
         line += (f"; IPv6 won {win['wins']}/{win['n']}"
-                 + (f", 95% CI [{wci['lo']}, {wci['hi']}] width {wci['width']}" if wci else ""))
+                 + (f", 95% CI [{wci['lo']}, {wci['hi']}] width {wci['width']}" if wci else "")
+                 + (f"; IPv4 won {oc['v4']['n']}, no winner {oc['none']['n']}" if oc else ""))
+        if oc and oc["none"]["n"]:
+            line += f"\n  CAVEAT: {FAILURE_RATE_CAVEAT}"
     note = win_note(state, win_ci_width)
     return line + (f"\n  {note}" if note else "")
 

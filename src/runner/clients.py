@@ -27,10 +27,13 @@ ALL_SCENARIOS = scenario_ids()
 
 # --- curl -------------------------------------------------------------------------------
 
+CURL_MAX_TIME_S = 10   # the whole transfer, connection attempts included
+
+
 def curl_argv(url: str = CURL_URL, he_timeout_ms: int | None = None) -> list[str]:
     """-q must stay first (it stops curl reading ~/.curlrc). A variant adds its Happy Eyeballs timeout."""
     he = [] if he_timeout_ms is None else ["--happy-eyeballs-timeout-ms", str(he_timeout_ms)]
-    return ["curl", "-q", "-sS", "--noproxy", "*", "--max-time", "10", *he,
+    return ["curl", "-q", "-sS", "--noproxy", "*", "--max-time", str(CURL_MAX_TIME_S), *he,
             "-o", "/dev/null", "-w", CURL_FORMAT, url]
 
 
@@ -93,6 +96,8 @@ class CurlClient:
         return {"happy_eyeballs_timeout_ms": "default (not set)" if he is None else he,
                 **({"variant": f"{self.variant} (--happy-eyeballs-timeout-ms {he})"} if self.variant else {}),
                 "curlrc": "ignored (-q)",
+                "run_time_limit": f"curl --max-time {CURL_MAX_TIME_S} s (set by the runner; a run that reaches it "
+                                  "fails with exit 28)",
                 "proxy": "disabled (--noproxy '*')", "url": self.url,
                 "launcher": shlex.join(launcher)}
 
@@ -157,6 +162,8 @@ class ChromiumClient:
                                "Playwright's own switch removed with ignore_default_args; "
                                "checked per run against the NetLog command line (client_report.launch_check)"),
             "happy_eyeballs": "Chromium default (not overridden)",
+            "run_time_limit": (f"Playwright page.goto timeout {client_chromium.NAV_TIMEOUT_MS} ms (set by the "
+                               "runner); Chromium's own connection timeouts are not overridden"),
             "resolver": "Chromium default, not overridden (see the run's NetLog)",
             "navigation": f"page.goto wait_until=load timeout={client_chromium.NAV_TIMEOUT_MS} ms",
             "playwright_version": info.get("playwright_version"),

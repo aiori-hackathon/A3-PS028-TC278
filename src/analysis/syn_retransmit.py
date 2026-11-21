@@ -20,8 +20,11 @@ For each (client, scenario) cell it reports, from the pcaps only:
    spacing between neighbouring cluster medians, compared with the 1000 ms reference. Whether
    clusters 1 s apart appear at all is an observation: with a healthy other family, a run can be
    won by that family before any retransmission timer fires.
-3. Win fraction (packet-level: which family completed the winning handshake), with a 95% Wilson
-   interval (analysis.metrics.wilson_ci).
+3. Outcomes (packet-level: which family completed the winning handshake), over EVERY run, three
+   ways: IPv6 won, IPv4 won, no winner, each with a 95% Wilson interval. A run with no winner is
+   never dropped. The median setup time is over every run too, a run without one ranked above all
+   observed values, so the slowest runs cannot fall out of it. A no-winner rate depends on the
+   client's own time limit and is reported with that caveat (metrics.FAILURE_RATE_CAVEAT).
 4. Adaptive stop: if the cell was run with --reps-adaptive, whether the rule stopped while the win
    fraction was still poorly determined (it decided on the median CI alone, or stopped at the
    maximum with the win CI wider than requested). Said out loud, never dropped.
@@ -41,7 +44,7 @@ from pathlib import Path
 if __package__ in (None, ""):  # run as a script: make src/ importable
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from analysis.metrics import wilson_ci  # noqa: E402
+from analysis.metrics import FAILURE_RATE_CAVEAT, bootstrap_median_ci_ranked, wilson_ci  # noqa: E402
 from analysis.names import label_of  # noqa: E402
 from analysis.parse_pcap import parse  # noqa: E402
 
@@ -145,14 +148,22 @@ def analyse_cell(records: list[dict], repo: Path = REPO) -> dict:
     n = len(winners)
     k6 = sum(1 for w in winners if w == "v6")
     k4 = sum(1 for w in winners if w == "v4")
+    all_runs = [rr["tcp_setup_time_ms"] for rr in runs]
+    ranked = sorted(all_runs, key=lambda x: (x is None, x or 0))
+    mid = ranked[(n - 1) // 2: n // 2 + 1] if n else []
+    median = (None if not mid or None in mid else round(sum(mid) / len(mid), 3))
+    limits = sorted({r["client"].get("config", {}).get("run_time_limit", "not recorded") for r in records})
     return {"client": label_of(records[0]["client"]),
             "scenario": records[0]["scenario"]["id"], "n_runs": n,
             "attempts_with_syn_retransmission": len(syn_gaps),
             "syn_retransmission_gaps": _by_ordinal(syn_gaps),
             "synack_retransmission_gaps": _by_ordinal(synack_gaps),
             "setup_clusters": cl, "cluster_spacing_ms": spacing,
+            "median_all_runs_ms": median, "median_ci_all_runs": bootstrap_median_ci_ranked(all_runs),
+            "runs_without_setup_time": sum(1 for x in all_runs if x is None),
             "win": {"v6": {"wins": k6, "ci": wilson_ci(k6, n)}, "v4": {"wins": k4, "ci": wilson_ci(k4, n)},
-                    "none": n - k6 - k4},
+                    "none": {"wins": n - k6 - k4, "ci": wilson_ci(n - k6 - k4, n)}},
+            "client_run_time_limit": limits,
             "adaptive_note": adaptive_note(records), "runs": runs}
 
 
@@ -167,7 +178,8 @@ def load_records(sessions: set[str], runs_dir: Path = RUNS_DIR) -> dict[tuple[st
 
 def _fmt_gaps(rows: list[dict]) -> str:
     if not rows:
-        return "    none observed (an attempt abandoned before its timer fired shows none: censored)"
+        return ("    none observed (an attempt abandoned before its timer fired shows none; whether the capture "
+                "ended first or the socket was closed is not visible in packets)")
     return "\n".join(f"    #{g['ordinal']}: n={g['n']} median {g['median_ms']} ms (range {g['min_ms']}-{g['max_ms']}), "
                      f"reference {g['reference_ms']:g} ms" for g in rows)
 
@@ -186,8 +198,19 @@ def report(cells: list[dict]) -> str:
         out += [f"    n={k['n']} median {k['median_ms']} ms (range {k['min_ms']}-{k['max_ms']})" for k in c["setup_clusters"]]
         out.append(f"    spacing between cluster medians: {c['cluster_spacing_ms'] or 'one cluster only'} "
                    f"(reference {INITIAL_RTO_MS:g} ms)")
-        out.append(f"  [packet-level] IPv6 won {w6['wins']}/{c['n_runs']}, 95% Wilson CI "
-                   f"[{w6['ci']['lo']}, {w6['ci']['hi']}]; IPv4 won {w4['wins']}; no winner {c['win']['none']}")
+        if c["runs_without_setup_time"]:
+            out.append(f"    ({c['runs_without_setup_time']} run(s) without a setup time are not in the clusters)")
+        mci = c["median_ci_all_runs"]
+        med = c["median_all_runs_ms"]
+        out.append(f"  [packet-level] median TCP setup time over all {c['n_runs']} runs (no setup time ranked highest): "
+                   + (f"{med} ms" if med is not None else "above every observed value")
+                   + (f", 95% CI [{mci['lo']}, {mci['hi']}]" + (" unbounded" if mci["unbounded"] else "") if mci else ""))
+        wn = c["win"]["none"]
+        out.append("  [packet-level] outcomes over all runs (95% Wilson CI): "
+                   + "; ".join(f"{name} {x['wins']}/{c['n_runs']} [{x['ci']['lo']}, {x['ci']['hi']}]"
+                               for name, x in (("IPv6 won", w6), ("IPv4 won", w4), ("no winner", wn))))
+        if wn["wins"]:
+            out.append(f"  CAVEAT: {FAILURE_RATE_CAVEAT}. This client's limit: {'; '.join(c['client_run_time_limit'])}")
         if c["adaptive_note"]:
             out.append(f"  NOTE: {c['adaptive_note']}")
         out.append("")
