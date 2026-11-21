@@ -1,5 +1,8 @@
-# Run-record schema (version 0.2)
+# Run-record schema (version 0.3)
 
+Version 0.3 adds two optional blocks, `profile` (measurement cost) and `adaptive` (the
+adaptive-repetition stopping rule's state). Records of earlier versions remain valid and may not
+contain them; the core dataset's records are 0.2 and are not rewritten.
 Version 0.2 adds the required `cross_checks` block. 0.1 records (the Milestone 1 harness
 runs) remain valid and must not contain it.
 
@@ -38,6 +41,8 @@ So a null always says *why* it is null, and "not observed" is never confused wit
 - `packet_observations` and the packet-derived `metrics` come from the **packet capture**.
   These are packet-level evidence.
 - `outcome` comes from the **client and runner logs**. It records what the client reported.
+- `profile` and `adaptive` are **runner measurements and runner decisions**: what the run cost
+  and whether the stopping rule asked for more runs. They are not evidence about client behaviour.
 - Interpretations never go in a run record. They belong in the report and dashboard, labelled as interpretation.
 
 ## Fields
@@ -46,7 +51,7 @@ So a null always says *why* it is null, and "not observed" is never confused wit
 
 | Key | Type | Notes |
 |---|---|---|
-| `schema_version` | string | `"0.2"` (`"0.1"` accepted for old records) |
+| `schema_version` | string | `"0.3"` (`"0.2"` and `"0.1"` accepted for old records) |
 | `run_id` | string | `<UTC yyyymmddThhmmssZ>_<scenario>_<client>_r<NN>`, e.g. `20261026T101500Z_C0_curl_r01` |
 | `scenario` | object | see below |
 | `client` | object | see below |
@@ -56,7 +61,9 @@ So a null always says *why* it is null, and "not observed" is never confused wit
 | `evidence` | object | see below |
 | `packet_observations` | object | wrapped fields, see below |
 | `metrics` | object | wrapped fields, see below |
-| `cross_checks` | object | 0.2 only: client/runner log versus pcap, see below |
+| `cross_checks` | object | 0.2 and later: client/runner log versus pcap, see below |
+| `profile` | object | 0.3, optional: measurement cost of this run, see below |
+| `adaptive` | object | 0.3, optional: present only in adaptive sessions, see below |
 
 ### `scenario`
 
@@ -184,3 +191,37 @@ the log side is defined explicitly for Chromium:
 - The Chromium page (`/chromium.html`) carries a `data:` icon so the browser does not open a second
   connection for `/favicon.ico`; with keep-alive off, that would make every run ambiguous.
 - The run's NetLog is kept as raw client evidence but is **not** used in cross_checks yet.
+
+### `profile` (0.3, optional; runner measurements)
+
+| Key | Type | Notes |
+|---|---|---|
+| `wall_time_s` | number | From the start of the run (before the DNS and nginx checks) to the end of parsing the capture, before the record is written. Includes netem apply, both lab verifies, capture, client, restore and parsing. |
+| `wall_time_scope` | string | That definition, stored with the value |
+| `pcap_bytes` | integer | Size of this run's pcap file |
+| `client_peak_rss_kib` | integer or null | `ru_maxrss` returned by `wait4` for the client command: the peak resident memory of the **largest single process** among the client command and its reaped descendants, in KiB. Not a sum over processes, so for Chromium it is not the browser's total memory. Nothing is sampled while the client runs, so the timed connection is not disturbed. |
+| `client_peak_rss_scope` | string | That definition, stored with the value |
+
+### `adaptive` (0.3, optional; runner decision)
+
+Written only when the orchestrator runs with `--reps-adaptive MIN MAX --ci-width-ms W`. Records
+are written once, as each run finishes, so each record holds the rule's state **after that run**.
+The final stopping reason and CI per scenario are in the last record of the session and in
+`data/generated/lab/<session>_adaptive.json`.
+
+| Key | Type | Notes |
+|---|---|---|
+| `min_reps`, `max_reps` | integer | `1 <= min_reps <= max_reps` |
+| `ci_width_ms` | number | Stop once the CI is no wider than this |
+| `metric` | string | Always `tcp_setup_time_ms` |
+| `after_this_run.n_runs` | integer | Runs in this scenario so far, including this one |
+| `after_this_run.n_values` | integer | Of those, runs with a TCP setup time (the CI uses only these) |
+| `after_this_run.median_ms` | number or null | Median TCP setup time so far |
+| `after_this_run.ci` | object or null | `{lo, hi, width, level, n, resamples, seed, method}`: 95% percentile bootstrap of the median, 10 000 resamples, seed 0 (`analysis.metrics.bootstrap_median_ci`). Null with fewer than 2 values. |
+| `after_this_run.decision` | string | `continue` or `stop` |
+| `after_this_run.reason` | string or null | On a stop: `ci_width_reached` or `max_reps_reached`. Null on `continue`. |
+
+The rule (`analysis.metrics.adaptive_decision`) never looks at the median's value, only at the CI
+width and the run count. `summarise.py` recomputes it from the setup times and refuses a session
+whose recorded decisions do not replay identically.
+

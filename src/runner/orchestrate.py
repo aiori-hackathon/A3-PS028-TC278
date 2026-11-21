@@ -8,6 +8,17 @@ Usage (lab already up via `sudo src/lab/setup.sh`; run with plain sudo, never su
     sudo .venv/bin/python src/runner/orchestrate.py --scenario C0 S1 --reps 3
     sudo .venv/bin/python src/runner/orchestrate.py --scenario S2 S3 S4 S5 S6 --reps 3   # pilot
     sudo .venv/bin/python src/runner/orchestrate.py --client chromium --scenario C0 S1 --reps 3
+    sudo .venv/bin/python src/runner/orchestrate.py --scenario S3 --reps-adaptive 5 20 --ci-width-ms 1
+
+Adaptive repetitions (--reps-adaptive MIN MAX --ci-width-ms W), per scenario: run MIN reps, then
+keep adding one at a time until the 95% bootstrap CI on the median TCP setup time is no wider
+than W ms, or MAX runs are done (analysis.metrics.adaptive_decision). The rule never looks at the
+median's value. Every record carries the rule's state after that run ("adaptive" block); the
+final stopping reason and CI per scenario go to the session log and to
+data/generated/lab/<session>_adaptive.json.
+
+Every record also carries a "profile" block (measurement cost): wall time, pcap size and the
+client's peak resident memory (kernel rusage, so nothing is sampled during the timed run).
 
 Session: start the DNS server and nginx inside hl-server (as the invoking user), then for
 each scenario and repetition run one measurement:
@@ -32,6 +43,7 @@ import shlex
 import signal
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -43,6 +55,7 @@ if __package__ in (None, ""):  # run as a script: make src/ importable
 import yaml  # noqa: E402
 
 from analysis import metrics  # noqa: E402
+from analysis.metrics import adaptive_decision  # noqa: E402
 from analysis.scenario_config import SCENARIOS_FILE  # noqa: E402
 from analysis.parse_pcap import parse  # noqa: E402
 from analysis.validate_record import SCHEMA_VERSION, validate  # noqa: E402
@@ -62,6 +75,12 @@ URL = CURL_URL
 # Port 443 (TCP and UDP) is captured so an HTTPS upgrade or QUIC attempt is seen, not missed.
 CAPTURE_FILTER = "tcp port 80 or tcp port 443 or udp port 443 or udp port 53 or icmp or icmp6 or arp"
 TAIL_WAIT_S = 0.5  # keep capturing briefly after the client exits, for the closing FIN/ACKs
+WALL_TIME_SCOPE = ("from the start of the run (before the DNS and nginx checks) to the end of parsing the "
+                   "capture, before the record is written: netem apply, both lab verifies, capture, client, "
+                   "restore and parsing")
+RSS_SCOPE = ("ru_maxrss from wait4 on the client command (ip netns exec ... runuser ... client): peak "
+             "resident memory of the largest single process among it and its reaped descendants, in KiB; "
+             "not a sum over processes")
 
 
 class OrchestratorError(Exception):
@@ -306,6 +325,74 @@ def sh(ctx: Ctx, argv: list[str], log: RunLog | None, check: bool = True, timeou
     return proc
 
 
+def run_client(argv: list[str], env: dict, timeout_s: float) -> tuple[subprocess.CompletedProcess, int | None]:
+    """Like subprocess.run(capture_output=True, text=True), plus the kernel's peak RSS for the child.
+
+    The child is reaped with os.wait4, which returns its resource usage; ru_maxrss (KiB on Linux) is
+    the peak resident memory of the largest single process among the child and its reaped
+    descendants. Nothing polls the process while it runs, so the timed connection is not disturbed.
+
+    env must come from child_env(): if any of STRIPPED_VARS is in it, nothing is started and
+    OrchestratorError is raised, which stops the session.
+    """
+    leaked = [k for k in STRIPPED_VARS if k in env]
+    if leaked:
+        raise OrchestratorError(f"run_client: {', '.join(leaked)} in the client environment; "
+                                "build it with child_env()")
+    proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+    out: list[str] = []
+    err: list[str] = []
+    readers = [threading.Thread(target=lambda f, buf: buf.append(f.read()), args=(stream, buf), daemon=True)
+               for stream, buf in ((proc.stdout, out), (proc.stderr, err))]
+    for t in readers:
+        t.start()
+    timed_out = threading.Event()
+
+    def kill() -> None:
+        timed_out.set()
+        proc.kill()
+    timer = threading.Timer(timeout_s, kill)
+    timer.start()
+    try:
+        _, status, usage = os.wait4(proc.pid, 0)
+    finally:
+        timer.cancel()
+    proc.returncode = os.waitstatus_to_exitcode(status)  # reaped here: Popen must not wait again
+    for t in readers:
+        t.join()
+    proc.stdout.close()
+    proc.stderr.close()
+    stdout, stderr = "".join(out), "".join(err)
+    if timed_out.is_set():
+        raise subprocess.TimeoutExpired(argv, timeout_s, stdout, stderr)
+    return subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr), int(usage.ru_maxrss)
+
+
+def profile_block(wall_time_s: float, pcap_bytes: int, peak_rss_kib: int | None) -> dict:
+    return {"wall_time_s": round(wall_time_s, 3), "wall_time_scope": WALL_TIME_SCOPE,
+            "pcap_bytes": pcap_bytes, "client_peak_rss_kib": peak_rss_kib, "client_peak_rss_scope": RSS_SCOPE}
+
+
+def setup_value(record: dict) -> float | None:
+    f = record["metrics"]["tcp_setup_time_ms"]
+    return f["value"] if f["status"] == "computed" else None
+
+
+def adaptive_block(previous: list[float | None], record: dict, min_reps: int, max_reps: int,
+                   ci_width_ms: float) -> dict:
+    """The stopping rule's state after this run (this run's setup time added to the earlier ones)."""
+    return {"min_reps": min_reps, "max_reps": max_reps, "ci_width_ms": ci_width_ms,
+            "metric": "tcp_setup_time_ms",
+            "after_this_run": adaptive_decision([*previous, setup_value(record)], min_reps, max_reps, ci_width_ms)}
+
+
+def adaptive_summary_line(sid: str, state: dict) -> str:
+    ci = state["ci"]
+    ci_txt = f"CI [{ci['lo']}, {ci['hi']}] width {ci['width']} ms" if ci else "no CI"
+    return (f"ADAPTIVE {sid}: stopped after {state['n_runs']} run(s), reason {state['reason']}; "
+            f"median {state['median_ms']} ms, {ci_txt} ({state['n_values']} setup times)")
+
+
 def check_environment(dry_run: bool) -> tuple[str, int, int]:
     leaked = [k for k in STRIPPED_VARS if k in os.environ]
     if leaked and not dry_run:
@@ -441,7 +528,11 @@ def restore_baseline(ctx: Ctx, base_delay: int, log: RunLog | None) -> None:
 
 
 def run_one(ctx: Ctx, client: str, sid: str, sc: dict, rep: int, base: dict, client_version: str,
-            client_info: dict, environment: dict, dirs: dict[str, Path]) -> dict:
+            client_info: dict, environment: dict, dirs: dict[str, Path], t0: float | None = None,
+            annotate=None) -> dict:
+    """One measurement. t0 (time.monotonic()) is when the run started, for the profile's wall time;
+    annotate(record) may add blocks (e.g. adaptive) before the record is validated and written."""
+    t0 = time.monotonic() if t0 is None else t0
     spec = CLIENTS[client]
     run_start = datetime.now(timezone.utc)
     run_id = make_run_id(run_start, sid, rep, client)
@@ -480,7 +571,7 @@ def run_one(ctx: Ctx, client: str, sid: str, sc: dict, rep: int, base: dict, cli
         full = in_ns_as_user(ctx.lab["NS_CLIENT"], ctx.user, argv)
         log.write(f"+ {shlex.join(full)}")
         client_start_ns = time.time_ns()
-        proc = subprocess.run(full, capture_output=True, text=True, env=ctx.env, timeout=spec.timeout_s)
+        proc, peak_rss_kib = run_client(full, ctx.env, spec.timeout_s)
         client_end_ns = time.time_ns()
         log.write(f"    exit {proc.returncode} stdout {proc.stdout!r} stderr {proc.stderr!r}")
         log.write(f"    client_start_epoch_ns {client_start_ns} client_end_epoch_ns {client_end_ns}")
@@ -528,6 +619,9 @@ def run_one(ctx: Ctx, client: str, sid: str, sc: dict, rep: int, base: dict, cli
     if netlog is not None:
         record["outcome"]["client_report"]["netlog_path"] = (
             str(netlog.relative_to(REPO)) if netlog.exists() else None)
+    record["profile"] = profile_block(time.monotonic() - t0, pcap.stat().st_size, peak_rss_kib)
+    if annotate is not None:
+        annotate(record)
     problems = validate(record)
     if problems:
         log.write("RECORD INVALID:\n  " + "\n  ".join(problems))
@@ -549,6 +643,12 @@ def run_one(ctx: Ctx, client: str, sid: str, sc: dict, rep: int, base: dict, cli
     return record
 
 
+def write_adaptive_file(path: Path, entries: list[dict]) -> None:
+    """Session-level summary of each adaptive scenario: settings, run IDs, final stopping state."""
+    path.write_text(json.dumps({"session": entries[0]["session"], "scenarios": entries}, indent=2) + "\n",
+                    encoding="utf-8")
+
+
 def summary_line(r: dict, wall_s: float | None = None) -> str:
     met, obs = r["metrics"], r["packet_observations"]
 
@@ -560,11 +660,17 @@ def summary_line(r: dict, wall_s: float | None = None) -> str:
             + (f"  wall_s={wall_s:.2f}" if wall_s is not None else ""))
 
 
-def dry_run(scenarios: dict, reps: int, user: str, lab: dict, client: str = "curl") -> None:
+def dry_run(scenarios: dict, reps: int, user: str, lab: dict, client: str = "curl",
+            adaptive: tuple[int, int, float] | None = None) -> None:
     spec = CLIENTS[client]
     base = scenarios["_baseline"]
     print(f"DRY RUN (nothing is executed). Client {client}. "
           f"Session would run as root and drop to '{user}' for clients and services.")
+    if adaptive:
+        lo, hi, w = adaptive
+        print(f"Adaptive repetitions per scenario: at least {lo}, at most {hi}; stop once the 95% bootstrap CI "
+              f"on the median TCP setup time is no wider than {w} ms.")
+        reps = hi
     print(f"session start: {shlex.join(in_ns_as_user(lab['NS_CLIENT'], user, spec.version_argv()))}")
     print(f"session start: {shlex.join(cmd_dns(lab, user, {}))}")
     print(f"session start: {shlex.join(cmd_nginx(lab, user, REPO / 'data/generated/nginx'))}")
@@ -573,7 +679,7 @@ def dry_run(scenarios: dict, reps: int, user: str, lab: dict, client: str = "cur
             continue
         rid = make_run_id(datetime.now(timezone.utc), sid, 1, client)
         pcap = REPO / "captures" / f"{rid}.pcap"
-        print(f"\n# {sid} ({sc['label']}), repetition 1 of {reps}, run_id like {rid}")
+        print(f"\n# {sid} ({sc['label']}), repetition 1 of {'up to ' if adaptive else ''}{reps}, run_id like {rid}")
         steps = [
             ("dns", cmd_dns(lab, user, sc["dns"]["delay_ms"])),
             ("apply", cmd_netem("v4", sc["v4"]["delay_ms_each_way"], sc["v4"]["loss_pct"])),
@@ -598,11 +704,31 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--client", choices=sorted(CLIENTS), default="curl")
     p.add_argument("--scenario", nargs="+", required=True, choices=ALL_SUPPORTED)
-    p.add_argument("--reps", type=int, default=1)
+    p.add_argument("--reps", type=int, default=None, help="fixed number of repetitions (default 1)")
+    p.add_argument("--reps-adaptive", type=int, nargs=2, metavar=("MIN", "MAX"),
+                   help="adaptive repetitions per scenario: at least MIN, at most MAX (needs --ci-width-ms)")
+    p.add_argument("--ci-width-ms", type=float,
+                   help="stop once the 95%% bootstrap CI on the median TCP setup time is no wider than this")
     p.add_argument("--first-rep", type=int, default=1,
                    help="number of the first repetition (to complete a batch that stopped early)")
     p.add_argument("--dry-run", action="store_true", help="print the commands, execute nothing (no sudo needed)")
     args = p.parse_args(argv)
+    adaptive = None
+    if args.reps_adaptive:
+        lo, hi = args.reps_adaptive
+        if args.reps is not None:
+            p.error("use either --reps or --reps-adaptive, not both")
+        if not 1 <= lo <= hi:
+            p.error("--reps-adaptive needs 1 <= MIN <= MAX")
+        if args.ci_width_ms is None or args.ci_width_ms <= 0:
+            p.error("--reps-adaptive needs a positive --ci-width-ms")
+        if args.first_rep != 1:
+            p.error("--first-rep cannot be used with --reps-adaptive (an adaptive batch is never resumed; re-run it)")
+        adaptive = (lo, hi, args.ci_width_ms)
+    elif args.ci_width_ms is not None:
+        p.error("--ci-width-ms only applies with --reps-adaptive")
+    if args.reps is None:
+        args.reps = 1
     if args.reps < 1:
         p.error("--reps must be >= 1")
     if args.first_rep < 1:
@@ -613,16 +739,17 @@ def main(argv: list[str] | None = None) -> int:
         lab = load_lab_env()
         scenarios = load_scenarios(args.scenario, client=args.client)
         if args.dry_run:
-            dry_run(scenarios, args.reps, user, lab, args.client)
+            dry_run(scenarios, args.reps, user, lab, args.client, adaptive)
             return 0
         return run_session(args.scenario, args.reps, scenarios, lab, user, uid, gid, args.client,
-                           first_rep=args.first_rep)
+                           first_rep=args.first_rep, adaptive=adaptive)
     except OrchestratorError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
 
-def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl", first_rep: int = 1) -> int:
+def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl", first_rep: int = 1,
+                adaptive: tuple[int, int, float] | None = None) -> int:
     if not Path(f"/run/netns/{lab['NS_CLIENT']}").exists():
         raise OrchestratorError("lab is not up: run sudo src/lab/setup.sh first")
     env, removed = child_env_with_removed()
@@ -641,6 +768,8 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl",
     services = Services(ctx, dirs["nginx"], dirs["lab"])
     records = []
     walls: list[float] = []  # whole-run wall time incl. DNS restart, verifies and restore
+    adaptive_path = dirs["lab"] / f"{session_id}_adaptive.json"
+    adaptive_out: list[dict] = []
     status = 0
     try:
         spec = CLIENTS[client]
@@ -663,13 +792,29 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl",
         services.ensure_nginx(session_log)
         for sid in ids:
             sc = scenarios[sid]
-            for rep in range(first_rep, first_rep + reps):
+            setups: list[float | None] = []
+            entry = None
+            if adaptive:
+                lo, hi, width = adaptive
+                entry = {"client": client, "scenario": sid, "session": session_id, "min_reps": lo,
+                         "max_reps": hi, "ci_width_ms": width, "metric": "tcp_setup_time_ms",
+                         "status": "running", "run_ids": [], "final": None}
+                adaptive_out.append(entry)
+            rep = first_rep
+            while True:
+                if not adaptive and rep >= first_rep + reps:
+                    break
                 t0 = time.monotonic()
                 services.ensure_dns(sc["dns"]["delay_ms"], session_log)
                 services.ensure_nginx(session_log)
+                annotate = None
+                if adaptive:
+                    def annotate(rec, prev=list(setups)):
+                        rec["adaptive"] = adaptive_block(prev, rec, *adaptive)
                 record = run_one(ctx, client, sid, sc, rep, base, client_version, client_info,
-                                 environment, dirs)
+                                 environment, dirs, t0=t0, annotate=annotate)
                 walls.append(time.monotonic() - t0)
+                rep += 1
                 records.append(record)
                 line = summary_line(record, walls[-1])
                 session_log.write(line)
@@ -678,11 +823,28 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl",
                     status = 3
                     for c in record["cross_checks"]["conflicts"]:
                         print(f"  CONFLICT {c['field']}: log={c['log_value']!r} pcap={c['pcap_value']!r}  {c['note']}")
+                if adaptive:
+                    setups.append(setup_value(record))
+                    entry["run_ids"].append(record["run_id"])
+                    state = record["adaptive"]["after_this_run"]
+                    if state["decision"] == "stop":
+                        entry["status"], entry["final"] = "stopped_by_rule", state
+                        line = adaptive_summary_line(sid, state)
+                        session_log.write(line)
+                        print(line, flush=True)
+                        write_adaptive_file(adaptive_path, adaptive_out)
+                        break
     except (OrchestratorError, KeyboardInterrupt) as exc:
         print(f"STOPPED: {exc or 'interrupted'}", file=sys.stderr)
         session_log.write(f"STOPPED: {exc or 'interrupted'}")
         status = 1
     finally:
+        for e in adaptive_out:
+            if e["status"] == "running":
+                e["status"] = "session_stopped_before_a_decision"
+        if adaptive_out:
+            write_adaptive_file(adaptive_path, adaptive_out)
+            ctx.created.append(adaptive_path)
         services.stop()
         try:
             restore_baseline(ctx, base["delay_ms_each_way"], session_log)

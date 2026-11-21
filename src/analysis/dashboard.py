@@ -257,9 +257,14 @@ def _penalty(x: dict) -> str:
     return f"– <span class=muted>({_e(x.get('scenario_penalty_note', 'not available'))})</span>"
 
 
+def _ci(cell: dict) -> str:
+    ci = cell.get("tcp_setup_median_ci95")
+    return "" if not ci else f"<br><span class=muted>CI {ci['lo']}–{ci['hi']} (width {ci['width']})</span>"
+
+
 def summary_table(cells: dict) -> str:
     head = ("<tr><th>Scenario</th><th>Client</th><th>Measured RTT, ms <span class=src>lab verify</span></th>"
-            "<th>Runs / success</th><th>Winner</th><th>Setup median [IQR], ms</th><th>Range, ms</th>"
+            "<th>Runs / success</th><th>Winner</th><th>Setup median [IQR], ms<br><span class=src>95% CI of median</span></th><th>Range, ms</th>"
             "<th>Penalty, ms</th><th>Inter-family delay</th><th>Failed / abandoned per run</th>"
             "<th>Attempt shape</th><th>DNS median, ms</th></tr>")
     body = []
@@ -276,7 +281,7 @@ def summary_table(cells: dict) -> str:
                 f"<tr><td><b>{s}</b><br><span class=muted>{_e(x['label'])}</span></td><td>{CLIENT_LABEL[c]}</td>"
                 f"<td>{_rtt(x)}</td><td>{x['n']} / {x['successes']}</td>"
                 f"<td>{_counts(x['winning_family'], lambda k: 'IPv' + k[1] if k.startswith('v') else k)}</td>"
-                f"<td>{st['median']} [{st['q1']}–{st['q3']}]</td><td>{st['min']}–{st['max']}</td>"
+                f"<td>{st['median']} [{st['q1']}–{st['q3']}]{_ci(x)}</td><td>{st['min']}–{st['max']}</td>"
                 f"<td>{_penalty(x)}</td><td>{inter_txt}</td><td>{fa}</td>"
                 f"<td>{_counts(x['attempt_shape'], lambda k: k.replace('>', ' → '))}</td>"
                 f"<td>{x['dns_ms']['median'] if x['dns_ms'] else '-'}</td></tr>")
@@ -715,8 +720,11 @@ def _lede_scope(ds: dict, clients, scenarios, reps: int, code: str) -> str:
     if "shape" not in ds:  # the core dataset: wording unchanged
         return (f"{ds['runs']} runs: 2 clients × 7 scenarios × 20 repetitions, from the 14 sessions listed in\n"
                 f"<code>{_e(ds['source'])}</code> (full matrix, 2026-10-26, code version <code>{_e(code)}</code>).")
+    ad = ds["shape"].get("adaptive")
+    reps_txt = (f"{ad['min']}–{ad['max']} adaptive repetitions (stop at a 95% CI width of {ad['ci_width_ms']:g} ms)"
+                if ad else f"{reps} repetitions")
     return (f"{ds['runs']} runs: {len(clients)} client(s) × {len(scenarios)} scenario(s) ({_e(', '.join(scenarios))}) "
-            f"× {reps} repetitions, from the {len(ds['sessions'])} sessions listed in <code>{_e(ds['source'])}</code> "
+            f"× {reps_txt}, from the {len(ds['sessions'])} sessions listed in <code>{_e(ds['source'])}</code> "
             f"(code version <code>{_e(code)}</code>). Not the core dataset.")
 
 
@@ -774,7 +782,9 @@ Times are from packet captures inside an isolated lab; every scenario's RTT was 
                   "knows the winner in advance, so it is a reference, not a target.",
                   f"{chart('cost')}<div class=scroll>{oracle_table(cells)}</div>") \
         + section("All numbers", ["packet"],
-                  "Medians with interquartile range. Measured RTT is the pre-run lab check (ping median; "
+                  "Medians with interquartile range, and a 95% percentile-bootstrap confidence interval on the "
+                  "median (10 000 resamples, seed 0): a description of how precisely 20 runs pin the median "
+                  "down, not a significance test. No mean or standard deviation is shown. Measured RTT is the pre-run lab check (ping median; "
                   "\"no reply\" means a verified blackhole). Failed/abandoned attempts are counted per run.",
                   f"<div class=scroll>{summary_table(cells)}</div>") \
         + section("What the evidence suggests", ["interp", "packet", "client"],
