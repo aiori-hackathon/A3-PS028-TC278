@@ -5,6 +5,7 @@ import json
 import pytest
 
 from runner import client_chromium as cc
+from analysis.scenario_config import scenario_ids
 from runner.clients import CLIENTS
 
 
@@ -103,7 +104,8 @@ def test_main_requires_url_or_version():
 def test_chromium_client_spec(tmp_path):
     spec = CLIENTS["chromium"]
     assert spec.url == "http://www.hl.test/chromium.html"
-    assert spec.scenarios == ("C0", "S1", "S2", "S3", "S4", "S5", "S6")
+    assert spec.scenarios[:7] == ("C0", "S1", "S2", "S3", "S4", "S5", "S6")   # then the generated extensions
+    assert spec.scenarios == scenario_ids()
     assert spec.netlog_path(tmp_path, "R") == tmp_path / "R_netlog.json"
     argv = spec.argv(tmp_path / "R_netlog.json")
     assert argv[0].endswith(".venv/bin/python") and argv[1].endswith("src/runner/client_chromium.py")

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from analysis.parse_pcap import parse
+from analysis.scenario_config import scenario_ids
 from analysis.validate_record import validate
 from runner import orchestrate as o
 
@@ -22,7 +23,8 @@ VERIFY up: PASS (50 checks)
 
 
 def test_scope_per_client():
-    assert o.SUPPORTED["curl"] == ("C0", "S1", "S2", "S3", "S4", "S5", "S6")
+    assert o.SUPPORTED["curl"][:7] == ("C0", "S1", "S2", "S3", "S4", "S5", "S6")
+    assert o.SUPPORTED["curl"] == scenario_ids()   # core, then the generated extensions
     assert o.SUPPORTED["chromium"] == o.SUPPORTED["curl"]  # widened deliberately, 2026-10-26
     for client in ("curl", "chromium"):
         with pytest.raises(o.OrchestratorError, match=f"out of scope for {client}"):

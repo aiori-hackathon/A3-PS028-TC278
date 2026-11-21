@@ -16,8 +16,8 @@ A YAML header declaring the shape, then the same session table as the core datas
 ---
 title: Example extra scenario          # optional
 description: what this dataset is for  # optional
-clients: [curl, chromium]              # required, from: curl, chromium
-scenarios: [C0, X1]                    # required, each defined in src/config/scenarios.yaml
+clients: [curl, chromium]              # required: curl, chromium, or a curl variant such as curl@he200
+scenarios: [C0, X1]                    # required, each defined in scenarios.yaml or scenarios_generated.yaml
 reps: 20                               # required, repetitions per session (at least 1)
 # or, for sessions run with --reps-adaptive MIN MAX --ci-width-ms W:
 # reps: {min: 10, max: 20, ci_width_ms: 0.5}
@@ -42,8 +42,11 @@ The manifest is checked against its own declared shape, and its runs against the
 
 - The header must exist and have `clients`, `scenarios` and `reps`, with no other keys apart from
   `title` and `description`.
-- Every client must be one the analysis knows, and every scenario must be defined in
-  `scenarios.yaml`, the single source of scenario IDs (`src/analysis/scenario_config.py`).
+- Every client must be one the analysis knows: `curl`, `chromium`, or a curl variant `curl@he<N>`
+  (`analysis.names.parse_client`). A variant is listed as its own client column in the table, but
+  summaries and the dashboard group it under curl; its scenario penalty uses its own C0.
+- Every scenario must be defined in `scenarios.yaml` or the generated `scenarios_generated.yaml`
+  (`src/analysis/scenario_config.py` reads both).
 - The table must have exactly one session per declared client × scenario. A missing, duplicated
   or undeclared cell, or a row that cannot be read, is refused.
 - With adaptive `reps`, each session must hold between `min` and `max` records, repetitions 1..n,

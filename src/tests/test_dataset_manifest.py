@@ -43,7 +43,9 @@ def small_runs(tmp_path, reps=2):
 # --- one source of scenario IDs ------------------------------------------------------------
 
 def test_scenario_ids_come_from_scenarios_yaml_in_file_order():
-    assert scenario_ids() == ("C0", "S1", "S2", "S3", "S4", "S5", "S6")
+    # hand-written core scenarios first, then the generated extensions, each file in its own order
+    assert scenario_ids() == ("C0", "S1", "S2", "S3", "S4", "S5", "S6") + tuple(f"Gv6d{n}" for n in (100, 200, 250, 300, 350, 400))
+    assert scenario_ids(generated=None) == ("C0", "S1", "S2", "S3", "S4", "S5", "S6")
 
 
 def test_runner_and_orchestrator_read_the_same_ids():
@@ -103,7 +105,7 @@ def test_dashboard_draws_only_the_manifest_shape(tmp_path):
     _, runs, summary = sm.build(manifest=sm.load_manifest(manifest(tmp_path, SMALL, SMALL_ROWS)),
                                 runs_dir=small_runs(tmp_path), repo=None)
     page = dashboard.render(summary, runs, "")
-    assert "1 client(s) × 2 scenario(s) (C0, S1) × 2 repetitions" in page and "Not the core dataset" in page
+    assert "1 client implementation(s) × 2 scenario(s) (C0, S1) × 2 repetitions" in page and "Not the core dataset" in page
     timeline = dashboard.fig_timeline(runs, ("curl",), ("C0", "S1"), 2)
     assert timeline["layout"]["yaxis"]["ticktext"] == ["C0 · curl", "S1 · curl"]
     assert "<td>Chromium</td>" not in page

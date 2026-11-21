@@ -104,8 +104,8 @@ def adaptive_rec(decision="continue", reason=None):
                                "ci": bootstrap_median_ci(NARROW, **FAST), "decision": decision, "reason": reason}}
 
 
-def test_schema_version_is_0_3_and_older_records_still_validate():
-    assert SCHEMA_VERSION == "0.3"
+def test_schema_version_is_0_4_and_older_records_still_validate():
+    assert SCHEMA_VERSION == "0.4"   # 0.4 (client variants, generated scenarios) builds on 0.3
     assert validate(json.loads(EXAMPLE.read_text())) == []      # a 0.2 record from the dataset
 
 

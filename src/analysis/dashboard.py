@@ -29,6 +29,7 @@ import plotly.graph_objects as go  # noqa: E402
 from plotly.offline import get_plotlyjs, get_plotlyjs_version  # noqa: E402
 
 from analysis import race as race_mod  # noqa: E402
+from analysis.names import group_by_implementation, implementation_of, parse_client  # noqa: E402
 from analysis.summarise import (CLIENTS, CORE_DATASET, EXPECTED_REPS, SCENARIOS, DatasetError,  # noqa: E402
                                 Run, build, load_dataset, out_dir_for)
 
@@ -38,7 +39,31 @@ PALETTE = {
     "light": {"curl": "#2a78d6", "chromium": "#eb6834", "v6": "#1baf7a", "v4": "#6250d6"},
     "dark": {"curl": "#3987e5", "chromium": "#d95926", "v6": "#199e70", "v4": "#9085e9"},
 }
-CLIENT_LABEL = {"curl": "curl", "chromium": "Chromium"}
+CLIENT_LABEL = {"curl": "curl", "chromium": "Chromium"}   # the implementations
+
+
+def client_label(c: str) -> str:
+    """Display name of a client label: the implementation, plus the variant for a curl variant."""
+    cn = parse_client(c)
+    base = CLIENT_LABEL[cn.implementation]
+    return base if not cn.variant else f"{base} (HE timeout {cn.he_timeout_ms} ms)"
+
+
+def role_of(c: str) -> str:
+    """Colour role: a variant takes its implementation's colour and differs by mark shape
+    (triangle points, hatched bars) and by its legend name."""
+    return implementation_of(c)
+
+
+def _bar_marks(c: str) -> dict:
+    """Hatched bars for a variant; nothing for a plain client."""
+    return {"marker": dict(pattern=dict(shape="/"))} if parse_client(c).variant else {}
+
+
+def _box_marker(c: str) -> dict:
+    return dict(size=6, opacity=0.75, **({"symbol": "triangle-up"} if parse_client(c).variant else {}))
+
+
 KIND_SYMBOL = {"first": "circle", "same-family": "diamond", "other-family": "square"}
 KIND_LABEL = {"first": "first SYN", "same-family": "new attempt, same family", "other-family": "first SYN, other family"}
 RFC8305_REFERENCE_MS = 250
@@ -79,10 +104,10 @@ def fig_setup(runs: list[Run], clients=CLIENTS, scenarios=SCENARIOS) -> dict:
     for c in clients:
         rs = [r for r in runs if r.client == c and r.setup_ms is not None]
         data.append(go.Box(
-            x=[r.scenario for r in rs], y=[r.setup_ms for r in rs], name=CLIENT_LABEL[c], meta={"role": c},
-            boxpoints="all", jitter=0.5, pointpos=0, marker=dict(size=6, opacity=0.75), line=dict(width=1.5),
+            x=[r.scenario for r in rs], y=[r.setup_ms for r in rs], name=client_label(c), meta={"role": role_of(c)},
+            boxpoints="all", jitter=0.5, pointpos=0, marker=_box_marker(c), line=dict(width=1.5),
             fillcolor="rgba(0,0,0,0)", offsetgroup=c, customdata=[r.run_id for r in rs],
-            hovertemplate="%{customdata}<br>TCP setup %{y:.3f} ms<extra>" + CLIENT_LABEL[c] + "</extra>"))
+            hovertemplate="%{customdata}<br>TCP setup %{y:.3f} ms<extra>" + client_label(c) + "</extra>"))
     return {"data": data, "layout": _base_layout(
         boxmode="group", xaxis=dict(title=dict(text="Scenario"), categoryorder="array", categoryarray=list(scenarios)),
         yaxis=dict(title=dict(text="TCP setup time (ms)"), rangemode="tozero"))}
@@ -94,9 +119,9 @@ def fig_penalty(cells: dict) -> dict:
     for c in clients:
         vals = [cells[c][s]["scenario_penalty_ms"] for s in scenarios]
         data.append(go.Bar(
-            x=list(scenarios), y=vals, name=CLIENT_LABEL[c], meta={"role": c}, offsetgroup=c,
+            x=list(scenarios), y=vals, name=client_label(c), meta={"role": role_of(c)}, offsetgroup=c, **_bar_marks(c),
             text=[f"{v:.1f}" if v is not None and abs(v) >= 5 else "" for v in vals], textposition="outside",
-            hovertemplate="%{x}: %{y:.3f} ms<extra>" + CLIENT_LABEL[c] + " penalty</extra>"))
+            hovertemplate="%{x}: %{y:.3f} ms<extra>" + client_label(c) + " penalty</extra>"))
     return {"data": data, "layout": _base_layout(
         barmode="group", bargap=0.3, bargroupgap=0.08,
         xaxis=dict(title=dict(text="Scenario"), categoryorder="array", categoryarray=list(scenarios)),
@@ -137,7 +162,7 @@ def fig_timeline(runs: list[Run], clients=CLIENTS, scenarios=SCENARIOS, reps: in
         height=560, margin=dict(l=120, r=16, t=16, b=48),
         xaxis=dict(title=dict(text="Time from the run's first SYN (ms)"),
                    range=[-10, max((r.setup_ms or 0) for r in runs) + 15], zeroline=False),
-        yaxis=dict(tickvals=list(range(len(rows))), ticktext=[f"{s} · {CLIENT_LABEL[c]}" for s, c in rows],
+        yaxis=dict(tickvals=list(range(len(rows))), ticktext=[f"{s} · {client_label(c)}" for s, c in rows],
                    autorange="reversed", showgrid=False, zeroline=False),
         shapes=[dict(type="line", xref="x", yref="paper", x0=RFC8305_REFERENCE_MS, x1=RFC8305_REFERENCE_MS,
                      y0=0, y1=1, line=dict(dash="dot", width=1), meta={"role": "muted"})],
@@ -156,10 +181,10 @@ def fig_inter_family(runs: list[Run], cells: dict) -> dict:
     for k, c in enumerate(clients):
         rs = [r for r in runs if r.client == c and r.inter_family_ms is not None]
         data.append(go.Box(
-            x=[r.scenario for r in rs], y=[r.inter_family_ms for r in rs], name=CLIENT_LABEL[c], meta={"role": c},
-            boxpoints="all", jitter=0.5, pointpos=0, marker=dict(size=6, opacity=0.75), line=dict(width=1.5),
+            x=[r.scenario for r in rs], y=[r.inter_family_ms for r in rs], name=client_label(c), meta={"role": role_of(c)},
+            boxpoints="all", jitter=0.5, pointpos=0, marker=_box_marker(c), line=dict(width=1.5),
             fillcolor="rgba(0,0,0,0)", offsetgroup=c, customdata=[r.run_id for r in rs],
-            hovertemplate="%{customdata}<br>second family's first SYN +%{y:.3f} ms<extra>" + CLIENT_LABEL[c]
+            hovertemplate="%{customdata}<br>second family's first SYN +%{y:.3f} ms<extra>" + client_label(c)
                           + "</extra>"))
         for s in scenarios:
             inter = cells[c][s]["inter_family"]
@@ -167,7 +192,7 @@ def fig_inter_family(runs: list[Run], cells: dict) -> dict:
                 annotations.append(dict(
                     x=s, y=0, xref="x", yref="y", yanchor="bottom", xshift=(-1 if k == 0 else 1) * 17,
                     showarrow=False, textangle=-90, font=dict(size=11),
-                    text=f"{CLIENT_LABEL[c]}: not observed ×{inter['not_observed']}"))
+                    text=f"{client_label(c)}: not observed ×{inter['not_observed']}"))
     # annotations are placed against an empty-but-ranged axis, so make sure every category exists
     data.append(go.Scatter(x=list(scenarios), y=[None] * len(scenarios), showlegend=False, hoverinfo="skip"))
     return {"data": data, "layout": _base_layout(
@@ -178,7 +203,7 @@ def fig_inter_family(runs: list[Run], cells: dict) -> dict:
 
 def fig_winner(cells: dict, reps: int = EXPECTED_REPS) -> dict:
     rows = timeline_rows(*shape_of(cells))
-    labels = [f"{s} · {CLIENT_LABEL[c]}" for s, c in rows]
+    labels = [f"{s} · {client_label(c)}" for s, c in rows]
     data = []
     for fam in ("v6", "v4"):
         counts = [cells[c][s]["winning_family"].get(fam, 0) for s, c in rows]
@@ -202,12 +227,12 @@ def fig_cost(runs: list[Run], clients=CLIENTS, scenarios=SCENARIOS) -> dict:
     for c in clients:
         rs = [r for r in runs if r.client == c and r.cost_of_racing_ms is not None]
         data.append(go.Box(
-            x=[r.scenario for r in rs], y=[r.cost_of_racing_ms for r in rs], name=CLIENT_LABEL[c], meta={"role": c},
-            boxpoints="all", jitter=0.5, pointpos=0, marker=dict(size=6, opacity=0.75), line=dict(width=1.5),
+            x=[r.scenario for r in rs], y=[r.cost_of_racing_ms for r in rs], name=client_label(c), meta={"role": role_of(c)},
+            boxpoints="all", jitter=0.5, pointpos=0, marker=_box_marker(c), line=dict(width=1.5),
             fillcolor="rgba(0,0,0,0)", offsetgroup=c,
             customdata=[[r.run_id, r.setup_ms, r.oracle_setup_ms] for r in rs],
             hovertemplate=("%{customdata[0]}<br>cost of racing %{y:.3f} ms<br>= TCP setup %{customdata[1]:.3f} ms"
-                           " − oracle %{customdata[2]:.3f} ms<extra>" + CLIENT_LABEL[c] + "</extra>")))
+                           " − oracle %{customdata[2]:.3f} ms<extra>" + client_label(c) + "</extra>")))
     return {"data": data, "layout": _base_layout(
         boxmode="group", xaxis=dict(title=dict(text="Scenario"), categoryorder="array", categoryarray=list(scenarios)),
         yaxis=dict(title=dict(text="TCP setup minus winning family's measured RTT (ms)"), zeroline=True))}
@@ -218,10 +243,10 @@ def fig_dns(runs: list[Run], clients=CLIENTS, scenarios=SCENARIOS) -> dict:
     for c in clients:
         rs = [r for r in runs if r.client == c and r.dns_ms is not None]
         data.append(go.Box(
-            x=[r.scenario for r in rs], y=[r.dns_ms for r in rs], name=CLIENT_LABEL[c], meta={"role": c},
-            boxpoints="all", jitter=0.5, pointpos=0, marker=dict(size=6, opacity=0.75), line=dict(width=1.5),
+            x=[r.scenario for r in rs], y=[r.dns_ms for r in rs], name=client_label(c), meta={"role": role_of(c)},
+            boxpoints="all", jitter=0.5, pointpos=0, marker=_box_marker(c), line=dict(width=1.5),
             fillcolor="rgba(0,0,0,0)", offsetgroup=c, customdata=[r.run_id for r in rs],
-            hovertemplate="%{customdata}<br>DNS time %{y:.3f} ms<extra>" + CLIENT_LABEL[c] + "</extra>"))
+            hovertemplate="%{customdata}<br>DNS time %{y:.3f} ms<extra>" + client_label(c) + "</extra>"))
     return {"data": data, "layout": _base_layout(
         boxmode="group", xaxis=dict(title=dict(text="Scenario"), categoryorder="array", categoryarray=list(scenarios)),
         yaxis=dict(title=dict(text="DNS time, www.hl.test (ms, log scale)"), type="log"))}
@@ -278,7 +303,7 @@ def summary_table(cells: dict) -> str:
                          + (f"<br>median {io['median']} [{io['q1']}–{io['q3']}]" if io else ""))
             fa = ", ".join(f"{k} attempts ×{v}" for k, v in x["failed_or_abandoned_per_run"].items())
             body.append(
-                f"<tr><td><b>{s}</b><br><span class=muted>{_e(x['label'])}</span></td><td>{CLIENT_LABEL[c]}</td>"
+                f"<tr><td><b>{s}</b><br><span class=muted>{_e(x['label'])}</span></td><td>{client_label(c)}</td>"
                 f"<td>{_rtt(x)}</td><td>{x['n']} / {x['successes']}</td>"
                 f"<td>{_counts(x['winning_family'], lambda k: 'IPv' + k[1] if k.startswith('v') else k)}</td>"
                 f"<td>{st['median']} [{st['q1']}–{st['q3']}]{_ci(x)}</td><td>{st['min']}–{st['max']}</td>"
@@ -309,7 +334,7 @@ def oracle_table(cells: dict) -> str:
             cost_txt = f"{st['median']} [{st['q1']} to {st['q3']}]" if st else "–"
             range_txt = f"{st['min']} to {st['max']}" if st else "–"
             body.append(
-                f"<tr><td><b>{s}</b><br><span class=muted>{_e(x['label'])}</span></td><td>{CLIENT_LABEL[c]}</td>"
+                f"<tr><td><b>{s}</b><br><span class=muted>{_e(x['label'])}</span></td><td>{client_label(c)}</td>"
                 f"<td>{_counts(x['winning_family'], lambda k: 'IPv' + k[1] if k.startswith('v') else k)}</td>"
                 f"<td>{orc['median'] if orc else '–'}</td><td>{cost_txt}</td><td>{range_txt}</td>"
                 f"<td>{o['status'].get('computed', 0)} / {x['n']}</td><td>{'<br>'.join(notes) or '–'}</td></tr>")
@@ -329,19 +354,26 @@ def interpretation_html(items: list[dict]) -> str:
 
 
 def provenance_html(ds: dict) -> str:
-    sess = "".join(f"<tr><td>{x['scenario']}</td><td>{CLIENT_LABEL[x['client']]}</td><td><code>{x['session']}"
+    sess = "".join(f"<tr><td>{x['scenario']}</td><td>{client_label(x['client'])}</td><td><code>{x['session']}"
                    f"</code></td></tr>" for x in ds["sessions"])
     clients = []
-    for c, p in ds["clients"].items():
-        cfg = p["configs"][0] if len(p["configs"]) == 1 else p["configs"]
-        keep = {k: v for k, v in cfg.items() if k in ("happy_eyeballs_timeout_ms", "happy_eyeballs", "resolver",
-                                                     "headless_mode", "quic", "secure_dns", "https_upgrades",
-                                                     "playwright_version", "browser_per_run", "url")}
-        rows = "".join(f"<tr><th>{_e(k)}</th><td>{_e(v)}</td></tr>" for k, v in keep.items())
-        clients.append(f"<h3>{CLIENT_LABEL[c]}</h3><p><code>{_e('; '.join(p['versions']))}</code><br>"
-                       f"code version {_e(', '.join(p['code_versions']))}"
-                       f"{' (configs differ between runs)' if len(p['configs']) > 1 else ''}</p>"
-                       f"<table class=kv>{rows}</table>")
+    for impl, labels in group_by_implementation(ds["clients"]).items():
+        for i, c in enumerate(labels):   # a variant is listed under its implementation, not as a client
+            p = ds["clients"][c]
+            head = f"<h3>{CLIENT_LABEL[impl]}</h3>" if i == 0 else ""
+            if parse_client(c).variant:
+                head += (f"<h4>{_e(client_label(c))}: a configuration of {CLIENT_LABEL[impl]}, "
+                         f"not another client implementation</h4>")
+            cfg = p["configs"][0] if len(p["configs"]) == 1 else p["configs"]
+            keep = {k: v for k, v in cfg.items() if k in ("happy_eyeballs_timeout_ms", "variant", "happy_eyeballs",
+                                                         "resolver", "headless_mode", "quic", "secure_dns",
+                                                         "https_upgrades", "playwright_version", "browser_per_run",
+                                                         "url")}
+            rows = "".join(f"<tr><th>{_e(k)}</th><td>{_e(v)}</td></tr>" for k, v in keep.items())
+            clients.append(f"{head}<p><code>{_e('; '.join(p['versions']))}</code><br>"
+                           f"code version {_e(', '.join(p['code_versions']))}"
+                           f"{' (configs differ between runs)' if len(p['configs']) > 1 else ''}</p>"
+                           f"<table class=kv>{rows}</table>")
     return (f"<div class=grid2><div><h3>Sessions ({ds['runs']} runs, from {_e(ds['source'])})</h3>"
             f"<table class=compact><tr><th>Scenario</th><th>Client</th><th>Session</th></tr>{sess}</table></div>"
             f"<div>{''.join(clients)}</div></div>")
@@ -713,7 +745,22 @@ winner in advance. Default: {why}.</p>
 
 
 def _race_label(r: dict) -> str:
-    return f"{CLIENT_LABEL[r['cl']]} · {r['sc']} · r{r['rep']:02d}"
+    return f"{client_label(r['cl'])} · {r['sc']} · r{r['rep']:02d}"
+
+
+def race_labels(clients) -> dict:
+    """Display names for the race view: the implementations plus every client label shown."""
+    return {**CLIENT_LABEL, **{c: client_label(c) for c in clients}}
+
+
+def _clients_text(clients) -> str:
+    impls = group_by_implementation(clients)
+    variants = [c for c in clients if parse_client(c).variant]
+    txt = f"{len(impls)} client implementation(s)"
+    if variants:
+        txt += (f" ({_e(', '.join(client_label(c) for c in variants))}: configuration variant(s) of curl, "
+                "not further clients)")
+    return txt
 
 
 def _lede_scope(ds: dict, clients, scenarios, reps: int, code: str) -> str:
@@ -723,7 +770,7 @@ def _lede_scope(ds: dict, clients, scenarios, reps: int, code: str) -> str:
     ad = ds["shape"].get("adaptive")
     reps_txt = (f"{ad['min']}–{ad['max']} adaptive repetitions (stop at a 95% CI width of {ad['ci_width_ms']:g} ms)"
                 if ad else f"{reps} repetitions")
-    return (f"{ds['runs']} runs: {len(clients)} client(s) × {len(scenarios)} scenario(s) ({_e(', '.join(scenarios))}) "
+    return (f"{ds['runs']} runs: {_clients_text(clients)} × {len(scenarios)} scenario(s) ({_e(', '.join(scenarios))}) "
             f"× {reps_txt}, from the {len(ds['sessions'])} sessions listed in <code>{_e(ds['source'])}</code> "
             f"(code version <code>{_e(code)}</code>). Not the core dataset.")
 
@@ -739,7 +786,7 @@ def render(summary: dict, runs: list[Run], plotly_src: str, race: dict | None = 
             "winner": fig_winner(cells, reps), "dns": fig_dns(runs, clients, scenarios),
             "cost": fig_cost(runs, clients, scenarios)}
     figs_json = json.dumps({k: json.loads(json.dumps(v, cls=plotly.utils.PlotlyJSONEncoder)) for k, v in figs.items()})
-    versions = "; ".join(f"{CLIENT_LABEL[c]}: {p['versions'][0].split(' (')[0]}" for c, p in ds["clients"].items())
+    versions = "; ".join(f"{client_label(c)}: {p['versions'][0].split(' (')[0]}" for c, p in ds["clients"].items())
     code = ", ".join(sorted({v for p in ds["clients"].values() for v in p["code_versions"]}))
     body = f"""
 <header><div><h1>HappyLab: IPv6/IPv4 fallback measurements</h1>
@@ -799,7 +846,7 @@ Times are from packet captures inside an isolated lab; every scenario's RTT was 
              "examples": []}
     race_json = json.dumps(race or empty, separators=(",", ":")).replace("</", "<\\/")
     js = (JS.replace("__PALETTE__", json.dumps(PALETTE)).replace("__FIGS__", figs_json)
-          + RACE_JS.replace("__RACE__", race_json).replace("__LABELS__", json.dumps(CLIENT_LABEL)))
+          + RACE_JS.replace("__RACE__", race_json).replace("__LABELS__", json.dumps(race_labels(clients))))
     return (f"<!doctype html><html lang=en-GB><head><meta charset=utf-8>"
             f"<meta name=viewport content='width=device-width, initial-scale=1'><title>HappyLab results</title>"
             f"<style>{CSS}</style>{plotly_src}</head><body><main>{body}</main><script>{js}</script></body></html>")

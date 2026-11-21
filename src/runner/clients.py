@@ -9,6 +9,7 @@ from __future__ import annotations
 import shlex
 from pathlib import Path
 
+from analysis.names import ClientName, parse_client
 from analysis.scenario_config import scenario_ids
 from runner import client_chromium
 
@@ -20,14 +21,16 @@ CURL_URL = "http://www.hl.test/"
 CHROMIUM_URL = "http://www.hl.test/chromium.html"  # HTML page with a data: icon (no favicon request)
 CURL_FORMAT = "%{http_code}|%{remote_ip}|%{time_namelookup}|%{time_connect}|%{time_total}|%{num_connects}"
 
-# Every scenario defined in src/config/scenarios.yaml (the single source of scenario IDs).
+# Every scenario defined in src/config/scenarios.yaml and scenarios_generated.yaml (analysis.scenario_config).
 ALL_SCENARIOS = scenario_ids()
 
 
 # --- curl -------------------------------------------------------------------------------
 
-def curl_argv(url: str = CURL_URL) -> list[str]:
-    return ["curl", "-q", "-sS", "--noproxy", "*", "--max-time", "10",
+def curl_argv(url: str = CURL_URL, he_timeout_ms: int | None = None) -> list[str]:
+    """-q must stay first (it stops curl reading ~/.curlrc). A variant adds its Happy Eyeballs timeout."""
+    he = [] if he_timeout_ms is None else ["--happy-eyeballs-timeout-ms", str(he_timeout_ms)]
+    return ["curl", "-q", "-sS", "--noproxy", "*", "--max-time", "10", *he,
             "-o", "/dev/null", "-w", CURL_FORMAT, url]
 
 
@@ -52,13 +55,21 @@ def parse_curl_report(stdout: str) -> dict:
 
 
 class CurlClient:
+    """curl, or a curl variant (a configuration of curl, not another client implementation)."""
     name = "curl"
     url = CURL_URL
     timeout_s = 30
     scenarios = ALL_SCENARIOS
 
+    def __init__(self, client: ClientName = ClientName("curl")):
+        if client.implementation != "curl":
+            raise ValueError(f"not a curl label: {client.label}")
+        self.client = client
+        self.variant = client.variant
+        self.label = client.label
+
     def argv(self, netlog: Path | None = None) -> list[str]:
-        return curl_argv(self.url)
+        return curl_argv(self.url, self.client.he_timeout_ms)
 
     def netlog_path(self, logs: Path, run_id: str) -> Path | None:
         return None
@@ -78,7 +89,10 @@ class CurlClient:
                 "error": error, "source": "client/runner log", "client_report": report}
 
     def config(self, launcher: list[str], info: dict) -> dict:
-        return {"happy_eyeballs_timeout_ms": "default (not set)", "curlrc": "ignored (-q)",
+        he = self.client.he_timeout_ms
+        return {"happy_eyeballs_timeout_ms": "default (not set)" if he is None else he,
+                **({"variant": f"{self.variant} (--happy-eyeballs-timeout-ms {he})"} if self.variant else {}),
+                "curlrc": "ignored (-q)",
                 "proxy": "disabled (--noproxy '*')", "url": self.url,
                 "launcher": shlex.join(launcher)}
 
@@ -87,6 +101,8 @@ class CurlClient:
 
 class ChromiumClient:
     name = "chromium"
+    variant = None
+    label = "chromium"
     url = CHROMIUM_URL
     timeout_s = 60
     # Widened from C0/S1 to all seven scenarios by deliberate decision (2026-10-26), after the clean
@@ -148,5 +164,13 @@ class ChromiumClient:
         }
 
 
-CLIENTS = {"curl": CurlClient(), "chromium": ChromiumClient()}
+CLIENTS = {"curl": CurlClient(), "chromium": ChromiumClient()}   # the two implementations
+
+
+def get_client(label: str):
+    """The client for a label: 'curl', 'curl@he<N>' or 'chromium' (analysis.names.parse_client)."""
+    c = parse_client(label)
+    if c.variant is None:
+        return CLIENTS[c.implementation]
+    return CurlClient(c)
 

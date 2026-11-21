@@ -1,5 +1,8 @@
-# Run-record schema (version 0.3)
+# Run-record schema (version 0.4)
 
+Version 0.4 adds the optional `client.variant` (a curl configuration such as `he200`; see
+[Client variants and file names](#client-variants-and-file-names)) and allows generated extension
+scenario IDs such as `Gv6d200`. Earlier records remain valid and may contain neither.
 Version 0.3 adds two optional blocks, `profile` (measurement cost) and `adaptive` (the
 adaptive-repetition stopping rule's state). Records of earlier versions remain valid and may not
 contain them; the core dataset's records are 0.2 and are not rewritten.
@@ -51,8 +54,8 @@ So a null always says *why* it is null, and "not observed" is never confused wit
 
 | Key | Type | Notes |
 |---|---|---|
-| `schema_version` | string | `"0.3"` (`"0.2"` and `"0.1"` accepted for old records) |
-| `run_id` | string | `<UTC yyyymmddThhmmssZ>_<scenario>_<client>_r<NN>`, e.g. `20261026T101500Z_C0_curl_r01` |
+| `schema_version` | string | `"0.4"` (`"0.3"`, `"0.2"` and `"0.1"` accepted for old records) |
+| `run_id` | string | `<UTC yyyymmddThhmmssZ>_<scenario>_<client>_r<NN>`, e.g. `20261026T101500Z_C0_curl_r01`. `<client>` is the client label in its file-name form (`@` written as `-`), e.g. `20261121T101500Z_S1_curl-he200_r01` |
 | `scenario` | object | see below |
 | `client` | object | see below |
 | `environment` | object | free-form strings: kernel, gai.conf in use, resolver, git commit, etc. |
@@ -62,14 +65,14 @@ So a null always says *why* it is null, and "not observed" is never confused wit
 | `packet_observations` | object | wrapped fields, see below |
 | `metrics` | object | wrapped fields, see below |
 | `cross_checks` | object | 0.2 and later: client/runner log versus pcap, see below |
-| `profile` | object | 0.3, optional: measurement cost of this run, see below |
-| `adaptive` | object | 0.3, optional: present only in adaptive sessions, see below |
+| `profile` | object | 0.3 and later, optional: measurement cost of this run, see below |
+| `adaptive` | object | 0.3 and later, optional: present only in adaptive sessions, see below |
 
 ### `scenario`
 
 | Key | Type | Notes |
 |---|---|---|
-| `id` | string | One of `C0`, `S1`–`S6`, `X1`, or `harness-test`. `harness-test` marks runs that test the tooling (for example, the loopback curl run). They are never measurement data. |
+| `id` | string | One of `C0`, `S1`–`S6`, `X1`, or `harness-test`; from 0.4 also a generated extension ID (`G<v4\|v6><d\|l><N>`, e.g. `Gv6d200`, see below). `harness-test` marks runs that test the tooling (for example, the loopback curl run). They are never measurement data. |
 | `label` | string | Human-readable name. |
 | `repetition` | integer ≥ 1 | |
 | `netem` | object or null | Configured impairment per link. Configuration only; it is **not** ground truth. null for `harness-test`. |
@@ -80,10 +83,41 @@ So a null always says *why* it is null, and "not observed" is never confused wit
 
 | Key | Type | Notes |
 |---|---|---|
-| `name` | string | `curl` or `chromium` |
+| `name` | string | The client **implementation**: `curl` or `chromium`. A variant never changes it. |
+| `variant` | string | 0.4, optional, curl only: the configuration variant, e.g. `he200` for `--happy-eyeballs-timeout-ms 200`. Absent for plain curl and for Chromium. |
 | `version` | string | Exact version string as reported by the client. |
 | `argv` | list of strings | The exact command run (for Chromium: launch args). |
-| `config` | object | Settings that affect connection behaviour, recorded even when left at default. |
+| `config` | object | Settings that affect connection behaviour, recorded even when left at default. For curl, `happy_eyeballs_timeout_ms` is `"default (not set)"` without a variant, and the value actually passed (an integer, e.g. `200`) with one. |
+
+The validator checks that a variant is consistent: `argv` carries exactly one
+`--happy-eyeballs-timeout-ms N` with the variant's N, `config.happy_eyeballs_timeout_ms` is that
+N, and plain curl carries neither.
+
+### Client variants and file names
+
+A **client label** names what was run: `curl`, `chromium`, or a curl variant `curl@he<N>` (curl
+with `--happy-eyeballs-timeout-ms N`, N a whole number 1–60000 written without a leading zero).
+Chromium takes no variants. A variant is a configuration of curl, not another client: PS-028's
+"2 client implementations or versions" are curl and Chromium. In records the label is split into
+`client.name` (the implementation) and `client.variant`; summaries and the dashboard list a variant
+under curl, beside plain curl, never as a further client.
+
+**Sanitisation rule.** In every file name and path, a client label is written with `@` replaced by
+`-`: `curl@he200` becomes `curl-he200`. The rule is applied once, in the run ID
+(`orchestrate.make_run_id`, via `analysis.names.file_token`), and every per-run file is named after
+the run ID: the record (`data/generated/runs/<run_id>.json`), the pcap (`captures/<run_id>.pcap`),
+the client log and the Chromium NetLog. `run_matrix.py` batch logs use the same form. The mapping
+is reversible (`analysis.names.label_from_file_token`) because implementation names contain no `-`.
+Dataset manifests, CLI arguments and summaries use the label itself (`curl@he200`).
+
+### Generated extension scenarios
+
+C0 (baseline) and S1–S6 (PS-028's six required scenarios) are defined by hand in
+`src/config/scenarios.yaml`. Further scenarios are generated from `src/config/scenario_grid.yaml`
+by `src/runner/scenario_grid.py` into `src/config/scenarios_generated.yaml`, every one marked
+`extension: true`. Their IDs are `G` + family + `d` (delay, "+N ms RTT") or `l` (loss, N %) + N,
+e.g. `Gv6d200`. A generated ID that equals or looks like a core ID (`C0`, `S1`–`S6`, `X1`, or any
+`C`/`S`/`X` + digits) is rejected by the generator and by the loader.
 
 ### `timestamps`
 

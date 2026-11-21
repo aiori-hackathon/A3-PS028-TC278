@@ -1,4 +1,4 @@
-"""Validate HappyLab run records against schema versions 0.1-0.3.
+"""Validate HappyLab run records against schema versions 0.1-0.4.
 
 The schema is documented in docs/run_record_schema.md. Standard library only.
 
@@ -15,10 +15,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "0.3"
+if __package__ in (None, ""):  # run as a script: make src/ importable
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from analysis.names import (FILE_TOKEN_PATTERN, GENERATED_ID_PATTERN, InvalidName, file_token,  # noqa: E402
+                            is_generated_id, label_of, parse_client)
+
+SCHEMA_VERSION = "0.4"
 # 0.1 records (Milestone 1 harness runs) stay valid; 0.2 adds the required cross_checks block;
-# 0.3 adds two optional blocks: profile (measurement cost) and adaptive (stopping-rule state).
-SUPPORTED_VERSIONS = {"0.1", "0.2", "0.3"}
+# 0.3 adds two optional blocks: profile (measurement cost) and adaptive (stopping-rule state);
+# 0.4 adds the optional client.variant (curl@he<N>) and allows generated extension scenario IDs.
+SUPPORTED_VERSIONS = {"0.1", "0.2", "0.3", "0.4"}
+SINCE_0_3 = {"0.3", "0.4"}
 OPTIONAL_KEYS_0_3 = {"profile", "adaptive"}
 ADAPTIVE_DECISIONS = {"continue", "stop"}
 ADAPTIVE_REASONS = {"ci_width_reached", "max_reps_reached"}
@@ -41,8 +49,11 @@ METRIC_KEYS = {
 NON_NEGATIVE_METRICS = {"dns_time_ms", "tcp_setup_time_ms", "inter_family_attempt_delay_ms"}
 
 RUN_ID_RE = re.compile(
-    r"^\d{8}T\d{6}Z_(?P<scenario>C0|S[1-6]|X1|harness-test)_(?P<client>curl|chromium)_r\d{2,}$"
+    rf"^\d{{8}}T\d{{6}}Z_(?P<scenario>C0|S[1-6]|X1|harness-test|{GENERATED_ID_PATTERN})"
+    rf"_(?P<client>{FILE_TOKEN_PATTERN})_r\d{{2,}}$"
 )
+HE_FLAG = "--happy-eyeballs-timeout-ms"
+CURL_HE_DEFAULT = "default (not set)"
 
 
 def _is_int(x: Any) -> bool:
@@ -200,6 +211,32 @@ def _check_adaptive(errors: list[str], ad: Any) -> None:
         errors.append(f"{p}.n_runs: above max_reps")
 
 
+def _check_variant(errors: list[str], cl: dict) -> None:
+    """client.variant (0.4): a curl variant must say so in its config and pass the flag; plain curl must not."""
+    variant = cl.get("variant")
+    argv = cl.get("argv") if isinstance(cl.get("argv"), list) else []
+    cfg = cl.get("config") if isinstance(cl.get("config"), dict) else {}
+    flag_values = [argv[i + 1] for i, a in enumerate(argv[:-1]) if a == HE_FLAG]
+    if "variant" in cl:
+        if not isinstance(variant, str):
+            errors.append("client.variant: must be a string such as 'he200' (leave the key out for no variant)")
+            return
+        try:
+            c = parse_client(f"{cl.get('name')}@{variant}")
+        except InvalidName as exc:
+            errors.append(f"client.variant: {exc}")
+            return
+        if flag_values != [str(c.he_timeout_ms)]:
+            errors.append(f"client.argv: variant {variant} needs exactly one '{HE_FLAG} {c.he_timeout_ms}'")
+        if cfg.get("happy_eyeballs_timeout_ms") != c.he_timeout_ms:
+            errors.append(f"client.config.happy_eyeballs_timeout_ms: must be {c.he_timeout_ms} for variant {variant}")
+    elif cl.get("name") == "curl":
+        if flag_values:
+            errors.append(f"client.argv: '{HE_FLAG}' given but client.variant is missing")
+        if "happy_eyeballs_timeout_ms" in cfg and cfg["happy_eyeballs_timeout_ms"] != CURL_HE_DEFAULT:
+            errors.append(f"client.config.happy_eyeballs_timeout_ms: must be {CURL_HE_DEFAULT!r} without a variant")
+
+
 def validate(record: Any) -> list[str]:
     """Return a list of human-readable problems; an empty list means the record is valid."""
     errors: list[str] = []
@@ -213,13 +250,13 @@ def validate(record: Any) -> list[str]:
     missing = top_keys - record.keys()
     if missing:
         errors.append(f"record: missing {sorted(missing)}")
-    allowed = top_keys | (OPTIONAL_KEYS_0_3 if version == "0.3" else set())
+    allowed = top_keys | (OPTIONAL_KEYS_0_3 if version in SINCE_0_3 else set())
     extra = record.keys() - allowed
     if extra:
         errors.append(f"record: unexpected keys {sorted(extra)}")
     if "cross_checks" in top_keys and "cross_checks" in record:
         _check_cross_checks(errors, record["cross_checks"])
-    if version == "0.3":
+    if version in SINCE_0_3:
         if "profile" in record:
             _check_profile(errors, record["profile"])
         if "adaptive" in record:
@@ -229,8 +266,9 @@ def validate(record: Any) -> list[str]:
     sc = record.get("scenario")
     if _require_keys(errors, "scenario", sc,
                      {"id", "label", "repetition", "netem", "dns", "measured_rtt_ms"}):
-        if sc.get("id") not in SCENARIO_IDS:
-            errors.append(f"scenario.id: {sc.get('id')!r} not in {sorted(SCENARIO_IDS)}")
+        if sc.get("id") not in SCENARIO_IDS and not (version == "0.4" and is_generated_id(sc.get("id"))):
+            errors.append(f"scenario.id: {sc.get('id')!r} not in {sorted(SCENARIO_IDS)}"
+                          + (" or a generated extension ID" if version == "0.4" else ""))
         if not isinstance(sc.get("label"), str):
             errors.append("scenario.label: must be a string")
         rep = sc.get("repetition")
@@ -252,6 +290,10 @@ def validate(record: Any) -> list[str]:
     if _require_keys(errors, "client", cl, {"name", "version", "argv", "config"}):
         if cl.get("name") not in CLIENT_NAMES:
             errors.append(f"client.name: must be one of {sorted(CLIENT_NAMES)}")
+        extra_cl = cl.keys() - {"name", "version", "argv", "config"} - ({"variant"} if version == "0.4" else set())
+        if extra_cl:
+            errors.append(f"client: unexpected keys {sorted(extra_cl)}")
+        _check_variant(errors, cl)
         if not (isinstance(cl.get("version"), str) and cl.get("version")):
             errors.append("client.version: must be a non-empty string")
         argv = cl.get("argv")
@@ -268,8 +310,14 @@ def validate(record: Any) -> list[str]:
     else:
         if isinstance(sc, dict) and m["scenario"] != sc.get("id"):
             errors.append("run_id: scenario part does not match scenario.id")
-        if isinstance(cl, dict) and m["client"] != cl.get("name"):
-            errors.append("run_id: client part does not match client.name")
+        if isinstance(cl, dict) and isinstance(cl.get("name"), str):
+            try:
+                expected = file_token(label_of(cl))
+            except InvalidName:
+                expected = None
+            if m["client"] != expected:
+                errors.append("run_id: client part does not match client.name and client.variant "
+                              "('@' written as '-', e.g. curl-he200)")
 
     if not isinstance(record.get("environment"), dict):
         errors.append("environment: must be an object")

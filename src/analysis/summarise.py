@@ -62,6 +62,8 @@ import yaml  # noqa: E402
 
 from analysis.metrics import (ORACLE_EVIDENCE, TARGET_NAME, adaptive_decision,  # noqa: E402
                               bootstrap_median_ci, oracle_baseline, scenario_penalty)
+from analysis.names import (CLIENT_LABEL_PATTERN, InvalidName, group_by_implementation,  # noqa: E402
+                            label_of, parse_client)
 from analysis.parse_pcap import parse  # noqa: E402
 from analysis.scenario_config import scenario_ids  # noqa: E402
 from analysis.summarise_session import parse_walls  # noqa: E402
@@ -77,7 +79,7 @@ OUT_DIR = REPO / "data" / "generated" / "summary"
 CLIENTS = ("curl", "chromium")
 SCENARIOS = ("C0", "S1", "S2", "S3", "S4", "S5", "S6")
 EXPECTED_REPS = 20
-KNOWN_CLIENTS = CLIENTS  # the clients whose records this analysis understands
+KNOWN_CLIENTS = CLIENTS  # the client implementations; a dataset may also list curl variants (curl@he<N>)
 AAAA_DELAY_MS = 300  # S6 configuration (scenarios.yaml); used only to word the S6 interpretation
 
 
@@ -115,9 +117,8 @@ class Manifest:
 
 def _row_re() -> re.Pattern:
     """A session row: | n | client | scenario | `session` | ... (scenario IDs from scenarios.yaml)."""
-    clients = "|".join(map(re.escape, KNOWN_CLIENTS))
     scenarios = "|".join(map(re.escape, scenario_ids()))
-    return re.compile(rf"^\|\s*\d+\s*\|\s*({clients})\s*\|\s*({scenarios})\s*\|\s*`(\d{{8}}T\d{{6}}Z)`\s*\|")
+    return re.compile(rf"^\|\s*\d+\s*\|\s*({CLIENT_LABEL_PATTERN})\s*\|\s*({scenarios})\s*\|\s*`(\d{{8}}T\d{{6}}Z)`\s*\|")
 
 
 _ROW_LIKE_RE = re.compile(r"^\|\s*\d+\s*\|")   # any numbered table row, to catch rows that do not parse
@@ -154,9 +155,11 @@ def _shape_from_header(doc: Path, h: dict) -> Shape:
             raise DatasetError(f"{doc}: header {key} must be a non-empty list of names")
         if len(set(val)) != len(val):
             raise DatasetError(f"{doc}: header {key} lists a name twice: {val}")
-    bad_c = [c for c in clients if c not in KNOWN_CLIENTS]
-    if bad_c:
-        raise DatasetError(f"{doc}: unknown client(s) {bad_c}; known: {list(KNOWN_CLIENTS)}")
+    for c in clients:
+        try:
+            parse_client(c)
+        except InvalidName as exc:
+            raise DatasetError(f"{doc}: {exc}") from exc
     valid = scenario_ids()
     bad_s = [s for s in scenarios if s not in valid]
     if bad_s:
@@ -340,7 +343,7 @@ def run_from_record(r: dict) -> Run:
     resolved = cr.get("resolved") or {}
     dns_delay = (r["scenario"].get("dns") or {}).get("delay_ms")
     run = Run(
-        run_id=r["run_id"], client=r["client"]["name"], scenario=r["scenario"]["id"],
+        run_id=r["run_id"], client=label_of(r["client"]), scenario=r["scenario"]["id"],
         repetition=r["scenario"]["repetition"], success=bool(r["outcome"]["success"]),
         winner=_val(obs["winning_family"]), setup_ms=_val(met["tcp_setup_time_ms"]),
         inter_family_ms=_val(met["inter_family_attempt_delay_ms"]),
@@ -454,7 +457,7 @@ def load_runs(sessions: list[tuple[str, str, str]], runs_dir: Path = RUNS_DIR,
             if sorted(r["scenario"]["repetition"] for r in recs) != list(range(1, expected + 1)):
                 problems.append("repetitions are not exactly 1..%d" % expected)
         for r in recs:
-            if (r["client"]["name"], r["scenario"]["id"]) != (client, scenario):
+            if (label_of(r["client"]), r["scenario"]["id"]) != (client, scenario):
                 problems.append(f"{r['run_id']} is not {client}/{scenario}")
             if r["cross_checks"]["status"] != "agree":
                 problems.append(f"{r['run_id']} cross_checks {r['cross_checks']['status']}")
@@ -586,9 +589,20 @@ def summarise_cell(runs: list[Run]) -> dict:
     }
 
 
+def client_order(clients) -> list[str]:
+    """Implementations in order of first appearance; each one's variants right after it."""
+    groups = group_by_implementation(clients)
+    impls = list(dict.fromkeys(parse_client(c).implementation for c in clients))
+    return [lb for impl in impls for lb in groups[impl]]
+
+
 def summarise(runs: list[Run], shape: Shape = CORE_SHAPE) -> dict:
-    cells: dict[str, dict[str, dict]] = {c: {} for c in shape.clients}
-    for c in shape.clients:
+    """Cells per client label (a curl variant is its own cell, beside plain curl) and scenario.
+
+    A variant's scenario penalty uses its own C0, never plain curl's."""
+    clients = client_order(shape.clients)
+    cells: dict[str, dict[str, dict]] = {c: {} for c in clients}
+    for c in clients:
         for s in shape.scenarios:
             cells[c][s] = summarise_cell([r for r in runs if r.client == c and r.scenario == s])
         c0 = [r.setup_ms for r in runs if r.client == c and r.scenario == "C0" and r.setup_ms is not None]
@@ -792,7 +806,10 @@ def _fmt_cost(st: dict | None) -> str:
 def text_report(summary: dict) -> str:
     lines = []
     for c, by_scenario in summary["cells"].items():
-        lines.append(f"\n{c}  (packet-level unless stated)")
+        cn = parse_client(c)
+        variant = (f"; a variant of {cn.implementation}, not another client: --happy-eyeballs-timeout-ms "
+                   f"{cn.he_timeout_ms}") if cn.variant else ""
+        lines.append(f"\n{c}  (packet-level unless stated{variant})")
         lines.append(f"  {'scn':4} {'n':>3} {'ok':>3}  {'winner':16} {'setup median [IQR] ms':26} {'penalty':>9}  "
                      f"{'inter-family: obs/not, median':30} {'fail/aband per run':20} {'shape':22} dns median")
         for s, x in by_scenario.items():
@@ -866,7 +883,8 @@ def build(doc: Path = DATASET_DOC, runs_dir: Path = RUNS_DIR, manifest: Manifest
                           "clients": {c: {"versions": sorted(v for v in p["versions"] if v),
                                           "configs": [json.loads(x) for x in sorted(p["configs"])],
                                           "code_versions": sorted(x for x in p["code"] if x)}
-                                      for c, p in prov.items()}}
+                                      for c, p in prov.items()},
+                          "implementations": group_by_implementation(shape.clients)}
     if doc != DATASET_DOC:  # a named dataset records the shape it declared (core output stays as it was)
         summary["dataset"]["shape"] = {"clients": list(shape.clients), "scenarios": list(shape.scenarios),
                                        "reps": shape.reps}

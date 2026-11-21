@@ -1,0 +1,17 @@
+# Grid for the generated EXTENSION scenarios (src/runner/scenario_grid.py writes them to
+# scenarios_generated.yaml). The core scenarios C0 and S1-S6 are not here and are never generated.
+#
+# Each entry: family (v4 | v6), kind (delay | loss) and values.
+#   delay N: "+N ms RTT" on that family: delay_ms_each_way = 10 + N/2, verify_target = 20 + N (N even).
+#   loss N:  N% loss in each direction on that family at baseline delay (1-99). Not runnable yet:
+#            the lab's verify.sh cannot check partial loss, so the orchestrator refuses these.
+#
+# Values are PROVISIONAL (an IPv6 latency sweep around the observed fallback points, curl ~200 ms and
+# Chromium ~300 ms after the first IPv6 SYN); pilots decide the final set.
+
+schema_version: 1
+
+grids:
+  - family: v6
+    kind: delay
+    values: [100, 200, 250, 300, 350, 400]
