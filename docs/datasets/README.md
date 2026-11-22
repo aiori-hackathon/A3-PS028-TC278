@@ -6,7 +6,7 @@ has no header, and its shape is fixed in `src/analysis/summarise.py` (`CORE_SHAP
 
 Any further dataset, for example one with a new scenario added to `src/config/scenarios.yaml`, gets
 its own manifest here as `docs/datasets/<name>.md`. Names use lower-case letters, digits, `-` and `_`.
-No manifest is committed yet: one is added only when its sessions have been run and checked.
+A manifest is added only when its sessions have been run and checked.
 
 ## Format
 
