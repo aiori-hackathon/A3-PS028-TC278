@@ -350,28 +350,28 @@ code:**
 
 | Client | Cell | T (ms) | μ (ms) | σ (ms) (J·√2) | Predicted | Observed [95% Wilson CI] |
 |---|---|---|---|---|---|---|
-| curl | `Gv6j50` | 222.0 | 221.3 | 69.4 (70.7) | 0.50 | 17/39 = 0.44 [0.29, 0.59] |
-| curl | `Gv6j70` | 222.0 | 301.5 | 98.5 (99.0) | 0.21 | 8/31 = 0.26 [0.14, 0.43] |
-| chromium | `Gv6j50` | 322.5 | 221.2 | 70.0 (70.7) | 0.93 | 46/50 = 0.92 [0.81, 0.97] |
-| chromium | `Gv6j70` | 322.5 | 302.3 | 97.2 (99.0) | 0.58 | 28/50 = 0.56 [0.42, 0.69] |
+| curl | `Gv6j50` | 221.96 | 221.3 | 69.4 (70.7) | 0.50 | 17/39 = 0.44 [0.29, 0.59] |
+| curl | `Gv6j70` | 221.96 | 301.5 | 98.5 (99.0) | 0.21 | 8/31 = 0.26 [0.14, 0.43] |
+| chromium | `Gv6j50` | 322.47 | 221.2 | 70.0 (70.7) | 0.93 | 46/50 = 0.92 [0.81, 0.97] |
+| chromium | `Gv6j70` | 322.47 | 302.3 | 97.2 (99.0) | 0.58 | 28/50 = 0.56 [0.42, 0.69] |
 
 **T, as measured (packet times, derived).** This is the value the model uses. It is measured
 directly in the twin captures, not inferred from their outcomes:
 
 | Client | T, median | Runs | Range | Interquartile range |
 |---|---|---|---|---|
-| curl | 222.0 ms | 40 (both twins) | 221.0–224.1 ms | 221.5–222.9 ms |
-| chromium | 322.5 ms | 17 (`Gv6d280` runs where the IPv4 SYN-ACK appears) | 321.0–325.4 ms for 16 runs; one at 573.9 ms | 321.9–323.9 ms |
+| curl | 221.96 ms | 40 (both twins) | 221.00–224.12 ms | 221.48–222.94 ms |
+| chromium | 322.47 ms | 17 (`Gv6d280` runs where the IPv4 SYN-ACK appears) | 321.04–325.43 ms for 16 runs; one at 573.90 ms | 321.88–323.87 ms |
 
-**The 573.9 ms Chromium value (packet-level, run `20261122T022248Z_Gv6d280_chromium_r14`):** the IPv4
+**The 573.90 ms Chromium value (packet-level, run `20261122T022248Z_Gv6d280_chromium_r14`):** the IPv4
 SYN went out at 551.2 ms. That is 300.4 ms after the second IPv6 attempt's SYN (new source port,
 250.8 ms; see [`chromium_s1_second_v6_syn.md`](chromium_s1_second_v6_syn.md)), not about 300 ms
-after the first IPv6 SYN. The IPv4 SYN-ACK at 573.9 ms answers that SYN. So in this run the IPv4
+after the first IPv6 SYN. The IPv4 SYN-ACK at 573.90 ms answers that SYN. So in this run the IPv4
 attempt follows the later IPv6 attempt; the packets do not show why. The first IPv6 handshake had
 already completed at 300.9 ms. The value stays listed separately and is inside the median above.
 
-Across that measured spread the predictions barely move. For curl, the full range 221.0–224.1 ms
-gives 0.50–0.52 (`Gv6j50`) and 0.21–0.22 (`Gv6j70`). For Chromium, 321.0–325.4 ms gives 0.92–0.93
+Across that measured spread the predictions barely move. For curl, the full range 221.00–224.12 ms
+gives 0.50–0.52 (`Gv6j50`) and 0.21–0.22 (`Gv6j70`). For Chromium, 321.04–325.43 ms gives 0.92–0.93
 and 0.58–0.59. Within these cells, the uncertainty in T is therefore small next to the width of the
 observed intervals. T is measured in the no-jitter twins, not in the jitter cells; it is applied to
 them because the IPv4 link is the same (10 ms each way, no jitter) in both.
@@ -390,7 +390,7 @@ has only two twins:
   upper end.
 
 Both measured values fall inside these brackets, so the outcomes agree with the measurement. They
-are not where the 222.0 and 322.5 ms come from, and they could not locate T more finely than this.
+are not where the 221.96 and 322.47 ms come from, and they could not locate T more finely than this.
 
 **Limitation.** T is measured at only two IPv6 delays per client. The outcome check therefore
 brackets it coarsely, and for Chromium only from below; the outcome flip is not located. The latency
@@ -400,3 +400,7 @@ and so test the measured T independently of the packet times.
 *Added 2026-11-22:* the latency sweep has now run. It locates each client's outcome flip to within
 5 ms (curl 221–226 ms, Chromium 321–326 ms RTT), and both measured T values fall inside; see
 [the sweep findings](latency_and_he_sweeps.md). The paragraph above is kept as written before the run.
+
+*Edited 2026-11-22:* T is now given to two decimal places, as in every other campaign. The
+values were previously rounded to one decimal (curl 222.0 ms, Chromium 322.5 ms). The
+measurement is unchanged: the medians are 221.964 and 322.466 ms over the same 40 and 17 twin runs.
