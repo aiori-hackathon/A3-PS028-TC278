@@ -11,9 +11,14 @@ Both reports come from `src/analysis/crossover.py --dataset <name>`.
 **Evidence levels.**
 - **Packet-level:** which family completed the winning handshake, and the time of each SYN and
   SYN-ACK after the run's first SYN.
-- **Derived:** the RTT of a cell, which is the median of the per-run verify-ping medians (ICMP,
-  printed by ping in whole ms above 100 ms). Also derived: every median, bracket and predicted
-  value below.
+- **Derived:**
+  - the RTT of a cell, which is the median of the per-run verify-ping medians (ICMP, printed by
+    ping in whole ms above 100 ms);
+  - the oracle setup and cost of racing (pcap − lab RTT);
+  - every median, bracket and predicted value below.
+- **Precision:** T is given to two decimal places throughout, with the campaign it was measured
+  in. 221.84 (latency-sweep), 221.96 (jitter-loss) and 222.14 ms (he-sweep) are the same quantity
+  measured in different campaigns.
 - **Interpretation:** marked where it appears.
 
 Nothing here says how either client decides when to start an attempt, or that it implements any
@@ -52,8 +57,8 @@ client's flip bracket:
 
 | Client | Flip bracket (outcomes) | T in this dataset (packets) | T in jitter-loss (packets) |
 |---|---|---|---|
-| curl | 221–226 ms | 221.84 ms (70 runs with an IPv4 SYN-ACK) | 222.0 ms (n=40) |
-| Chromium | 321–326 ms | 321.99 ms (50 runs with an IPv4 SYN-ACK) | 322.5 ms (n=17) |
+| curl | 221–226 ms | 221.84 ms (70 runs with an IPv4 SYN-ACK) | 221.96 ms (n=40) |
+| Chromium | 321–326 ms | 321.99 ms (50 runs with an IPv4 SYN-ACK) | 322.47 ms (n=17) |
 
 So the outcome flip and the packet-measured T agree. The jitter-loss findings said this
 independent check was missing; this is that check.
@@ -62,6 +67,35 @@ independent check was missing; this is that check.
 attempt is made. Across the cells where an IPv4 SYN-ACK appears, the per-cell medians are:
 - curl: 221.26–222.27 ms, from +190 to +400;
 - Chromium: 321.35–323.19 ms, from +290 to +400.
+
+**Oracle baseline (derived: pcap − lab RTT).**
+- **Definitions.** A run's oracle setup is the pre-run verify-ping RTT of the family that won the
+  run. Its cost of racing is the packet-level TCP setup time minus that oracle; see
+  `src/analysis/metrics.py`, `oracle_baseline`. The oracle is a hindsight reference: it uses the
+  winner, which no client knows before connecting.
+- **Source.** The values come from `src/analysis/summarise.py --dataset latency-sweep`, with the
+  oracle computed in all 180 runs. Figure 1's "TCP setup against the oracle" panel plots them.
+- **Single-family cells.** In the cells marked "no" in the Race column, only IPv6 was tried. No race
+  took place, so the value there is only the handshake time against the ping RTT, not a cost of
+  racing.
+
+| Client | Cells (winner) | Runs | Race | Oracle setup, cell medians | TCP setup, cell medians | Cost of racing, cell medians | Cost of racing, per run |
+|---|---|---|---|---|---|---|---|
+| curl | `Gv6d100`–`Gv6d175` (IPv6) | 20 | no: IPv6 only | 121.0–196.0 ms | 120.66–196.01 ms | −0.03 to +0.21 ms | −0.47 to +1.83 ms |
+| curl | `Gv6d190`–`Gv6d200` (IPv6) | 15 | yes | 211.0–221.0 ms | 210.81–220.98 ms | −0.19 to +0.73 ms | −0.83 to +1.06 ms |
+| curl | `Gv6d205`–`Gv6d400` (IPv4) | 55 | yes | 20.85–21.0 ms | 221.76–222.34 ms | 200.76–201.48 ms | 199.66–202.96 ms |
+| Chromium | `Gv6d100`–`Gv6d275` (IPv6) | 40 | no: IPv6 only | 121.0–296.0 ms | 120.13–296.03 ms | −0.85 to +0.03 ms | −0.89 to +1.39 ms |
+| Chromium | `Gv6d290`–`Gv6d300` (IPv6) | 15 | yes | 311.0–321.0 ms | 311.28–320.60 ms | −0.44 to +0.28 ms | −0.84 to +1.27 ms |
+| Chromium | `Gv6d305`–`Gv6d400` (IPv4) | 35 | yes | 20.9–21.0 ms | 321.43–323.27 ms | 300.43–302.17 ms | 299.93–304.92 ms |
+
+- **Where IPv6 won.** Every cell median of the cost is within ±0.9 ms of zero. That is inside the
+  1 ms resolution of the ping that sets the oracle above 100 ms, and negative values are reported,
+  not clamped.
+- **Where IPv4 won.** The oracle drops to the IPv4 RTT, about 21 ms. The cost of racing is then
+  200.76–201.48 ms for curl and 300.43–302.17 ms for Chromium (cell medians), in every cell where
+  IPv4 won.
+- **Limits.** The cost is a derived value: packet-level setup minus a pre-run ping median. It says
+  nothing about how either client chooses when to start an attempt.
 
 **Limits.**
 - The bracket edges are verify-ping medians. Ping prints whole ms above 100 ms, and the medians
@@ -85,15 +119,21 @@ attempt is made. Across the cells where an IPv4 SYN-ACK appears, the per-cell me
 
 | Client | Timeout | IPv4 first SYN | IPv4 handshake | Predicted T | T | T − predicted |
 |---|---|---|---|---|---|---|
-| curl | not set | 200.832 | 21.024 | – | 222.135 | – |
-| curl@he50 | 50 | 50.689 | 20.809 | 70.809 | 71.496 | +0.687 |
-| curl@he100 | 100 | 100.799 | 20.941 | 120.941 | 121.733 | +0.792 |
-| curl@he150 | 150 | 150.750 | 20.962 | 170.962 | 171.721 | +0.759 |
-| curl@he200 | 200 | 200.833 | 20.987 | 220.987 | 221.882 | +0.895 |
-| curl@he250 | 250 | 250.939 | 20.989 | 270.989 | 271.808 | +0.819 |
-| curl@he300 | 300 | 301.650 | 20.941 | 320.941 | 322.837 | +1.896 |
-| curl@he400 | 400 | 401.087 | 20.959 | 420.959 | 422.115 | +1.156 |
-| curl@he500 | 500 | 501.629 | 20.941 | 520.941 | 522.927 | +1.986 |
+| curl | not set | 200.832 | 21.024 | – | 222.14 | – |
+| curl@he50 | 50 | 50.689 | 20.809 | 70.81 | 71.50 | +0.69 |
+| curl@he100 | 100 | 100.799 | 20.941 | 120.94 | 121.73 | +0.79 |
+| curl@he150 | 150 | 150.750 | 20.962 | 170.96 | 171.72 | +0.76 |
+| curl@he200 | 200 | 200.833 | 20.987 | 220.99 | 221.88 | +0.90 |
+| curl@he250 | 250 | 250.939 | 20.989 | 270.99 | 271.81 | +0.82 |
+| curl@he300 | 300 | 301.650 | 20.941 | 320.94 | 322.84 | +1.90 |
+| curl@he400 | 400 | 401.087 | 20.959 | 420.96 | 422.12 | +1.16 |
+| curl@he500 | 500 | 501.629 | 20.941 | 520.94 | 522.93 | +1.99 |
+
+T and the T-derived columns are given to two decimal places, as everywhere T is reported. The
+SYN and handshake columns keep three, because the control below compares SYN times 0.001 ms apart.
+Each value is rounded half-up on its own from its three-decimal median, so a difference can be
+0.01 ms off. For example, he200 gives 221.88 − 220.99 = 0.89, while the residual from the unrounded
+medians is +0.895, shown as +0.90.
 
 IPv4 won all 10 runs in every S1 cell. T follows the prediction from 50 to 500 ms, always a
 little late.
@@ -120,7 +160,7 @@ documents, so it should match plain curl:
 | | curl@he200 | Plain curl | Difference |
 |---|---|---|---|
 | IPv4 first SYN | 200.833 ms | 200.832 ms | 0.001 ms |
-| T | 221.882 ms | 222.135 ms | 0.25 ms |
+| T | 221.88 ms | 222.14 ms | 0.25 ms (from the unrounded 221.882 and 222.135) |
 
 Plain curl's T also matches its other measurements; see [Reproducibility of plain curl's
 T](#reproducibility-of-plain-curls-t).
@@ -129,9 +169,9 @@ T](#reproducibility-of-plain-curls-t).
 
 | Client | IPv6/IPv4 wins of 10 | IPv4 attempt seen | T |
 |---|---|---|---|
-| curl@he50 | 0/10 | yes | 71.743 ms |
-| curl@he100 | 0/10 | yes | 121.752 ms |
-| curl@he150 (boundary case) | 10/0 | yes, in all 10 runs | 171.391 ms |
+| curl@he50 | 0/10 | yes | 71.74 ms |
+| curl@he100 | 0/10 | yes | 121.75 ms |
+| curl@he150 (boundary case) | 10/0 | yes, in all 10 runs | 171.39 ms |
 | curl, he200–he500 | 10/0 | no | – |
 
 **he150 is a boundary case, not a finding.** The IPv4 attempt went out, but IPv6 completed
@@ -161,7 +201,7 @@ measured in four campaigns:
 | Campaign | When (UTC) | Code | IPv6 condition | Runs | T |
 |---|---|---|---|---|---|
 | [`variant-control`](../datasets/variant-control.md) | 2026-11-21 17:11 | `72be111` | blackhole (S1) | 20 | 221.53 ms |
-| [`jitter-loss`](../datasets/jitter-loss.md), twins | 2026-11-21 20:42 and 2026-11-22 02:15 | `c283448` | +200 and +280 ms delay | 40 | 222.0 ms |
+| [`jitter-loss`](../datasets/jitter-loss.md), twins | 2026-11-21 20:42 and 2026-11-22 02:15 | `c283448` | +200 and +280 ms delay | 40 | 221.96 ms |
 | [`latency-sweep`](../datasets/latency-sweep.md) | 2026-11-22 07:47–08:18 | `9a6de27` | +190 to +400 ms delay | 70 | 221.84 ms |
 | [`he-sweep`](../datasets/he-sweep.md), S1 | 2026-11-22 09:23 | `9a6de27` | blackhole (S1) | 10 | 222.14 ms |
 
