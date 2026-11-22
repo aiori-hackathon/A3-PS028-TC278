@@ -96,13 +96,23 @@ attempt is made. Across the cells where an IPv4 SYN-ACK appears, the per-cell me
 | curl@he500 | 500 | 501.629 | 20.941 | 520.941 | 522.927 | +1.986 |
 
 IPv4 won all 10 runs in every S1 cell. T follows the prediction from 50 to 500 ms, always a
-little late: +0.7 to +0.9 ms up to he250, and +1.2 to +2.0 ms from he300.
+little late.
 
-The IPv4 handshake is steady at 20.8–21.0 ms. So most of the excess is in when the IPv4 SYN
-appears: 0.69–0.94 ms after the timeout up to he250, and 1.09–1.65 ms from he300. The columns are
-medians taken separately, so the excess is not exactly their sum.
+**The residual steps between he250 and he300 (packet-level; no explanation offered).** T −
+predicted falls in two groups:
 
-That growth with the timeout is what the packets show. These data do not explain it.
+| Timeouts | T − predicted | IPv4 first SYN after the timeout |
+|---|---|---|
+| he50–he250 (5 cells) | +0.69 to +0.90 ms | 0.69 to 0.94 ms |
+| he300–he500 (3 cells) | +1.16 to +1.99 ms | 1.09 to 1.65 ms |
+
+- The step is not monotonic within the upper group: he400 (+1.16) is below both he300 (+1.90) and
+  he500 (+1.99).
+- The IPv4 handshake is steady at 20.8–21.0 ms in every cell. So the step is in when the IPv4 SYN
+  appears, not in the handshake.
+- The columns are medians taken separately, so the residual is not exactly their sum.
+
+This is reported as observed in the packets. These data draw no conclusion about why it happens.
 
 **Validation control (packet-level).** curl@he200 sets the default timeout that curl's man page
 documents, so it should match plain curl:
@@ -112,8 +122,8 @@ documents, so it should match plain curl:
 | IPv4 first SYN | 200.833 ms | 200.832 ms | 0.001 ms |
 | T | 221.882 ms | 222.135 ms | 0.25 ms |
 
-Plain curl's T also matches the 221.84 ms from the latency sweep and the 222.0 ms from
-jitter-loss.
+Plain curl's T also matches its other measurements; see [Reproducibility of plain curl's
+T](#reproducibility-of-plain-curls-t).
 
 **S3, IPv6 at +150 ms RTT (packet-level outcomes):**
 
@@ -121,13 +131,19 @@ jitter-loss.
 |---|---|---|---|
 | curl@he50 | 0/10 | yes | 71.743 ms |
 | curl@he100 | 0/10 | yes | 121.752 ms |
-| curl@he150 | 10/0 | yes, in all 10 runs | 171.391 ms |
+| curl@he150 (boundary case) | 10/0 | yes, in all 10 runs | 171.391 ms |
 | curl, he200–he500 | 10/0 | no | – |
 
-At he150 the IPv4 attempt went out, but IPv6 completed first in all 10 runs: the IPv6 oracle
-setup median is 171.0 ms, against an IPv4 SYN-ACK at 171.39 ms. That margin is about 0.4 ms, so
-this cell is a near tie. With 10 runs it shows which way the outcome fell in this lab, not a
-stable margin.
+**he150 is a boundary case, not a finding.** The IPv4 attempt went out, but IPv6 completed
+first in all 10 runs. The IPv6 oracle setup median is 171.0 ms, against an IPv4 SYN-ACK at
+171.39 ms.
+
+That margin is about 0.4 ms at n = 10. It is smaller than:
+- the 1 ms resolution of the verify pings that set the IPv6 RTT;
+- the 0.30–0.61 ms spread of plain curl's T across campaigns (below).
+
+So the 10/0 split records which way the outcome fell in these 10 runs. It is not evidence that
+IPv6 wins at this setting.
 
 **C0.** IPv6 won 10/10 in every cell, with no IPv4 attempt. The cost of racing is under 1 ms in
 magnitude.
@@ -136,6 +152,31 @@ magnitude.
 - Each cell has 10 runs, and T is a median of 10.
 - Only curl takes this flag, so the sweep has no Chromium counterpart.
 - This is one host and one kernel (7.0.0-43-generic).
+
+## Reproducibility of plain curl's T
+
+Plain curl's T (median time from the first SYN to the IPv4 SYN-ACK; packet-level) has been
+measured in four campaigns:
+
+| Campaign | When (UTC) | Code | IPv6 condition | Runs | T |
+|---|---|---|---|---|---|
+| [`variant-control`](../datasets/variant-control.md) | 2026-11-21 17:11 | `72be111` | blackhole (S1) | 20 | 221.53 ms |
+| [`jitter-loss`](../datasets/jitter-loss.md), twins | 2026-11-21 20:42 and 2026-11-22 02:15 | `c283448` | +200 and +280 ms delay | 40 | 222.0 ms |
+| [`latency-sweep`](../datasets/latency-sweep.md) | 2026-11-22 07:47–08:18 | `9a6de27` | +190 to +400 ms delay | 70 | 221.84 ms |
+| [`he-sweep`](../datasets/he-sweep.md), S1 | 2026-11-22 09:23 | `9a6de27` | blackhole (S1) | 10 | 222.14 ms |
+
+**Reproducibility result.**
+- The three campaigns from jitter-loss onwards agree within 0.30 ms (221.84–222.14).
+- With variant-control included, all four agree within 0.61 ms (221.53–222.14).
+- The four are separate sessions and campaigns, on three code versions. Two use an IPv6 blackhole
+  and two an IPv6 delay.
+- They are not independent of the host. All ran on the same machine and kernel (7.0.0-43-generic)
+  within about 16 hours, from 2026-11-21 17:11 to 2026-11-22 09:23 UTC.
+- So this shows T reproduces across campaigns on this host. It does not show T holds across hosts
+  or kernels.
+
+The core dataset's curl S1 median TCP setup time (222.221 ms, kernel 7.0.0-38) is a different
+metric, the setup time and not T, so it is not in this table.
 
 ## Running conditions
 
