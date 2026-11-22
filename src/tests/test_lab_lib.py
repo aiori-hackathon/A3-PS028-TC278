@@ -225,12 +225,23 @@ def test_check_bad_target(target):
 
 # --- hl_set_link: input checks happen before any tc command runs ----------------
 
-@pytest.mark.parametrize("args", ["v5 10 0", "v6 x 0", "v6 10 101", "v6 10 -1", "v6 1.5 0", "ctl 10 0"])
+@pytest.mark.parametrize("args", ["v5 10 0", "v6 x 0", "v6 10 101", "v6 10 -1", "v6 1.25 0", "v6 72.50 0",
+                                  "v6 .5 0", "v6 72.5.5 0", "v6 10 0 2.5", "ctl 10 0"])
 def test_set_link_rejects_bad_input_without_running_tc(args):
     out = bash(f"hl_set_link {args}")
     assert out.returncode == 2
     assert "error:" in out.stderr
     assert "+ tc" not in out.stdout
+
+
+def test_set_link_half_ms_delay():
+    """An odd "+N ms RTT" gives a half ms each way; tc gets it verbatim on both link ends."""
+    out = bash('tc() { :; }; hl_set_link v6 72.5 0')
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.splitlines() == [
+        "+ tc -n hl-server qdisc replace dev hl-v6s root netem delay 72.5ms",
+        "+ tc -n hl-server qdisc replace dev hl-ifb6 root netem delay 72.5ms",
+    ]
 
 
 def test_set_link_commands():

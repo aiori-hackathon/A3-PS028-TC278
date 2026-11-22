@@ -21,6 +21,7 @@ scenarios: [C0, X1]                    # required, each defined in scenarios.yam
 reps: 20                               # required, repetitions per session (at least 1)
 # or, for sessions run with --reps-adaptive MIN MAX --ci-width-ms W:
 # reps: {min: 10, max: 20, ci_width_ms: 0.5}
+# absent_cells: [chromium:X1]          # optional: client x scenario cells deliberately not run
 ---
 # Example extra scenario
 
@@ -49,6 +50,11 @@ The manifest is checked against its own declared shape, and its runs against the
   (`src/analysis/scenario_config.py` reads both).
 - The table must have exactly one session per declared client × scenario. A missing, duplicated
   or undeclared cell, or a row that cannot be read, is refused.
+- `absent_cells` (optional) lists `client:scenario` cells of that grid that were deliberately not
+  run, for example the latency sweep's fine steps, which run for one client only. Each must name a
+  declared client and scenario, once, and every client and every scenario keeps at least one cell.
+  A listed absent cell that also appears in the table is refused, like any undeclared cell.
+  Summaries skip absent cells; nothing is filled in for them.
 - With adaptive `reps`, each session must hold between `min` and `max` records, repetitions 1..n,
   each with an `adaptive` block whose settings match the header, `continue` on every run but the
   last and `stop` on the last. The stopping rule is recomputed from the setup times and must give

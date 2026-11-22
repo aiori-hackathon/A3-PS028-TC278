@@ -7,7 +7,8 @@ Reads src/config/scenario_grid.yaml (family, kind, values) and writes one scenar
 following the rules of src/config/scenarios.yaml:
 - delay N ("+N ms RTT" on that family): delay_ms_each_way = 10 + N/2, verify_target = 20 + N
   (from the baseline: each way = baseline each way + N/2, target = baseline RTT + N); the other
-  family stays at the baseline.
+  family stays at the baseline. An odd N gives a half ms each way (+125: 72.5 ms); whether netem
+  realises it is checked by src/runner/fractional_delay_check.py before such a scenario is used.
 - loss N (N% in each direction on that family, baseline delay): a band verify target (loss_band):
   round-trip ping loss 1 - (1 - N/100)^2 within 4 binomial standard errors over 200 pings.
 - jitter J (each way, netem 'distribution normal', base delay 10 + 2J so negative draws are rare):
@@ -91,9 +92,10 @@ def scenario_for(family: str, kind: str, value: int, baseline: dict) -> tuple[st
     ip = f"IPv{family[1]}"
     sid = f"G{family}{KINDS[kind]}{value}"
     if kind == "delay":
-        if value <= 0 or value % 2:
-            raise GridError(f"{family} delay {value}: '+N ms RTT' needs an even N > 0 (each way gets N/2)")
-        impaired = {"delay_ms_each_way": each + value // 2, "loss_pct": 0}
+        if value <= 0:
+            raise GridError(f"{family} delay {value}: '+N ms RTT' needs N > 0 (each way gets N/2)")
+        # Odd N gives a half ms each way (e.g. +125: 72.5 ms), which netem takes; even N stays whole.
+        impaired = {"delay_ms_each_way": each + value // 2 if value % 2 == 0 else each + value / 2, "loss_pct": 0}
         target = rtt + value
         label = f"{ip} +{value} ms RTT"
     elif kind in ("loss", "loss_sole_path"):

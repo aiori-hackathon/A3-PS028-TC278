@@ -8,6 +8,7 @@ and neighbour state is shared, so orchestrator sessions must never overlap.
     sudo .venv/bin/python src/runner/run_matrix.py --from 5             # resume at batch 5
     sudo .venv/bin/python src/runner/run_matrix.py --only S3:chromium   # one batch
     sudo .venv/bin/python src/runner/run_matrix.py --reps-adaptive 10 20 --ci-width-ms 0.5   # adaptive
+    sudo .venv/bin/python src/runner/run_matrix.py --only Gv6d125:curl --reps 5               # fixed 5 reps
 
 With --reps-adaptive each batch stops by the orchestrator's rule (see orchestrate.py); the batch
 check then expects exactly the number of runs the session's <session>_adaptive.json reports.
@@ -16,7 +17,7 @@ Plain sudo only, never sudo -E (the ROS variables would reach the orchestrator, 
 
 After every batch it runs the read-only batch check (src/analysis/check_batch.py): pcap count
 equals record count, every record has a matching pcap hash, lab verify passed before and after
-every run, cross_checks agree, code version not -dirty, 20 good repetitions. It then STOPS on:
+every run, cross_checks agree, code version not -dirty, all repetitions good (20, or --reps N). It then STOPS on:
   - orchestrator exit 1: the session stopped (failed verify, incomplete capture, error)
   - orchestrator exit 3: the session finished but some runs have log/pcap conflicts
   - a failed batch check
@@ -132,10 +133,11 @@ class Log:
 
 
 def run_batch(n: int, scenario: str, client: str, out_dir: Path, log: Log,
-              adaptive: tuple | None = None, total: int | None = None) -> tuple[int, str, str | None]:
-    cmd = orchestrator_cmd(scenario, client, adaptive=adaptive)
+              adaptive: tuple | None = None, total: int | None = None,
+              reps: int = REPS) -> tuple[int, str, str | None]:
+    cmd = orchestrator_cmd(scenario, client, reps=reps, adaptive=adaptive)
     path = out_dir / f"{n:02d}_{scenario}_{file_token(client)}.log"
-    reps_txt = f"adaptive {adaptive[0]}-{adaptive[1]}" if adaptive else f"x{REPS}"
+    reps_txt = f"adaptive {adaptive[0]}-{adaptive[1]}" if adaptive else f"x{reps}"
     where = f"{n}/{total or len(PLAN)}" + (" of the --only list" if total else "") if n else "extra batch, outside the plan"
     log(f"\n[{where}] {client} {scenario} {reps_txt}: {' '.join(cmd)}")
     t0 = time.monotonic()
@@ -194,6 +196,8 @@ def main(argv: list[str] | None = None) -> int:
                                    "run in that order (e.g. Gv6l10:curl,Gv6l10:chromium)")
     ap.add_argument("--reps-adaptive", type=int, nargs=2, metavar=("MIN", "MAX"),
                     help="adaptive repetitions per batch (needs --ci-width-ms); default: fixed 20")
+    ap.add_argument("--reps", type=int, default=REPS,
+                    help=f"fixed repetitions per batch (default {REPS}); not with --reps-adaptive")
     ap.add_argument("--ci-width-ms", type=float)
     ap.add_argument("--win-ci-width", type=float,
                     help="with --reps-adaptive: also require the IPv6 win fraction's 95%% Wilson CI to be no wider")
@@ -208,6 +212,10 @@ def main(argv: list[str] | None = None) -> int:
             (a.win_ci_width,) if a.win_ci_width is not None else ())
     elif a.ci_width_ms is not None or a.win_ci_width is not None:
         ap.error("--ci-width-ms and --win-ci-width only apply with --reps-adaptive")
+    if a.reps < 1:
+        ap.error("--reps must be at least 1")
+    if a.reps_adaptive and a.reps != REPS:
+        ap.error("--reps does not apply with --reps-adaptive")
     listed = bool(a.only and "," in a.only)
     if listed and a.start != 1:
         ap.error("--from does not apply to an --only list; to resume, pass the remaining batches to --only")
@@ -219,14 +227,14 @@ def main(argv: list[str] | None = None) -> int:
     if a.dry_run:
         reps_txt = (f"adaptive {adaptive[0]}-{adaptive[1]} reps (CI width {adaptive[2]:g} ms"
                     + (f", IPv6 win-fraction CI width {adaptive[3]:g}" if len(adaptive) > 3 else "") + ")" if adaptive
-                    else f"{REPS} reps")
+                    else f"{a.reps} reps")
         scope = (f"{len(todo)} batches from the --only list" if listed
                  else f"{len(todo)} of {len(PLAN)} batches" if all(n for n, _, _ in todo)
                  else "1 extra batch outside the 14-batch plan")
         print(f"Plan: {scope}, {reps_txt} each, one at a time; "
               "batch check after each; stop on any failure.")
         for n, s, c in todo:
-            print(f"  [{n:2d}] {' '.join(orchestrator_cmd(s, c, adaptive=adaptive))}")
+            print(f"  [{n:2d}] {' '.join(orchestrator_cmd(s, c, reps=a.reps, adaptive=adaptive))}")
         return 0
 
     leaked = [k for k in STRIPPED_VARS if k in os.environ]
@@ -247,12 +255,12 @@ def main(argv: list[str] | None = None) -> int:
     t_all = time.monotonic()
     try:
         for n, scenario, client in todo:
-            code, _, sid = run_batch(n, scenario, client, out_dir, log, adaptive, total)
+            code, _, sid = run_batch(n, scenario, client, out_dir, log, adaptive, total, a.reps)
             if sid is None:
                 log(f"  STOP: no session ID in the orchestrator output (exit {code}); see the batch output")
                 status = 1
                 break
-            expect = REPS
+            expect = a.reps
             if adaptive:
                 expect = adaptive_runs(sid, scenario)
                 if expect is None:

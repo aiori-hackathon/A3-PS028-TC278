@@ -117,8 +117,7 @@ def test_loss_scenario_declares_a_loss_band():
 
 
 @pytest.mark.parametrize("grid, msg", [
-    ({"grids": [{"family": "v6", "kind": "delay", "values": [201]}]}, "even N"),
-    ({"grids": [{"family": "v6", "kind": "delay", "values": [0]}]}, "even N > 0"),
+    ({"grids": [{"family": "v6", "kind": "delay", "values": [0]}]}, "needs N > 0"),
     ({"grids": [{"family": "v6", "kind": "loss", "values": [100]}]}, "core blackhole"),
     ({"grids": [{"family": "v6", "kind": "loss", "values": [0]}]}, "1-99"),
     ({"grids": [{"family": "v5", "kind": "delay", "values": [100]}]}, "family must be"),
@@ -224,3 +223,11 @@ def test_scenario_ids_lists_core_then_generated():
     assert ids[:7] == CORE_SCENARIOS and all(is_generated_id(i) for i in ids[7:]) and len(ids) > 7
     start = datetime(2026, 11, 21, tzinfo=timezone.utc)
     assert o.make_run_id(start, "Gv6d200", 1) == "20261121T000000Z_Gv6d200_curl_r01"
+
+
+def test_odd_delay_gives_a_half_ms_each_way_and_even_stays_whole():
+    base = {"delay_ms_each_way": 10, "rtt_ms": 20}
+    sid, sc = sg.scenario_for("v6", "delay", 125, base)
+    assert sid == "Gv6d125" and sc["v6"]["delay_ms_each_way"] == 72.5 and sc["verify_target"]["v6"] == 145
+    _, even = sg.scenario_for("v6", "delay", 200, base)
+    assert even["v6"]["delay_ms_each_way"] == 110 and isinstance(even["v6"]["delay_ms_each_way"], int)

@@ -2,7 +2,8 @@
 # scenarios_generated.yaml). The core scenarios C0 and S1-S6 are not here and are never generated.
 #
 # Each entry: family (v4 | v6), kind (delay | loss | jitter) and values.
-#   delay N:  "+N ms RTT" on that family: delay_ms_each_way = 10 + N/2, verify_target = 20 + N (N even).
+#   delay N:  "+N ms RTT" on that family: delay_ms_each_way = 10 + N/2, verify_target = 20 + N
+#             (odd N: a half ms each way, e.g. 72.5; checked by src/runner/fractional_delay_check.py).
 #   loss N:   N% loss in each direction on that family at baseline delay (1-99). Verified in band
 #             mode: round-trip ping loss 1 - (1 - N/100)^2 within 4 binomial standard errors (200 pings).
 #   jitter J: netem jitter J ms each way ('distribution normal'), base delay 10 + 2J each way, so the
@@ -24,7 +25,11 @@ schema_version: 1
 grids:
   - family: v6
     kind: delay
-    values: [100, 200, 250, 300, 350, 400]
+    # Latency sweep (campaign 2): 25 ms steps +100..+400, plus 5 ms steps around each client's
+    # packet-measured crossover (curl T = 222.0 ms, RTT 210-235 = +190..+215; Chromium T = 322.5 ms,
+    # RTT 310-335 = +290..+315). Which client runs which cell is the campaign plan, not the grid.
+    values: [100, 125, 150, 175, 190, 195, 200, 205, 210, 215, 225, 250,
+             275, 290, 295, 300, 305, 310, 315, 325, 350, 375, 400]
   - family: v6
     kind: loss
     values: [10, 30, 50]

@@ -13,3 +13,9 @@ See the [top-level README](../README.md) for what the lab measures and how to re
 
 Data stays outside `src/`. Packet captures go in `captures/` and run records in
 `data/generated/`. Both are gitignored, and two example runs are committed in `../examples/`.
+
+Campaign tooling for the latency and curl@he sweeps: `runner/run_campaigns.py` chains the
+fractional-delay check, campaign 2 (`latency-sweep`) and campaign 3 (`he-sweep`). It writes each
+manifest and restores the baseline at the end. `runner/fractional_delay_check.py` checks that netem
+realises a half-millisecond delay each way, which odd "+N ms RTT" scenarios need, and
+`analysis/crossover.py` reports the outcome flip and the packet-measured T for both datasets.
