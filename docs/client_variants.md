@@ -7,8 +7,9 @@ This page covers two additions:
 Neither changes the core dataset. C0 and S1–S6 are still defined only in
 `src/config/scenarios.yaml`, and a test pins that file byte for byte.
 
-No variant or generated-scenario session has been run yet, so this page has no results. It records
-what to run and how the results will be checked.
+This page records what to run and how the results are checked. Results are elsewhere: the
+curl@he200 control in [`variant-control`](datasets/variant-control.md), and the timeout and latency
+sweeps in [the sweep findings](findings/latency_and_he_sweeps.md).
 
 ## Client variants
 

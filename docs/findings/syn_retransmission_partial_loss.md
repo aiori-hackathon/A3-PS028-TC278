@@ -396,3 +396,7 @@ are not where the 222.0 and 322.5 ms come from, and they could not locate T more
 brackets it coarsely, and for Chromium only from below; the outcome flip is not located. The latency
 sweep `Gv6d100`–`Gv6d400` (generated, not yet run) would show where each client's outcome changes,
 and so test the measured T independently of the packet times.
+
+*Added 2026-11-22:* the latency sweep has now run. It locates each client's outcome flip to within
+5 ms (curl 221–226 ms, Chromium 321–326 ms RTT), and both measured T values fall inside; see
+[the sweep findings](latency_and_he_sweeps.md). The paragraph above is kept as written before the run.
