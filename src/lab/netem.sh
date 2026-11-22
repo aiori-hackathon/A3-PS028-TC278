@@ -5,6 +5,7 @@
 #   sudo src/lab/netem.sh v6 10 100     # S1: IPv6 blackhole
 #   sudo src/lab/netem.sh v6 110 0 50   # IPv6 delay 110 ms, jitter 50 ms (normal), each way
 #   sudo src/lab/netem.sh v6 10 0       # restore v6 to baseline (no jitter)
+#   sudo src/lab/netem.sh v6 72.5 0     # +125 ms RTT: half-ms each way is allowed (whole ms or .5)
 #
 # Changes only qdiscs on the server end and its ifb device inside hl-server
 # (see hl_set_link in lib.sh). Always follow with verify.sh and the matching targets.

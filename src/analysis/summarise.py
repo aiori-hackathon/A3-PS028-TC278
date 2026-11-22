@@ -97,10 +97,11 @@ class Shape:
     scenarios: tuple[str, ...]
     reps: int
     adaptive: tuple | None = None
+    absent: frozenset = frozenset()   # (client, scenario) cells the manifest declares were not run
 
     @property
     def cells(self) -> list[tuple[str, str]]:
-        return [(c, s) for c in self.clients for s in self.scenarios]
+        return [(c, s) for c in self.clients for s in self.scenarios if (c, s) not in self.absent]
 
 
 CORE_SHAPE = Shape(CLIENTS, SCENARIOS, EXPECTED_REPS)
@@ -123,7 +124,7 @@ def _row_re() -> re.Pattern:
 
 _ROW_LIKE_RE = re.compile(r"^\|\s*\d+\s*\|")   # any numbered table row, to catch rows that do not parse
 _HEADER_KEYS = {"clients", "scenarios", "reps"}
-_OPTIONAL_KEYS = {"title", "description"}
+_OPTIONAL_KEYS = {"title", "description", "absent_cells"}
 
 
 def _front_matter(doc: Path, text: str) -> tuple[dict | None, str]:
@@ -165,12 +166,35 @@ def _shape_from_header(doc: Path, h: dict) -> Shape:
     if bad_s:
         raise DatasetError(f"{doc}: scenario(s) {bad_s} are not defined in src/config/scenarios.yaml "
                            f"(defined: {list(valid)})")
+    absent = _absent_cells(doc, h.get("absent_cells", []), clients, scenarios)
     if isinstance(reps, dict):
-        return Shape(tuple(clients), tuple(scenarios), *_adaptive_reps(doc, reps))
+        return Shape(tuple(clients), tuple(scenarios), *_adaptive_reps(doc, reps), absent=absent)
     if isinstance(reps, bool) or not isinstance(reps, int) or reps < 1:
         raise DatasetError(f"{doc}: header reps must be a whole number of at least 1, or "
                            f"{{min, max, ci_width_ms}} for adaptive repetitions; got {reps!r}")
-    return Shape(tuple(clients), tuple(scenarios), reps)
+    return Shape(tuple(clients), tuple(scenarios), reps, absent=absent)
+
+
+def _absent_cells(doc: Path, items, clients: list[str], scenarios: list[str]) -> frozenset:
+    """absent_cells: ["client:scenario", ...], cells of the declared grid deliberately not run.
+    Each must name a declared client and scenario, once; every client and scenario keeps at least one cell."""
+    if not isinstance(items, list) or not all(isinstance(x, str) and x.count(":") == 1 for x in items):
+        raise DatasetError(f"{doc}: absent_cells must be a list of 'client:scenario' strings; got {items!r}")
+    if len(set(items)) != len(items):
+        raise DatasetError(f"{doc}: absent_cells lists a cell twice: {items}")
+    out = set()
+    for x in items:
+        s, c = x.split(":")[1], x.split(":")[0]
+        if c not in clients or s not in scenarios:
+            raise DatasetError(f"{doc}: absent cell {x!r} is not a declared client x scenario")
+        out.add((c, s))
+    for c in clients:
+        if all((c, s) in out for s in scenarios):
+            raise DatasetError(f"{doc}: absent_cells leaves client {c} with no cell; drop it from clients")
+    for s in scenarios:
+        if all((c, s) in out for c in clients):
+            raise DatasetError(f"{doc}: absent_cells leaves scenario {s} with no cell; drop it from scenarios")
+    return frozenset(out)
 
 
 def _adaptive_reps(doc: Path, reps: dict) -> tuple[int, tuple]:
@@ -218,8 +242,9 @@ def load_manifest(doc: Path = DATASET_DOC, require_header: bool = False) -> Mani
             raise DatasetError(f"{doc}: cannot read session row (unknown client or scenario?): {line.strip()}")
     cells = [(c, s) for c, s, _ in rows]
     if sorted(cells) != sorted(shape.cells):
-        raise DatasetError(f"{doc}: expected exactly one session per client x scenario "
-                           f"({len(shape.cells)}), got {cells}")
+        raise DatasetError(f"{doc}: expected exactly one session per client x scenario"
+                           + (" (less the absent_cells)" if shape.absent else "")
+                           + f" ({len(shape.cells)}), got {cells}")
     return Manifest(doc, shape, rows)
 
 
@@ -617,10 +642,11 @@ def summarise(runs: list[Run], shape: Shape = CORE_SHAPE) -> dict:
     clients = client_order(shape.clients)
     cells: dict[str, dict[str, dict]] = {c: {} for c in clients}
     for c in clients:
-        for s in shape.scenarios:
+        mine = [s for s in shape.scenarios if (c, s) not in shape.absent]
+        for s in mine:
             cells[c][s] = summarise_cell([r for r in runs if r.client == c and r.scenario == s])
         c0 = [r.setup_ms for r in runs if r.client == c and r.scenario == "C0" and r.setup_ms is not None]
-        for s in shape.scenarios:
+        for s in mine:
             sc = [r.setup_ms for r in runs if r.client == c and r.scenario == s and r.setup_ms is not None]
             cells[c][s]["scenario_penalty_ms"] = scenario_penalty(sc, c0)
             if "C0" not in shape.scenarios:   # never borrowed from another dataset's C0
@@ -902,6 +928,8 @@ def build(doc: Path = DATASET_DOC, runs_dir: Path = RUNS_DIR, manifest: Manifest
     if doc != DATASET_DOC:  # a named dataset records the shape it declared (core output stays as it was)
         summary["dataset"]["shape"] = {"clients": list(shape.clients), "scenarios": list(shape.scenarios),
                                        "reps": shape.reps}
+        if shape.absent:
+            summary["dataset"]["shape"]["absent_cells"] = sorted(f"{c}:{s}" for c, s in shape.absent)
         if shape.adaptive:
             lo, hi, w, *rest = shape.adaptive
             summary["dataset"]["shape"]["adaptive"] = {"min": lo, "max": hi, "ci_width_ms": w,

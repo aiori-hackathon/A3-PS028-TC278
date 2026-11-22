@@ -56,8 +56,9 @@ hl_set_link() {
         v6) dev=$V6_IF_S ifb=$V6_IFB ;;
         *) echo "error: family must be v4 or v6, got '$family'" >&2; return 2 ;;
     esac
-    if [[ ! $delay =~ ^[0-9]+$ ]]; then
-        echo "error: delay must be whole ms, got '$delay'" >&2; return 2
+    # Whole ms, or a half ms (an odd "+N ms RTT" splits into N/2 each way, e.g. 72.5); tc takes "72.5ms".
+    if [[ ! $delay =~ ^[0-9]+(\.5)?$ ]]; then
+        echo "error: delay must be whole ms or end in .5, got '$delay'" >&2; return 2
     fi
     if [[ ! $loss =~ ^[0-9]+$ ]] || ((loss > 100)); then
         echo "error: loss must be 0-100 (%), got '$loss'" >&2; return 2

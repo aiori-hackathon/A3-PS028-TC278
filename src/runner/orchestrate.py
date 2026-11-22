@@ -175,10 +175,19 @@ def in_ns_as_user(ns: str, user: str, argv: list[str]) -> list[str]:
     return ["ip", "netns", "exec", ns, "runuser", "-u", user, "--", *argv]
 
 
-def cmd_netem(family: str, delay_ms: int, loss_pct: int, jitter_ms: int = 0) -> list[str]:
+def delay_arg(delay_ms) -> str:
+    """netem.sh's delay argument: whole ms as before ("110"), or a half ms ("72.5") for an odd
+    "+N ms RTT". Anything finer is refused here, before any command runs (lib.sh refuses it too)."""
+    if isinstance(delay_ms, bool) or not isinstance(delay_ms, (int, float)) or delay_ms < 0 \
+            or (delay_ms * 2) != int(delay_ms * 2):
+        raise OrchestratorError(f"netem delay must be whole ms or a half ms, got {delay_ms!r}")
+    return str(int(delay_ms)) if float(delay_ms).is_integer() else f"{delay_ms:.1f}"
+
+
+def cmd_netem(family: str, delay_ms, loss_pct: int, jitter_ms: int = 0) -> list[str]:
     """netem.sh arguments; the jitter argument is added only when there is jitter, so every
     scenario without it (C0, S1-S6 among them) gets exactly the three arguments it always had."""
-    return [str(LAB / "netem.sh"), family, str(delay_ms), str(loss_pct)] + ([str(jitter_ms)] if jitter_ms else [])
+    return [str(LAB / "netem.sh"), family, delay_arg(delay_ms), str(loss_pct)] + ([str(jitter_ms)] if jitter_ms else [])
 
 
 def netem_for(family: str, link: dict) -> list[str]:

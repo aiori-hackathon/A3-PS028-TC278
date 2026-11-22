@@ -18,6 +18,51 @@ scenarios:
     dns: {delay_ms: {A: 0, AAAA: 0}}
     verify_target: {v4: 20, v6: 120}
 
+  Gv6d125:
+    label: IPv6 +125 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 125}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 72.5, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 145}
+
+  Gv6d150:
+    label: IPv6 +150 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 150}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 85, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 170}
+
+  Gv6d175:
+    label: IPv6 +175 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 175}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 97.5, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 195}
+
+  Gv6d190:
+    label: IPv6 +190 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 190}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 105, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 210}
+
+  Gv6d195:
+    label: IPv6 +195 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 195}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 107.5, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 215}
+
   Gv6d200:
     label: IPv6 +200 ms RTT (generated extension)
     extension: true
@@ -26,6 +71,42 @@ scenarios:
     v6: {delay_ms_each_way: 110, loss_pct: 0}
     dns: {delay_ms: {A: 0, AAAA: 0}}
     verify_target: {v4: 20, v6: 220}
+
+  Gv6d205:
+    label: IPv6 +205 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 205}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 112.5, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 225}
+
+  Gv6d210:
+    label: IPv6 +210 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 210}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 115, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 230}
+
+  Gv6d215:
+    label: IPv6 +215 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 215}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 117.5, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 235}
+
+  Gv6d225:
+    label: IPv6 +225 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 225}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 122.5, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 245}
 
   Gv6d250:
     label: IPv6 +250 ms RTT (generated extension)
@@ -36,6 +117,33 @@ scenarios:
     dns: {delay_ms: {A: 0, AAAA: 0}}
     verify_target: {v4: 20, v6: 270}
 
+  Gv6d275:
+    label: IPv6 +275 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 275}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 147.5, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 295}
+
+  Gv6d290:
+    label: IPv6 +290 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 290}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 155, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 310}
+
+  Gv6d295:
+    label: IPv6 +295 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 295}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 157.5, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 315}
+
   Gv6d300:
     label: IPv6 +300 ms RTT (generated extension)
     extension: true
@@ -45,6 +153,42 @@ scenarios:
     dns: {delay_ms: {A: 0, AAAA: 0}}
     verify_target: {v4: 20, v6: 320}
 
+  Gv6d305:
+    label: IPv6 +305 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 305}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 162.5, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 325}
+
+  Gv6d310:
+    label: IPv6 +310 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 310}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 165, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 330}
+
+  Gv6d315:
+    label: IPv6 +315 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 315}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 167.5, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 335}
+
+  Gv6d325:
+    label: IPv6 +325 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 325}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 172.5, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 345}
+
   Gv6d350:
     label: IPv6 +350 ms RTT (generated extension)
     extension: true
@@ -53,6 +197,15 @@ scenarios:
     v6: {delay_ms_each_way: 185, loss_pct: 0}
     dns: {delay_ms: {A: 0, AAAA: 0}}
     verify_target: {v4: 20, v6: 370}
+
+  Gv6d375:
+    label: IPv6 +375 ms RTT (generated extension)
+    extension: true
+    grid: {family: v6, kind: delay, value: 375}
+    v4: {delay_ms_each_way: 10, loss_pct: 0}
+    v6: {delay_ms_each_way: 197.5, loss_pct: 0}
+    dns: {delay_ms: {A: 0, AAAA: 0}}
+    verify_target: {v4: 20, v6: 395}
 
   Gv6d400:
     label: IPv6 +400 ms RTT (generated extension)
