@@ -10,8 +10,12 @@ For each (client, scenario) cell it reports, from the pcaps only:
    (docs/findings/chromium_s1_second_v6_syn.md). For every attempt, the gap from each SYN to the
    next one on that 4-tuple, by ordinal (1st retransmission, 2nd ...), and likewise for the
    server's repeated SYN-ACKs. Linux's initial retransmission timeout is 1 s (TCP_TIMEOUT_INIT,
-   RFC 6298 section 2) and doubles on each further timeout, so the reference gaps are 1000, 2000,
-   4000 ms. That is the KERNEL's timer, visible in packets; it is not a client decision. An attempt
+   RFC 6298 section 2). For the client's SYNs, net.ipv4.tcp_syn_linear_timeouts (4 on this lab's
+   kernel, 7.0) keeps the gap at 1 s for the first 4 retransmissions; after that the timeout doubles
+   again, starting from 1 s. So the SYN reference gaps are 1000 ms for ordinals 1-5, then 2000,
+   4000 ms. That sysctl does not apply to the server's SYN-ACKs, so their reference doubles:
+   1000, 2000, 4000 ms. These are references, not thresholds. It is the KERNEL's timer, visible in
+   packets; it is not a client decision. An attempt
    abandoned before its timer fired (the capture ends, or the socket is closed once another attempt
    has won) shows no retransmission: absence of a retransmission is censored, not evidence.
 2. Setup-time clusters (packet-level values, grouping is descriptive). The run's TCP setup times
@@ -51,6 +55,7 @@ from analysis.parse_pcap import parse  # noqa: E402
 REPO = Path(__file__).resolve().parents[2]
 RUNS_DIR = REPO / "data" / "generated" / "runs"
 INITIAL_RTO_MS = 1000.0     # Linux TCP_TIMEOUT_INIT (RFC 6298 2.1); reference only, not a threshold
+SYN_LINEAR_TIMEOUTS = 4     # net.ipv4.tcp_syn_linear_timeouts on the lab kernel; SYN side only
 CLUSTER_GAP_MS = 400.0      # neighbours further apart than this start a new cluster
 HTTP_PORT = 80
 
@@ -90,14 +95,24 @@ def clusters(values: list[float], gap_ms: float = CLUSTER_GAP_MS) -> list[dict]:
     return [{"n": len(c), "median_ms": round(statistics.median(c), 3), "min_ms": c[0], "max_ms": c[-1]} for c in out]
 
 
-def _by_ordinal(gap_lists: list[list[float]]) -> list[dict]:
-    """Gap statistics by retransmission ordinal, with the doubling reference 1000 * 2^(k-1) ms."""
+def syn_reference_ms(k: int, linear: int = SYN_LINEAR_TIMEOUTS) -> float:
+    """Reference gap before the k-th SYN retransmission: 1 s for k <= linear + 1, then doubling."""
+    return INITIAL_RTO_MS * 2 ** max(0, k - linear - 1)
+
+
+def synack_reference_ms(k: int) -> float:
+    """Reference gap before the k-th repeated SYN-ACK: 1000 * 2^(k-1) ms (no linear phase)."""
+    return INITIAL_RTO_MS * 2 ** (k - 1)
+
+
+def _by_ordinal(gap_lists: list[list[float]], reference=synack_reference_ms) -> list[dict]:
+    """Gap statistics by retransmission ordinal, each with its reference gap."""
     by: dict[int, list[float]] = defaultdict(list)
     for gaps in gap_lists:
         for k, g in enumerate(gaps, 1):
             by[k].append(g)
     return [{"ordinal": k, "n": len(v), "median_ms": round(statistics.median(v), 3), "min_ms": min(v),
-             "max_ms": max(v), "reference_ms": INITIAL_RTO_MS * 2 ** (k - 1)} for k, v in sorted(by.items())]
+             "max_ms": max(v), "reference_ms": reference(k)} for k, v in sorted(by.items())]
 
 
 def _val(field: dict):
@@ -156,8 +171,8 @@ def analyse_cell(records: list[dict], repo: Path = REPO) -> dict:
     return {"client": label_of(records[0]["client"]),
             "scenario": records[0]["scenario"]["id"], "n_runs": n,
             "attempts_with_syn_retransmission": len(syn_gaps),
-            "syn_retransmission_gaps": _by_ordinal(syn_gaps),
-            "synack_retransmission_gaps": _by_ordinal(synack_gaps),
+            "syn_retransmission_gaps": _by_ordinal(syn_gaps, syn_reference_ms),
+            "synack_retransmission_gaps": _by_ordinal(synack_gaps, synack_reference_ms),
             "setup_clusters": cl, "cluster_spacing_ms": spacing,
             "median_all_runs_ms": median, "median_ci_all_runs": bootstrap_median_ci_ranked(all_runs),
             "runs_without_setup_time": sum(1 for x in all_runs if x is None),

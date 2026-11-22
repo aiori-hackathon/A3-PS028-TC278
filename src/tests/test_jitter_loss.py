@@ -316,6 +316,13 @@ def test_retransmission_gap_and_clusters_from_packets(tmp_path):
     assert "[packet-level]" in text and "decid" not in text     # no statement about client decisions
 
 
+def test_syn_reference_is_linear_then_doubling_and_synack_reference_doubles():
+    # tcp_syn_linear_timeouts=4: SYN gaps 1, 1, 1, 1, 1, 2, 4 s; the server's SYN-ACKs have no linear phase
+    assert [sr.syn_reference_ms(k) for k in range(1, 8)] == [1000.0] * 5 + [2000.0, 4000.0]
+    assert [sr.syn_reference_ms(k, linear=0) for k in range(1, 4)] == [1000.0, 2000.0, 4000.0]
+    assert [sr.synack_reference_ms(k) for k in range(1, 4)] == [1000.0, 2000.0, 4000.0]
+
+
 def test_manifest_accepts_a_win_criterion():
     from analysis.summarise import DatasetError, _adaptive_reps
     assert _adaptive_reps(Path("x.md"), {"min": 20, "max": 60, "ci_width_ms": 5, "win_ci_width": 0.3}) == \
@@ -522,3 +529,40 @@ def test_run_matrix_dry_run_of_the_campaign(capsys):
                     "--win-ci-width", "0.3"]) == 0
     out = capsys.readouterr().out
     assert "16 batches from the --only list" in out and out.count("--win-ci-width 0.3") == 16
+
+
+# --- jitter win-fraction model (analysis/jitter_model.py) ---------------------------------------
+
+def test_jitter_model_prediction_is_phi_of_standardised_crossover():
+    from analysis import jitter_model as jm
+    assert jm.predict(220.0, 220.0, 70.0) == pytest.approx(0.5)
+    assert jm.predict(320.0, 220.0, 100.0) == pytest.approx(0.8413, abs=1e-4)   # one SD above the mean
+    assert jm.predict(220.0, 300.0, 99.0) < 0.25
+
+
+def test_jitter_model_twin_bracket_can_be_open():
+    from analysis import jitter_model as jm
+    curl = [{"rtt_ms": 221, "n": 20, "v6_wins": 20}, {"rtt_ms": 301, "n": 20, "v6_wins": 0}]
+    chromium = [{"rtt_ms": 221, "n": 20, "v6_wins": 20}, {"rtt_ms": 301, "n": 20, "v6_wins": 20}]
+    assert jm.twin_bracket(curl) == {"above_ms": 221, "below_ms": 301}
+    assert jm.twin_bracket(chromium) == {"above_ms": 301, "below_ms": None}   # IPv4 never won: no upper bound
+
+
+def test_jitter_model_crossover_from_ipv4_synack_in_packets(tmp_path):
+    from analysis import jitter_model as jm
+    # v6 SYN at T0 answered after 300 ms; v4 SYN 200 ms in, SYN-ACK 21 ms later: crossover 221 ms
+    frames = sorted([(T0, g.ip_tcp(g.C6, g.S6, 40010, 80, g.SYN, seq=1))]
+                    + [(T0 + 300 * MS, g.ip_tcp(g.S6, g.C6, 80, 40010, g.SYN | g.ACK, seq=9, ack=2))]
+                    + g.handshake(T0 + 200 * MS, g.C4, g.S4, 40012, rtt_ms=21), key=lambda f: f[0])
+    rec = _record(tmp_path, 1, frames, "v4", 221.03)
+    assert jm.v4_synack_ms(rec, repo=tmp_path) == 221.0
+    assert not jm.won_by_later_v6_attempt(rec, repo=tmp_path)
+    rec6 = _record(tmp_path, 2, _v4_fallback(T0 + 5000 * MS), "v4", 220.03)
+    assert jm.v4_synack_ms(rec6, repo=tmp_path) == 220.0
+
+
+def test_jitter_model_outcome_bracket_only_corroborates_the_measured_crossover():
+    from analysis import jitter_model as jm
+    assert jm._in_bracket(222.0, {"above_ms": 221, "below_ms": 301})
+    assert jm._in_bracket(322.5, {"above_ms": 301, "below_ms": None})
+    assert not jm._in_bracket(310.0, {"above_ms": 221, "below_ms": 301})

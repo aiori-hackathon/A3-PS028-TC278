@@ -12,7 +12,8 @@ For each scenario: apply both families' netem, then run `verify.sh up` N times a
 verify measured (scenario.verify_observed's format). After the last scenario, and on any error
 or Ctrl-C, both links are restored to the baseline and verified at the baseline RTT.
 
-It also reads (never sets) net.ipv4.tcp_syn_retries in hl-client and tcp_synack_retries in hl-server.
+It also reads (never sets) net.ipv4.tcp_syn_retries and tcp_syn_linear_timeouts in hl-client and
+tcp_synack_retries in hl-server.
 
 Output: data/generated/lab/<UTC>_band_pilot.json and .log (owned by the invoking user).
 A FAIL here is a pilot result to report, not something to tune away: the bands are 4 standard
@@ -88,7 +89,9 @@ def main(argv: list[str] | None = None) -> int:
     # Kernel limits under both clients' own time limits (read-only): SYN retries in hl-client,
     # SYN-ACK retries in hl-server. Recorded for the scenario doc; nothing is changed.
     result["kernel"] = {}
-    for ns, key in ((ctx.lab["NS_CLIENT"], "net.ipv4.tcp_syn_retries"), (ctx.lab["NS_SERVER"], "net.ipv4.tcp_synack_retries")):
+    for ns, key in ((ctx.lab["NS_CLIENT"], "net.ipv4.tcp_syn_retries"),
+                    (ctx.lab["NS_CLIENT"], "net.ipv4.tcp_syn_linear_timeouts"),
+                    (ctx.lab["NS_SERVER"], "net.ipv4.tcp_synack_retries")):
         p = o.sh(ctx, ["ip", "netns", "exec", ns, "sysctl", "-n", key], log, check=False)
         result["kernel"][f"{ns} {key}"] = p.stdout.strip() if p.returncode == 0 else None
         print(f"{ns} {key} = {result['kernel'][f'{ns} {key}']}")
