@@ -151,14 +151,17 @@ Lab host: Ubuntu 24.04, kernel 7.0.0-38-generic, Python 3.12.3, nginx 1.24.0, tc
 
 ## Method and evidence labels
 
-Every statement in the results is one of three kinds, and is labelled as such in the summary,
+Every statement in the results carries one of four evidence labels, the same four in the summary,
 the dashboard and the report:
 
-- **Packet-level evidence**: from the packet capture taken inside `hl-client`. All timings, winning
+- **Packet-level (pcap)**: from the packet capture taken inside `hl-client`. All timings, winning
   family, attempts and DNS times come from here.
-- **Outcomes (client/runner logs)**: what a client reported about itself, such as curl's `-w` output,
-  Chromium's NetLog and exit codes.
-- **Interpretation**: our reading of the two above. It is never a measurement.
+- **Client log**: what a client reported about itself, such as curl's `-w` output, Chromium's NetLog
+  and exit codes. These are outcomes, not packet-level evidence.
+- **Derived (pcap − lab RTT)**: packet-level TCP setup time combined with the winning family's RTT
+  from the lab's ping check before the run (the oracle baseline and cost of racing). It is computed,
+  not seen on the wire.
+- **Interpretation**: our reading of the evidence above. It is never a measurement.
 
 Fixed metric definitions:
 - **TCP setup time:** first SYN to the ACK completing the winning handshake. DNS time is separate.

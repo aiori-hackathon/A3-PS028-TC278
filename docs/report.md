@@ -9,7 +9,7 @@ is estimated or carried over from configuration.
 
 ## Conventions
 
-**Evidence labels.** These are the same three labels the dashboard uses.
+**Evidence labels.** These are the same four labels the dashboard uses: Packet-level (pcap), Client log, Derived (pcap − lab RTT) and Interpretation.
 - **[Packet-level (pcap)]** comes from the packet capture taken inside the client namespace.
 - **[Client log]** comes from what a client reported about itself: curl's `-w` output, or Chromium's NetLog.
 - **[Interpretation]** is our reading of the evidence. It is never a measurement.
