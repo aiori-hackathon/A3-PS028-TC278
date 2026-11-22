@@ -12,6 +12,7 @@ is estimated or carried over from configuration.
 **Evidence labels.** These are the same four labels the dashboard uses: Packet-level (pcap), Client log, Derived (pcap − lab RTT) and Interpretation.
 - **[Packet-level (pcap)]** comes from the packet capture taken inside the client namespace.
 - **[Client log]** comes from what a client reported about itself: curl's `-w` output, or Chromium's NetLog.
+- **[Derived (pcap − lab RTT)]** combines the packet-level TCP setup time with the winning family's RTT from the lab's ping check before the run (the oracle baseline and cost of racing). It is computed, not seen on the wire.
 - **[Interpretation]** is our reading of the evidence. It is never a measurement.
 
 **Wording rules.** These come from the project's CLAUDE.md, and both rules below are in it.

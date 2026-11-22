@@ -164,6 +164,8 @@ def test_report_names_the_four_dashboard_tags():
     line = next(x for x in REPORT.read_text(encoding="utf-8").splitlines() if x.startswith("**Evidence labels.**"))
     assert "four labels the dashboard uses" in line
     assert all(tag in line for tag in FOUR_TAGS), line
+    conventions = REPORT.read_text(encoding="utf-8").split("**Evidence labels.**", 1)[1].split("\n\n", 1)[0]
+    assert re.findall(r"^- \*\*\[(.+?)\]\*\*", conventions, re.MULTILINE) == FOUR_TAGS
 
 
 def test_readme_lists_the_four_dashboard_tags():
