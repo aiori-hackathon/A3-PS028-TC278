@@ -107,6 +107,27 @@ def test_load_runs_refuses_an_incomplete_or_unclean_session(tmp_path, records, m
         sm.load_runs([("curl", "C0", "A")], runs, expected=2, repo=None)
 
 
+def _with_commit(record, commit):
+    record["environment"]["git_commit"] = commit
+    return record
+
+
+def test_load_runs_refuses_a_session_with_a_dirty_record(tmp_path):
+    runs = tmp_path / "runs"
+    write(runs, [_with_commit(make_record("A", "curl", "C0", 1), "c283448"),
+                 _with_commit(make_record("A", "curl", "C0", 2), "c283448-dirty")])
+    with pytest.raises(sm.DatasetError, match=r"A_C0_curl_r02 code version is -dirty"):
+        sm.load_runs([("curl", "C0", "A")], runs, expected=2, repo=None)
+
+
+def test_load_runs_accepts_clean_commits_and_ignores_dirty_records_outside_the_dataset(tmp_path):
+    runs = tmp_path / "runs"
+    write(runs, [_with_commit(make_record("A", "curl", "C0", 1), "c283448"),
+                 _with_commit(make_record("A", "curl", "C0", 2), "dirty00"),       # only a -dirty suffix counts
+                 _with_commit(make_record("PILOT", "curl", "C0", 1), "c283448-dirty")])
+    assert len(sm.load_runs([("curl", "C0", "A")], runs, expected=2, repo=None)) == 2
+
+
 # --- attempt shapes ----------------------------------------------------------------------
 
 def test_chromium_two_v6_attempts_are_first_same_family_other_family():

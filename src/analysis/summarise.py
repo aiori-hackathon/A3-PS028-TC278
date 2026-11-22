@@ -7,7 +7,8 @@
 The core dataset is the 14 sessions (2 clients x C0-S6 x 20 reps) in docs/dataset.md; its output goes
 to data/generated/summary/. Any other dataset is a manifest in docs/datasets/ that declares its own
 shape (clients, scenarios, reps) in a YAML header, and is checked against that shape; its output goes
-to data/generated/summary/NAME/. Either way an incomplete or unclean dataset is refused.
+to data/generated/summary/NAME/. Either way an incomplete or unclean dataset is refused, including
+any record whose code version (environment.git_commit) ends in -dirty, as check_batch also refuses.
 
 Evidence levels, kept apart throughout:
   packet   from the pcap (the run record's packet_observations and metrics): packet-level evidence
@@ -502,6 +503,9 @@ def load_runs(sessions: list[tuple[str, str, str]], runs_dir: Path = RUNS_DIR,
                 problems.append(f"{r['run_id']} cross_checks {r['cross_checks']['status']}")
             if not (r["evidence"].get("pre_verify_ok") and r["evidence"].get("post_restore_verify_ok")):
                 problems.append(f"{r['run_id']} lab verify did not pass")
+            # same rule as check_batch: a record made from uncommitted code cannot be reproduced
+            if str(r.get("environment", {}).get("git_commit", "")).endswith("-dirty"):
+                problems.append(f"{r['run_id']} code version is -dirty (uncommitted changes)")
         if problems:
             raise DatasetError(f"session {sid} ({client}/{scenario}): " + "; ".join(problems))
         walls: dict[str, float] = {}

@@ -50,14 +50,18 @@ and argument parsing.
 
 ## Evidence labels
 
-The code keeps these sources separate, and so does this file:
+The code keeps these sources separate, and so does this file. These are the same four labels the
+dashboard and the report use:
 
 | Label | Meaning |
 |---|---|
 | **Packet-level (pcap)** | Read from the tcpdump capture of the client namespace. |
 | **Client log** | What the client or the runner reported (curl `-w`, Playwright, Chromium NetLog). These are outcomes, not packet evidence. |
-| **Lab check** | ping RTT and configuration checks from `verify.sh`. |
-| **Derived (pcap - lab RTT)** | Packet-level TCP setup time combined with the lab's pre-run ping RTT. The dashboard shows this tag as "Derived (pcap − lab RTT)". |
+| **Derived (pcap − lab RTT)** | Packet-level TCP setup time combined with the lab's pre-run ping RTT. |
+| **Interpretation** | Our reading of the evidence above. It is never a measurement. |
+
+"(lab check)" in the pseudocode below marks a value from `verify.sh` (ping RTT and configuration
+checks). It is an input to Derived values, not a fifth evidence label.
 
 Nothing below says whether a client conforms to RFC 8305 or any other specification. The metrics
 are times between packets. They describe what each client did on the wire in this lab, not why it
@@ -443,7 +447,7 @@ for each client c, scenario s in the dataset:
     scenario_penalty_ms(c, s) := median(S) − median(C0)      (None if either list is empty)
 ```
 
-### 3.5 Oracle baseline and cost of racing — Derived (pcap - lab RTT) `[src/analysis/metrics.py → oracle_baseline]`, called per run by `[src/analysis/summarise.py → run_from_record]`
+### 3.5 Oracle baseline and cost of racing — Derived (pcap − lab RTT) `[src/analysis/metrics.py → oracle_baseline]`, called per run by `[src/analysis/summarise.py → run_from_record]`
 
 This is a project addition alongside the fixed metrics. It replaces none of them and needs no new
 measurements.
@@ -540,7 +544,7 @@ for each client × scenario cell:
         (first / same-family / other-family); SYN retransmissions counted separately
     dns_ms statistics; for S6, A and AAAA answer times and first SYN relative to them
     measured_rtt_ms per family: median of computed values plus status counts (a blackhole is a status, not 0)
-    oracle (Derived (pcap - lab RTT)): oracle_setup and cost_of_racing statistics over runs
+    oracle (Derived (pcap − lab RTT)): oracle_setup and cost_of_racing statistics over runs
         where they were computed, with the other statuses counted and single-family runs counted
     cost: wall time, pcap bytes, client peak RSS                       (runner measurement)
     Chromium only: NetLog connect jobs and resolver order              (client log)
