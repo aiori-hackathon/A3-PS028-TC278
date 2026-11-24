@@ -322,6 +322,7 @@ sudo src/lab/teardown.sh                  # removes both namespaces and the lab 
 ├── Proposed-structure-hackathon.pdf   the organisers' presentation template (not our project)
 ├── PS-028.pdf                         the organisers' PS-028 problem statement, as issued (not our project)
 ├── CLAUDE.md                 project rules: metric definitions, wording, lab safety
+├── deck/                     presentation deck (.pptx and .pdf), its build script and number sources
 ├── docs/
 │   ├── report.md             technical report (methodology, results, limitations)
 │   ├── dataset.md            the 14 sessions / 280 runs that make up the core dataset (frozen)

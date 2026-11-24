@@ -32,3 +32,6 @@ Thumbs.db
 
 # Local style reference for the website (Next.js download); not part of the project
 web/dual-stack-lab-ui/
+
+# Deck build dependencies (deck/package-lock.json pins them; run npm ci in deck/)
+deck/node_modules/
