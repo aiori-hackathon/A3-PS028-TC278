@@ -10,21 +10,26 @@
 #   make report       summarise.py: tables, interpretation and summary.json (DATASET=name for a manifest)
 #   make dashboard    dashboard.py: data/generated/summary/dashboard.html (DATASET=name for a manifest)
 #   make csv          export_csv.py: the dataset as CSV (OUT=file, default stdout; DATASET=name)
+#   make demo         scripts/demo.sh: live demo, one run (SCENARIO=S1 CLIENT=curl), into data/demo/ only
+#   make demo-check   scripts/demo_check.sh: venue pre-flight for make demo; changes nothing
+#   make demo-isolation-check   fingerprint, make demo twice, fingerprint: every summary byte-identical
 #
 # Python always runs without PYTHONPATH and LD_LIBRARY_PATH (a ROS shell sets both), and sudo is
 # plain sudo, never sudo -E.
 
 PY      := env -u PYTHONPATH -u LD_LIBRARY_PATH .venv/bin/python
 ARGS    ?=
+SCENARIO ?= S1
+CLIENT   ?= curl
 DATASET ?=
 OUT     ?=
 dataset_arg := $(if $(DATASET),--dataset $(DATASET))
 
 .DEFAULT_GOAL := help
-.PHONY: help check setup test lab-up lab-down run report dashboard csv
+.PHONY: help check setup test lab-up lab-down run report dashboard csv demo demo-check demo-isolation-check
 
 help:
-	@sed -n '4,13p' Makefile | sed 's/^# \{0,1\}//'
+	@sed -n '4,16p' Makefile | sed 's/^# \{0,1\}//'
 
 check:
 	scripts/install.sh --check
@@ -52,3 +57,18 @@ dashboard:
 
 csv:
 	$(PY) src/analysis/export_csv.py $(dataset_arg) $(if $(OUT),--out $(OUT)) $(ARGS)
+
+# make demo runs as your user and calls sudo itself (once with a prompt, then sudo -n only).
+demo:
+	SCENARIO=$(SCENARIO) CLIENT=$(CLIENT) scripts/demo.sh
+
+demo-check:
+	scripts/demo_check.sh
+
+FP := data/demo/isolation
+demo-isolation-check:
+	$(PY) src/analysis/summary_fingerprint.py snapshot $(FP)/before.json
+	DEMO_OPEN=0 SCENARIO=$(SCENARIO) CLIENT=$(CLIENT) scripts/demo.sh
+	DEMO_OPEN=0 SCENARIO=$(SCENARIO) CLIENT=$(CLIENT) scripts/demo.sh
+	$(PY) src/analysis/summary_fingerprint.py snapshot $(FP)/after.json
+	$(PY) src/analysis/summary_fingerprint.py compare $(FP)/before.json $(FP)/after.json

@@ -274,11 +274,11 @@ text(s, [
 text(s, "A live run is a demonstration. It is not part of any dataset, and its numbers will differ slightly from the report.",
      { x: 0.6, y: 5.35, w: 12.15, h: 1.0, fontSize: 22, color: MUTED });
 notes(s, "3m40s (20s slide + 3m20s terminal)", "3:40-7:20", [
-  ["20s", "Set it up from the slide: three steps, and four things to watch. Then switch to the terminal. The lab is already built (sudo src/lab/setup.sh, run before the talk)."],
-  ["40s", "Step 1: sudo src/lab/verify.sh up. Point at the measured RTT on each link - about 21 ms - and the PASS lines. Say: we measure the real RTT; netem settings are not ground truth."],
-  ["100s", "Step 2: sudo .venv/bin/python src/runner/orchestrate.py --scenario S1 --reps 1. While it runs: it applies the blackhole, verifies it is 100% loss with no ICMP errors, captures, runs curl, restores the baseline and verifies again. Read out the one-line summary: IPv4 won, setup time around 222 ms."],
-  ["40s", "Step 3: .venv/bin/python src/analysis/summarise_session.py <session id printed by step 2>, then tcpdump -n -tt -r captures/<run id>.pcap 'tcp[tcpflags] & tcp-syn != 0'. Point at the IPv6 SYN with no reply and the IPv4 SYN about 200 ms later."],
-  ["20s", "Back to the slides. Fallback if anything fails live: the committed example runs in examples/ show the same thing. After the talk: sudo src/lab/teardown.sh, then verify the teardown."],
+  ["20s", "Set it up from the slide: three steps, and four things to watch. Then switch to the terminal. The lab is already built (sudo src/lab/setup.sh, run before the talk), and make demo-check passed on this machine at the venue."],
+  ["60s", "Type make demo. One command, under a minute of machine time; talk over it. Step 1 verifies the lab: point at the measured RTT on each link - about 21 ms - and the PASS. Say: we measure the real RTT; netem settings are not ground truth. Step 2 runs curl once in S1; read the progress lines as they appear: it applies the blackhole, verifies it is 100% loss with no ICMP errors, captures, runs curl, restores the baseline and verifies again."],
+  ["60s", "Step 3 re-reads the capture and checks it against the run record; step 4 opens the connection race timeline in the browser. Point at the IPv6 SYN with no reply, the IPv4 SYN about 200 ms later, the inter-family delay arrow between them, and IPv4 winning."],
+  ["60s", "Back to the terminal for the large numbers: winning family, each family's first SYN, the inter-family attempt delay, TCP setup time (around 222 ms), the oracle and the cost of racing. Say which are packet-level and which are derived. The lab stays up at baseline, so if a judge asks for another cell: make demo SCENARIO=S4 CLIENT=chromium."],
+  ["20s", "Back to the slides. If anything fails live, make demo prints FAIL, puts the lab back to its baseline and verifies it. Fallback: the committed example runs in examples/ show the same thing. After the talk: sudo src/lab/teardown.sh, then verify the teardown."],
 ], "about 201 ms from the first IPv6 SYN to the IPv4 SYN (200.956 ms median in the core).");
 
 // 7. Core results (Impact)

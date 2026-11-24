@@ -853,6 +853,19 @@ Times are from packet captures inside an isolated lab; every scenario's RTT was 
             f"<style>{CSS}</style>{plotly_src}</head><body><main>{body}</main><script>{js}</script></body></html>")
 
 
+def race_page(race: dict, plotly_src: str, title: str, banner: str) -> str:
+    """A page with only the connection race timeline (used by make demo for a single run). banner is shown
+    above the timeline, escaped; the race data is the same shape race.build() returns."""
+    js = (JS.replace("__PALETTE__", json.dumps(PALETTE)).replace("__FIGS__", "{}")
+          + RACE_JS.replace("__RACE__", json.dumps(race, separators=(",", ":")).replace("</", "<\\/"))
+          .replace("__LABELS__", json.dumps(race_labels(race.get("clients", [])))))
+    body = (f"<header><div><h1>{_e(title)}</h1><p class=lede>{_e(banner)}</p></div>"
+            f"<button id=theme type=button>Theme: auto</button></header>" + race_section(race))
+    return (f"<!doctype html><html lang=en-GB><head><meta charset=utf-8>"
+            f"<meta name=viewport content='width=device-width, initial-scale=1'><title>{_e(title)}</title>"
+            f"<style>{CSS}</style>{plotly_src}</head><body><main>{body}</main><script>{js}</script></body></html>")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dataset", default=CORE_DATASET,
