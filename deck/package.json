@@ -1,0 +1,13 @@
+{
+  "name": "happylab-deck",
+  "version": "1.0.0",
+  "description": "Builds the HappyLab presentation deck (pptxgenjs).",
+  "scripts": {
+    "build": "node build_deck.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "pptxgenjs": "4.0.1"
+  },
+  "private": true
+}
