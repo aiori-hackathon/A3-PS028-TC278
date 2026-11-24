@@ -21,7 +21,7 @@ and it quotes the prior work's published values, which are attributed to that pa
 - RFC 8305 is a reference design, not a predictor. This report never says RFC 8305 predicts an
   exact completion time. Its 250 ms Connection Attempt Delay is a reference point, not a pass or fail threshold.
 - The delay scenarios are **mobile-inspired latency conditions**. They are not carrier measurements.
-- The Happy Eyeballs v3 draft is background only. The report makes no conformance claim from undocumented client internals.
+- The Happy Eyeballs v3 draft (pinned at -04; status in section 4.7) is background only. The report makes no conformance claim from undocumented client internals.
 
 **Metric definitions.** These are fixed and are not redefined here.
 - **TCP setup time:** from the run's first SYN, of either family, to the ACK that completes the
@@ -330,7 +330,7 @@ not interpreted.
 - There is no server-side capture, so one-way delays are not measured separately.
 - Client-reported values (curl `-w` output, NetLog) are used only where labelled [Client log].
 
-**L8. X1 (compound stress) was not configured or measured.** PS-028 asks for six scenarios and does
+**L8. X1 (compound stress) was not configured or measured.** [PS-028](../PS-028.pdf) asks for six scenarios and does
 not mention X1. X1 was an optional extra in our own proposal, to run only if time allowed. It was never
 added to `src/config/scenarios.yaml`, and the report gives no figures for it.
 
@@ -490,7 +490,7 @@ Our data do not resolve this, and we assert nothing either way:
     (last revision -02, 2024), named for v6ops. That was replaced by
     `draft-pauly-happy-happyeyeballs-v3`, and in April 2025 the HAPPY working group adopted it as
     `draft-ietf-happy-happyeyeballs-v3`.
-  - **PS-028 condition.** PS-028 asks for v3 to be treated as pinned "unless its publication
+  - **PS-028 condition.** [PS-028](../PS-028.pdf) asks for v3 to be treated as pinned "unless its publication
     status is confirmed at launch". We checked that status on 2026-11-24: v3 is not published as
     an RFC, so the pin stands and v3 remains background only.
 - **[R4]** curl's documented Happy Eyeballs default (200 ms):

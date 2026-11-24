@@ -16,7 +16,7 @@ sweeps in [the sweep findings](findings/latency_and_he_sweeps.md).
 `curl@he<N>` means curl run with `--happy-eyeballs-timeout-ms N`. The orchestrator, `run_matrix.py
 --only`, `check_batch.py`, dataset manifests and `summarise.py` all accept this label.
 
-**What a variant is.** It is a configuration of curl, not a third client. PS-028 asks for "2 client
+**What a variant is.** It is a configuration of curl, not a third client. [PS-028](../PS-028.pdf) asks for "2 client
 implementations or versions", and those are curl and Chromium. The run records keep this clear:
 - `client.name` is always the implementation (`curl`);
 - `client.variant` holds the variant (`he200`);

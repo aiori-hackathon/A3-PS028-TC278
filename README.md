@@ -11,6 +11,7 @@ PS-028.
 **[Demo video](https://youtu.be/DnplR7TfhMs)** ·
 **[Technical report](docs/report.md)** ·
 **[Project proposal (PDF)](A3-PS028-HappyLab-Project-Proposal.pdf)** ·
+[PS-028 problem statement (PDF)](PS-028.pdf) ·
 [Team intro](https://youtu.be/TA8UYlIY-GY) ·
 [Licence: MIT](LICENSE)
 
@@ -319,6 +320,7 @@ sudo src/lab/teardown.sh                  # removes both namespaces and the lab 
 ├── LICENSE                   MIT
 ├── A3-PS028-HappyLab-Project-Proposal.pdf
 ├── Proposed-structure-hackathon.pdf   the organisers' presentation template (not our project)
+├── PS-028.pdf                         the organisers' PS-028 problem statement, as issued (not our project)
 ├── CLAUDE.md                 project rules: metric definitions, wording, lab safety
 ├── docs/
 │   ├── report.md             technical report (methodology, results, limitations)
@@ -358,7 +360,8 @@ sudo src/lab/teardown.sh                  # removes both namespaces and the lab 
   report.
 - **Observed, not documented.** Chromium's ~250 ms and ~301 ms points are observed delays in this
   set-up. We make no claim about Chromium's internal timers, and no claim of conformance to
-  RFC 8305 or the Happy Eyeballs v3 draft.
+  RFC 8305 or the Happy Eyeballs v3 draft (pinned at draft-ietf-happy-happyeyeballs-v3-04; see
+  [Credits and prior work](#credits-and-prior-work)).
 - **Sample size.** 20 runs per cell. We report medians and interquartile ranges, with no
   significance tests.
 - **X1 not run.** The compound-stress scenario was an optional extra in our proposal, not one of the six scenarios PS-028 asks for. It was never configured or measured.
@@ -398,7 +401,7 @@ Team **NetDefenders**, AIORI-3 problem statement **PS-028** (team code A3-PS028-
   and it is still an Internet-Draft of the HAPPY working group, not an RFC. It began as the
   individual draft `draft-pauly-v6ops-happy-eyeballs-v3`, was renamed
   `draft-pauly-happy-happyeyeballs-v3`, and was adopted by the HAPPY working group in April 2025.
-  PS-028 asks for v3 to be treated as pinned "unless its publication status is confirmed at
+  [PS-028](PS-028.pdf) asks for v3 to be treated as pinned "unless its publication status is confirmed at
   launch". We confirmed it is unpublished, so the pin stands.
 - P. Sattler, M. Kirstein, L. Wüstrich, J. Zirngibl and G. Carle, "Lazy Eye Inspection: Capturing
   the State of Happy Eyeballs Implementations", ACM IMC 2025,
