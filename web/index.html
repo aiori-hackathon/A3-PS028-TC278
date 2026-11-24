@@ -682,7 +682,7 @@ section[id^="p-"] { padding-top: 48px }
       <div class="card"><h3>3. First handshake wins</h3><p class="small">Whichever TCP three-way handshake completes first carries the application data. All other in-flight attempts are cancelled. The user never sees the failed path — the penalty is just the fallback delay, not a full timeout.</p></div>
     </div>
 
-    <p class="small" style="max-width:none">RFC 8305 ("Happy Eyeballs Version 2: Better Connectivity Using Concurrency," D. Schinazi and T. Pauly, December 2017) defines this mechanism. The original Happy Eyeballs algorithm was specified in RFC 6555 (2012). Our lab measures how closely real clients — curl and Chromium — follow this design under controlled fault conditions.</p>
+    <p class="small" style="max-width:none">RFC 8305 ("Happy Eyeballs Version 2: Better Connectivity Using Concurrency," D. Schinazi and T. Pauly, December 2017) defines this mechanism. The original Happy Eyeballs algorithm was specified in RFC 6555 (2012). Our lab uses it as a reference design, not a test. We measure when curl and Chromium send each connection attempt, and which family wins, under controlled fault conditions. We make no claim about how closely either client follows the design.</p>
   </div>
 
 </div>
@@ -978,13 +978,12 @@ page.goto(<b>"http://www.hl.test/chromium.html"</b>, wait_until="load", timeout=
             <li>Reads the same 14 sessions' run records directly, using summarise.py's loader, and leaves out any run with a conflict or a failed verify, naming it</li>
             <li>Rewrites only the JavaScript data objects (D, WIN, IFDV, RUNS, CAPS) between the generated-data markers in this static page</li>
             <li>Every inter-family dot on the charts is a <span class="hl">real per-run value</span> with its run ID: no jitter, no synthetic points</li>
-            <li>The repository has 285 automated tests; 20 of them cover export_web.py</li>
+            <li>export_web.py has its own tests in the repository's automated test suite</li>
           </ul>
           <div class="arch-stat-row">
             <div class="arch-stat"><div class="as-v">280</div><div class="as-k">runs total</div></div>
             <div class="arch-stat"><div class="as-v">14</div><div class="as-k">sessions</div></div>
             <div class="arch-stat"><div class="as-v">0</div><div class="as-k">conflicts</div></div>
-            <div class="arch-stat"><div class="as-v">285</div><div class="as-k">tests pass</div></div>
           </div>
         </div>
       </details>
