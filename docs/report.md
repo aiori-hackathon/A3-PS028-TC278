@@ -5,7 +5,9 @@ AIORI-3 PS-028 · team code A3-PS028-TC278 · backend and measurement only (the 
 Draft, 2026-11-01. Every number below comes from the 280-run dataset listed in
 [`dataset.md`](dataset.md), as summarised by `src/analysis/summarise.py`, or from the Chromium
 note in [`findings/chromium_s1_second_v6_syn.md`](findings/chromium_s1_second_v6_syn.md). Nothing
-is estimated or carried over from configuration.
+is estimated or carried over from configuration. The one exception is section 4 (Related work). It
+also cites the extension findings in [`findings/`](findings/), naming the campaign for each number,
+and it quotes the prior work's published values, which are attributed to that paper's authors.
 
 ## Conventions
 
@@ -19,7 +21,7 @@ is estimated or carried over from configuration.
 - RFC 8305 is a reference design, not a predictor. This report never says RFC 8305 predicts an
   exact completion time. Its 250 ms Connection Attempt Delay is a reference point, not a pass or fail threshold.
 - The delay scenarios are **mobile-inspired latency conditions**. They are not carrier measurements.
-- The Happy Eyeballs v3 draft is background only. The report makes no conformance claim from undocumented client internals.
+- The Happy Eyeballs v3 draft (pinned at -04; status in section 4.7) is background only. The report makes no conformance claim from undocumented client internals.
 
 **Metric definitions.** These are fixed and are not redefined here.
 - **TCP setup time:** from the run's first SYN, of either family, to the ACK that completes the
@@ -28,6 +30,9 @@ is estimated or carried over from configuration.
   It is "not observed" when only one family was tried.
 - **Scenario penalty:** the client's median TCP setup time minus its own median in C0.
 - Every run also records the winning family, success or failure, and failed or abandoned attempts.
+
+**Standard terms.** The report also uses the terms Connection Attempt Delay (CAD) and Resolution
+Delay (RD) from RFC 8305. Section 4.2 maps them to the metrics above, which stay as defined.
 
 ## 1. Methodology
 
@@ -325,20 +330,176 @@ not interpreted.
 - There is no server-side capture, so one-way delays are not measured separately.
 - Client-reported values (curl `-w` output, NetLog) are used only where labelled [Client log].
 
-**L8. X1 (compound stress) was not configured or measured.** PS-028 asks for six scenarios and does
+**L8. X1 (compound stress) was not configured or measured.** [PS-028](../PS-028.pdf) asks for six scenarios and does
 not mention X1. X1 was an optional extra in our own proposal, to run only if time allowed. It was never
 added to `src/config/scenarios.yaml`, and the report gives no figures for it.
 
 **L9. RFC 8305 is a reference only.** The data shows when each client opened each attempt. It does not
-test conformance to RFC 8305 or the Happy Eyeballs v3 draft, and none is claimed.
+test conformance to RFC 8305 or the Happy Eyeballs v3 draft, and none is claimed. The v3 draft is
+pinned at revision -04. Its status at the time of writing is in the references (section 4.7).
 
 **L10. Cross-kernel comparison of curl S1 ([`variant-control`](datasets/variant-control.md), `src/analysis/variant_control.py`).**
 Cross-kernel comparison: curl S1 (variant-control) differed from curl S1 (core dataset) by -0.618 ms in median TCP setup time (221.603 ms, 95% CI 221.214-222.002, n=20, against 222.221 ms, 95% CI 222.099-222.435, n=20; on kernel 7.0.0-43-generic against 7.0.0-38-generic). The intervals do not overlap. The cause is not established by these data. In context (interpretation): the difference is 0.28% of the core median and about 326 times smaller than curl's S1 scenario penalty in the core dataset (201.524 ms), so it does not affect conclusions that rest on differences of that size; it is, however, larger than the sub-millisecond quantities in the core results (S4–S6 penalties of 0.001–0.115 ms, costs of racing of −0.30 to −0.48 ms, median CI widths of 0.137–0.370 ms), whose sensitivity to the kernel change these data cannot rule out.
 
-## 4. Reproducing the figures
+## 4. Related work
+
+### 4.1 Prior work: Sattler et al.
+
+The closest prior work is Sattler et al., "Lazy Eye Inspection: Capturing the State of Happy
+Eyeballs Implementations" [R1].
+
+**Their method, as they describe it.**
+- A local testbed of two directly connected hosts, with tc-netem delaying IPv6 and DNS.
+- The Connection Attempt Delay is inferred from packet captures.
+- A public web-based tester as well as the testbed.
+- Clients: Firefox, Chrome, Edge, Chromium, curl, wget and Safari, plus recursive resolvers.
+- At least 20 repetitions per client, with delays stepped from 0 to 400 ms in 5 ms increments.
+
+**Their published findings, as they state them.**
+- curl's Connection Attempt Delay is 200 ms. Chromium-based browsers use 300 ms.
+- Neither client implements the Resolution Delay.
+- Chromium waits for the A record and relies on the resolver's timeout. A HEv3 feature flag added
+  in April 2024 removes that behaviour.
+- Both clients try only one IPv6 and one IPv4 address during fallback.
+
+**Their claims stay theirs.** Wherever a statement says what a client implements, for example that it does
+not implement the Resolution Delay, it is the authors' conclusion and is attributed to them here.
+This report does not adopt claims about client internals. Our own S6 wording (section 2.5) stays at
+what the packets show.
+
+### 4.2 Standard terms: CAD and RD
+
+RFC 8305 [R2] defines the two delays that the field's vocabulary is built on:
+- **Connection Attempt Delay (CAD), section 5:** the time a client waits after starting one
+  connection attempt before starting the next. The RFC recommends 250 ms.
+- **Resolution Delay (RD), section 3:** the time a client waits for the AAAA answer when the A answer
+  arrives first, before starting with IPv4. The RFC recommends 50 ms.
+
+Our fixed metrics stay as defined in Conventions. They map to these terms as follows. Each of our
+quantities is a measured interval between packets. It is not a reading of a client's configured timer.
+
+| RFC 8305 term | Our measurement | Evidence | Section |
+|---|---|---|---|
+| CAD, when the next attempt uses the other family | Inter-family attempt delay: the second family's first SYN minus the first family's first SYN | Packet-level (pcap) | 2.1, 2.2 |
+| CAD, when the next attempt uses the same family | Not one of our metrics. Reported as the gap between Chromium's two IPv6 SYNs | Packet-level (pcap) | 2.2, 4.4 |
+| RD | Not one of our metrics. In S6 we report the time from the first A answer to the first SYN, and that SYN's family. DNS time is reported separately | Packet-level (pcap) | 2.5 |
+| (no RFC term) | T: the run's first SYN to the first SYN-ACK of its IPv4 attempt. It is the inter-family attempt delay plus the IPv4 handshake | Packet-level (pcap); the decomposition is derived | 4.3 |
+
+### 4.3 Independent reproduction of the published delays
+
+Our measured crossovers **reproduce** the values Sattler et al. published: 200 ms for curl and
+300 ms for Chromium. This is an independent reproduction in a separate lab with our own client
+builds (curl 8.5.0, Chromium 156.0.8078.4). It is not a discovery: they published the values first.
+
+T is given to two decimal places, with the campaign it was measured in, as in the findings docs.
+
+| Client | Published CAD [R1] | Inter-family attempt delay, core S1 / S2 | T, jitter-loss | T, latency-sweep | Outcome flip, latency-sweep (IPv6 RTT) |
+|---|---|---|---|---|---|
+| curl | 200 ms | 200.956 / 200.956 ms | 221.96 ms (n=40) | 221.84 ms (n=70) | 221–226 ms |
+| Chromium | 300 ms | 301.067 / 301.120 ms | 322.47 ms (n=17) | 321.99 ms (n=50) | 321–326 ms |
+
+- **Evidence.** All the times are packet-level medians. The outcome flip comes from which family
+  won and uses no packet times. Its edges are verify-ping RTTs and are good to about 1 ms. Sources:
+  sections 2.1–2.2,
+  [`syn_retransmission_partial_loss.md`](findings/syn_retransmission_partial_loss.md) and
+  [`latency_and_he_sweeps.md`](findings/latency_and_he_sweeps.md).
+- **T against the published values.** T is the attempt delay plus the IPv4 handshake, which takes
+  about 21 ms in this lab [Derived]. So 221.96 ms corresponds to curl's 200 ms and 322.47 ms to
+  Chromium's 300 ms.
+
+**The he-sweep is the check (curl only).** We ran curl with `--happy-eyeballs-timeout-ms` set to eight
+values from 50 to 500 ms, with IPv6 blackholed (he-sweep, 10 runs per cell).
+- **Prediction.** It was set before the run: T ≈ configured timeout + IPv4 handshake.
+- **Result.** T minus that prediction was +0.69 to +1.99 ms in all eight variants [Derived from
+  packet-level medians]. So T minus the handshake tracks the configured timeout in every variant,
+  slightly late each time.
+- **A step we don't explain.** The residual steps up between 250 and 300 ms, and these data offer
+  no explanation for it.
+- **Control.** curl@he200 sets curl's documented default [R4]. It sent its IPv4 SYN at 200.833 ms,
+  against plain curl's 200.832 ms.
+- **Chromium.** It takes no such option, so it has no equivalent check. Its 300 ms is an observed
+  delay only (L3).
+
+### 4.4 A refinement: one IPv6 address, two connection attempts
+
+Sattler et al. report that both clients try only one IPv6 and one IPv4 address during fallback. Our
+captures add a detail about attempts, not addresses.
+
+[Packet-level (pcap)]
+- **Two IPv6 SYNs.** In 40 of 40 Chromium S1 and S2 runs, the capture shows two IPv6 SYNs to the
+  same address, 2001:db8:28:6::2, from different source ports.
+- **Timing.** The second SYN follows the first by a median 250.625 ms (S1) and 250.69 ms (S2),
+  about 250.6 ms.
+- **No retransmissions.** No socket sent a second SYN: there were zero same-socket SYN
+  retransmissions on any attempt in the dataset.
+- **Then IPv4.** One IPv4 SYN follows at about 301 ms.
+- **curl** made one attempt per family.
+
+So Chromium used one IPv6 address and made two connection attempts to it. This refines the
+published observation and does not contradict it.
+- **Addresses.** The lab's DNS returns one AAAA and one A record, so our data cannot show how many
+  addresses either client would try if offered more.
+- **Wording.** This is packet-level only. It says nothing about what Chromium implements or
+  intends (section 2.2 gives the client-log view).
+
+The 250.6 ms interval sits near the 250 ms default that RFC 8305 section 5 recommends for the
+Connection Attempt Delay.
+
+### 4.5 What this work adds
+
+| Addition | What it shows | Source |
+|---|---|---|
+| Cost of racing against an oracle baseline. Not measured in that work | TCP setup time minus the winning family's pre-run ping RTT, per run [Derived (pcap − lab RTT)]. Where IPv4 won in the latency sweep, the cell medians were 200.76–201.48 ms (curl) and 300.43–302.17 ms (Chromium). Where IPv6 won, they were within ±0.9 ms of zero | [`latency_and_he_sweeps.md`](findings/latency_and_he_sweeps.md) |
+| Partial loss and jitter on IPv6, where outcomes become probabilistic | Win fractions with 95% Wilson intervals over 558 runs. A model, P(IPv6 wins) = Φ((T − μ)/σ), has inputs measured independently of the outcomes it predicts. T comes from the no-jitter twin captures, and μ and σ from the verify pings. Its values match all four jitter cells within their Wilson intervals. The model was written up together with the jitter results, so this is not a prediction registered before they existed. Its T values were fixed before the latency sweep ran, and the sweep confirmed them: both fall inside the outcome-flip brackets | [`syn_retransmission_partial_loss.md`](findings/syn_retransmission_partial_loss.md), [`latency_and_he_sweeps.md`](findings/latency_and_he_sweeps.md) |
+| curl's timeout varied across eight values, rather than one default inferred | T tracks timeout + IPv4 handshake from 50 to 500 ms (section 4.3) | [`latency_and_he_sweeps.md`](findings/latency_and_he_sweeps.md) |
+| A compound control, `Gv6c30`: IPv4 blackholed plus 30% loss each way on IPv6. It is a generated extension, not X1 | Kernel SYN retransmissions become visible [Packet-level (pcap)]. The gaps between same-socket SYNs were about 1 s up to the fifth SYN, with no doubling. [Interpretation] This matches `net.ipv4.tcp_syn_linear_timeouts` = 4 in hl-client | [`syn_retransmission_partial_loss.md`](findings/syn_retransmission_partial_loss.md) |
+| Certified datasets | Every analysis reads only the sessions a manifest lists. Each record carries its pcap's SHA-256. `summarise.py` refuses a missing, duplicated or undeclared cell, a cross-check conflict or a failed verify, and nothing is skipped or filled in | [`datasets/README.md`](datasets/README.md), [`dataset.md`](dataset.md) |
+
+### 4.6 Open question: Chromium in S6
+
+S6 delays the AAAA answer by 300 ms, and the A answer arrives about 1 ms in.
+- **What the packets show.** Chromium 156.0.8078.4 sent no IPv4 SYN at any point in S6 (0/20 runs).
+  Its first SYN was IPv6, after the AAAA answer (section 2.5).
+- **What the prior work describes.** Sattler et al. describe a HEv3 feature flag, added in
+  April 2024, that removes Chromium's wait for the A record.
+- **The question.** Is the behaviour behind that flag now the default in the version we ran?
+
+Our data do not resolve this, and we assert nothing either way:
+- S6 delays the AAAA answer, not the A answer.
+- We set no feature flag for this behaviour, and our records do not show its state.
+- We ran a single Chromium version.
+
+### 4.7 References
+
+- **[R1]** P. Sattler, M. Kirstein, L. Wüstrich, J. Zirngibl and G. Carle, "Lazy Eye Inspection:
+  Capturing the State of Happy Eyeballs Implementations", ACM IMC 2025,
+  doi:[10.1145/3730567.3732925](https://doi.org/10.1145/3730567.3732925). Preprint
+  [arXiv:2412.00263](https://arxiv.org/abs/2412.00263). It is also listed by TUM as
+  `sattler2025happyeyeballs`.
+- **[R2]** D. Schinazi and T. Pauly, "Happy Eyeballs Version 2: Better Connectivity Using
+  Concurrency", [RFC 8305](https://www.rfc-editor.org/rfc/rfc8305), IETF, December 2017.
+- **[R3]** T. Pauly, D. Schinazi, N. Jaju and K. Ishibashi, "Happy Eyeballs Version 3: Better
+  Connectivity Using Concurrency",
+  [draft-ietf-happy-happyeyeballs-v3-04](https://datatracker.ietf.org/doc/draft-ietf-happy-happyeyeballs-v3/04/),
+  2026-07-01. It is work in progress and background only.
+  - **Pin.** We pinned revision -04 and keep it.
+  - **Status, checked on IETF Datatracker on 2026-11-24.** The current revision is -05, dated
+    2026-11-02. It is still an Internet-Draft, a working-group document of the HAPPY working
+    group, and is not an RFC.
+  - **History.** The document began as the individual draft `draft-pauly-v6ops-happy-eyeballs-v3`
+    (last revision -02, 2024), named for v6ops. That was replaced by
+    `draft-pauly-happy-happyeyeballs-v3`, and in April 2025 the HAPPY working group adopted it as
+    `draft-ietf-happy-happyeyeballs-v3`.
+  - **PS-028 condition.** [PS-028](../PS-028.pdf) asks for v3 to be treated as pinned "unless its publication
+    status is confirmed at launch". We checked that status on 2026-11-24: v3 is not published as
+    an RFC, so the pin stands and v3 remains background only.
+- **[R4]** curl's documented Happy Eyeballs default (200 ms):
+  [`--happy-eyeballs-timeout-ms`](https://curl.se/docs/manpage.html#--happy-eyeballs-timeout-ms).
+
+## 5. Reproducing the figures
 
 ```
-scripts/test.sh                                   # 322 tests, including parser and metric checks
+scripts/test.sh                                   # the full test suite, including parser and metric checks
 .venv/bin/python src/analysis/summarise.py        # tables above + interpretation, writes data/generated/summary/
 .venv/bin/python src/analysis/dashboard.py        # the same data as an offline Plotly dashboard
 ```

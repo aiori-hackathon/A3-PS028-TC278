@@ -185,4 +185,5 @@ disagree, the record keeps both in `cross_checks.conflicts`; neither is overwrit
 
 Wording that applies to anything built on these records: RFC 8305's 250 ms is a reference, not a
 threshold, and the records support no claim of conformance to RFC 8305 or the Happy Eyeballs v3
-draft. The latency scenarios are mobile-inspired latency conditions, not carrier measurements.
+draft (pinned at draft-ietf-happy-happyeyeballs-v3-04; its status is in the
+[report's references](report.md#47-references)). The latency scenarios are mobile-inspired latency conditions, not carrier measurements.

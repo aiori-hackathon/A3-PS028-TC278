@@ -8,7 +8,8 @@ Hello all,
 We are a small team that built a lab to measure how two existing clients behave under controlled
 IPv4/IPv6 failures and delays. We are sharing the data in case it is useful to the working group.
 This message describes what we measured. It is not an evaluation of either client against RFC 8305
-or draft-ietf-happy-happyeyeballs-v3.
+or draft-ietf-happy-happyeyeballs-v3. We pinned revision -04 as background and are aware that -05
+(2026-11-02) is current.
 
 **Setup**
 
@@ -50,7 +51,7 @@ apply only to these versions, in this lab, with 20 runs per cell.
 - **Data:** the full dataset, with per-run captures and records, and the lab scripts. The scripts and
   two example runs are at https://github.com/aiori-hackathon/A3-PS028-TC278.
 - **More runs:** we can run further conditions if they would help the group.
-  Examples are other DNS timings, the HTTPS/SVCB cases in the v3 draft, or other clients and versions.
+  Examples are other DNS timings, the HTTPS/SVCB cases in the v3 draft (-04 as pinned), or other clients and versions.
   Suggestions for what would be most useful are welcome.
 
 Corrections to the method are welcome too.
