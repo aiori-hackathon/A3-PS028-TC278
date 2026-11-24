@@ -32,8 +32,8 @@ LibreOffice renders with the metric-identical Liberation Sans, so the PDF keeps 
   - T appears rounded to one decimal;
   - a slide lacks speaker notes with a time budget;
   - the PDF is missing.
-- **Totals:** the 1,328-run total is recomputed from the dataset docs. The 670 tests figure is
-  the `scripts/test.sh` count on 2026-11-24, and the slide gives that date.
+- **Totals:** the 1,328-run total is recomputed from the dataset docs. The 704 tests figure is
+  the `scripts/test.sh` count on 2026-11-25, and the slide gives that date.
 
 ## Live demo (slide 6)
 

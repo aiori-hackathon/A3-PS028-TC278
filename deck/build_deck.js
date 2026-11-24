@@ -162,7 +162,7 @@ reqs.forEach(([a, b], i) => {
   text(s, a, { x: 1.25, y, w: 4.0, h: 0.55, bold: true, valign: "middle" });
   text(s, b, { x: 5.4, y, w: 7.4, h: 0.55, fontSize: 22, valign: "middle" });
 });
-const stats = [["1,328", "runs, all certified"], ["5", "certified datasets"], ["670", "tests, 24 Nov 2026"]];
+const stats = [["1,328", "runs, all certified"], ["5", "certified datasets"], ["704", "tests, 25 Nov 2026"]];
 stats.forEach(([v, k], i) => {
   const x = 0.6 + i * 4.1;
   card(s, x, 5.5, 3.85, 1.3);
@@ -252,9 +252,9 @@ notes(s, "40s", "3:00-3:40", [
 s = pres.addSlide({ masterName: "CONTENT", sectionTitle: S });
 title(s, "Live demo: one IPv6-blackhole run, start to finish");
 const steps = [
-  ["1", "Verify the lab", "real RTT on both links; PASS per check"],
+  ["1", "Verify the lab", "real RTT on both links; PASS or FAIL"],
   ["2", "Run curl once in S1", "IPv6 blackholed; capture running"],
-  ["3", "Read the run back", "per-run table and the SYN times"],
+  ["3", "See the race", "race timeline, then large numbers"],
 ];
 steps.forEach(([k, a, b], i) => {
   const y = 1.5 + i * 1.25;
