@@ -20,6 +20,8 @@ htmlcov/
 
 # Generated experiment data
 data/generated/
+# Live demo runs (make demo): never part of a dataset, never committed
+data/demo/
 
 # Packet captures and their logs: never committed (small reviewer examples live in examples/)
 captures/

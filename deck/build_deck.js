@@ -162,7 +162,7 @@ reqs.forEach(([a, b], i) => {
   text(s, a, { x: 1.25, y, w: 4.0, h: 0.55, bold: true, valign: "middle" });
   text(s, b, { x: 5.4, y, w: 7.4, h: 0.55, fontSize: 22, valign: "middle" });
 });
-const stats = [["1,328", "runs, all certified"], ["5", "certified datasets"], ["670", "tests, 24 Nov 2026"]];
+const stats = [["1,328", "runs, all certified"], ["5", "certified datasets"], ["704", "tests, 25 Nov 2026"]];
 stats.forEach(([v, k], i) => {
   const x = 0.6 + i * 4.1;
   card(s, x, 5.5, 3.85, 1.3);
@@ -252,9 +252,9 @@ notes(s, "40s", "3:00-3:40", [
 s = pres.addSlide({ masterName: "CONTENT", sectionTitle: S });
 title(s, "Live demo: one IPv6-blackhole run, start to finish");
 const steps = [
-  ["1", "Verify the lab", "real RTT on both links; PASS per check"],
+  ["1", "Verify the lab", "real RTT on both links; PASS or FAIL"],
   ["2", "Run curl once in S1", "IPv6 blackholed; capture running"],
-  ["3", "Read the run back", "per-run table and the SYN times"],
+  ["3", "See the race", "race timeline, then large numbers"],
 ];
 steps.forEach(([k, a, b], i) => {
   const y = 1.5 + i * 1.25;
@@ -274,11 +274,11 @@ text(s, [
 text(s, "A live run is a demonstration. It is not part of any dataset, and its numbers will differ slightly from the report.",
      { x: 0.6, y: 5.35, w: 12.15, h: 1.0, fontSize: 22, color: MUTED });
 notes(s, "3m40s (20s slide + 3m20s terminal)", "3:40-7:20", [
-  ["20s", "Set it up from the slide: three steps, and four things to watch. Then switch to the terminal. The lab is already built (sudo src/lab/setup.sh, run before the talk)."],
-  ["40s", "Step 1: sudo src/lab/verify.sh up. Point at the measured RTT on each link - about 21 ms - and the PASS lines. Say: we measure the real RTT; netem settings are not ground truth."],
-  ["100s", "Step 2: sudo .venv/bin/python src/runner/orchestrate.py --scenario S1 --reps 1. While it runs: it applies the blackhole, verifies it is 100% loss with no ICMP errors, captures, runs curl, restores the baseline and verifies again. Read out the one-line summary: IPv4 won, setup time around 222 ms."],
-  ["40s", "Step 3: .venv/bin/python src/analysis/summarise_session.py <session id printed by step 2>, then tcpdump -n -tt -r captures/<run id>.pcap 'tcp[tcpflags] & tcp-syn != 0'. Point at the IPv6 SYN with no reply and the IPv4 SYN about 200 ms later."],
-  ["20s", "Back to the slides. Fallback if anything fails live: the committed example runs in examples/ show the same thing. After the talk: sudo src/lab/teardown.sh, then verify the teardown."],
+  ["20s", "Set it up from the slide: three steps, and four things to watch. Then switch to the terminal. The lab is already built (sudo src/lab/setup.sh, run before the talk), and make demo-check passed on this machine at the venue."],
+  ["60s", "Type make demo. One command, under a minute of machine time; talk over it. Step 1 verifies the lab: point at the measured RTT on each link - about 21 ms - and the PASS. Say: we measure the real RTT; netem settings are not ground truth. Step 2 runs curl once in S1; read the progress lines as they appear: it applies the blackhole, verifies it is 100% loss with no ICMP errors, captures, runs curl, restores the baseline and verifies again."],
+  ["60s", "Step 3 re-reads the capture and checks it against the run record; step 4 opens the connection race timeline in the browser. Point at the IPv6 SYN with no reply, the IPv4 SYN about 200 ms later, the inter-family delay arrow between them, and IPv4 winning."],
+  ["60s", "Back to the terminal for the large numbers: winning family, each family's first SYN, the inter-family attempt delay, TCP setup time (around 222 ms), the oracle and the cost of racing. Say which are packet-level and which are derived. The lab stays up at baseline, so if a judge asks for another cell: make demo SCENARIO=S4 CLIENT=chromium."],
+  ["20s", "Back to the slides. If anything fails live, make demo prints FAIL, puts the lab back to its baseline and verifies it. Fallback: the committed example runs in examples/ show the same thing. After the talk: sudo src/lab/teardown.sh, then verify the teardown."],
 ], "about 201 ms from the first IPv6 SYN to the IPv4 SYN (200.956 ms median in the core).");
 
 // 7. Core results (Impact)
