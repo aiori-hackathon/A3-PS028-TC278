@@ -69,5 +69,5 @@
   "sattler_curl":       {"text": "curl's Connection Attempt Delay is 200 ms", "src": "docs/report.md"},
   "sattler_chr":        {"text": "Chromium-based browsers use 300 ms", "src": "docs/report.md"},
 
-  "_scale": "1,328 runs = core 280 + variant-control 40 (2 sessions x 20) + jitter-loss 558 + latency-sweep 180 + he-sweep 270; recomputed by the test. 704 tests is the scripts/test.sh count on 2026-11-25 and is dated on the slide."
+  "_scale": "1,328 runs = core 280 + variant-control 40 (2 sessions x 20) + jitter-loss 558 + latency-sweep 180 + he-sweep 270; recomputed by the test. 709 tests is the scripts/test.sh count on 2026-11-25 and is dated on the slide."
 }
