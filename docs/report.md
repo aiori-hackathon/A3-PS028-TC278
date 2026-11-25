@@ -315,13 +315,14 @@ versions, headed mode or default feature settings may behave differently.
 - curl ran with its default Happy Eyeballs timeout.
 
 **L5. The conditions are simplified.** The delay scenarios are mobile-inspired latency conditions on veth
-links, not carrier measurements:
+links, not carrier measurements. In the core dataset (the jitter-loss extension adds IPv6 jitter, partial
+loss and one compound control; see [its findings](findings/syn_retransmission_partial_loss.md)):
 - fixed symmetric delay with no jitter
 - no partial loss: loss is either 0% or 100%
 - one family impaired at a time
 - DNS on an unimpaired separate link, with only the AAAA answer delayed in S6
 
-**L6. Sample size.** There are 20 runs per client and scenario. Medians and interquartile ranges are reported.
+**L6. Sample size.** There are 20 runs per client and scenario in the core dataset (5 to 50 per cell in the extension campaigns). Medians and interquartile ranges are reported.
 No significance tests were run, and sub-millisecond differences (for example the S4/S5 penalties) are
 not interpreted.
 
