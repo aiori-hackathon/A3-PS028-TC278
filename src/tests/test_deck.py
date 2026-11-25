@@ -23,7 +23,8 @@ def _numbers() -> dict[str, dict]:
 
 
 def _figure_paths() -> list[str]:
-    return sorted(set(re.findall(r"docs/figures/[\w./-]+", BUILD.read_text(encoding="utf-8"))))
+    block = re.search(r"const FIGURES = \{(.*?)\};", BUILD.read_text(encoding="utf-8"), re.S).group(1)
+    return sorted(set(re.findall(r'"(docs/figures/[\w./-]+\.png)"', block)))
 
 
 def test_every_figure_the_deck_references_exists():
@@ -97,7 +98,8 @@ def test_every_slide_has_speaker_notes_with_a_time_budget():
     with zipfile.ZipFile(PPTX) as z:
         slides = [n for n in z.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", n)]
         notes = [z.read(n).decode("utf-8") for n in z.namelist() if re.match(r"ppt/notesSlides/notesSlide\d+\.xml$", n)]
-    assert len(notes) == len(slides) == 14
+    total = int(re.search(r"const TOTAL = (\d+);", BUILD.read_text(encoding="utf-8")).group(1))
+    assert len(notes) == len(slides) == total == 16   # 14 talk slides + References + Thank You
     assert all("TIME: " in x and "NUMBER NOT TO FORGET" in x for x in notes)
 
 
@@ -132,3 +134,49 @@ def test_demo_slide_beats_fill_its_three_minutes_forty():
 def test_committed_pptx_carries_the_make_demo_notes():
     text = _pptx_text()
     assert "make demo SCENARIO=S4 CLIENT=chromium" in text and "summarise_session.py" not in text
+
+
+def test_clock_times_run_on_without_gaps():
+    clocks = re.findall(r'^notes\(s, "[^"]*", "(\d+):(\d\d)-(\d+):(\d\d)"', BUILD.read_text(encoding="utf-8"), re.MULTILINE)
+    spans = [(int(a) * 60 + int(b), int(c) * 60 + int(d)) for a, b, c, d in clocks]
+    assert len(spans) == 16 and spans[0][0] == 0
+    for (_, end), (start, _) in zip(spans, spans[1:]):
+        assert start == end, f"clock gap or overlap at {start // 60}:{start % 60:02d}"
+
+
+def test_test_count_on_slide_3_matches_its_notes():
+    text = BUILD.read_text(encoding="utf-8")
+    block = text[text.index("// 3. "):text.index("// 4. ")]
+    count = re.search(r'\["(\d[\d,]*)", "tests, ', block).group(1)
+    assert f"and {count} automated tests" in block, "slide 3 shows one test count and its notes say another"
+
+
+def test_prior_work_citation_number_matches_the_references_slide():
+    text = BUILD.read_text(encoding="utf-8")
+    refs = re.findall(r'^  "(.+)",$', text[text.index("const refs = ["):text.index("];", text.index("const refs = ["))],
+                      re.MULTILINE)
+    k = next(i for i, r in enumerate(refs, 1) if r.startswith("P. Sattler"))
+    block = text[text.index("// 13. "):text.index("// 14. ")]
+    assert f"Published CAD [{k}]" in block and f'"[{k}] P. Sattler' in block
+
+
+@pytest.mark.skipif(not PPTX.exists(), reason="deck not built")
+def test_title_slide_logo_is_the_templates_file_unchanged():
+    logo = DECK / "assets" / "aiori_logo.png"
+    with zipfile.ZipFile(PPTX) as z:
+        media = {hashlib.sha256(z.read(n)).hexdigest() for n in z.namelist() if n.startswith("ppt/media/")}
+    assert hashlib.sha256(logo.read_bytes()).hexdigest() in media
+    assert "Proposed-structure-hackathon.pdf" in (DECK / "assets" / "README.md").read_text(encoding="utf-8")
+
+
+def test_slide_figures_are_placed_at_the_size_they_were_drawn_for():
+    # slide_figures.py draws each chart at its size on the slide (1 px = 1 pt), so its type sizes are the
+    # sizes the audience sees. That only holds while the deck places each figure at exactly that size.
+    from analysis.slide_figures import SIZES
+    text = BUILD.read_text(encoding="utf-8")
+    keys = dict(re.findall(r'(\w+): "docs/figures/slides/(\w+)\.png"', re.search(r"const FIGURES = \{(.*?)\};", text, re.S).group(1)))
+    placed = {k: (float(w), float(h)) for k, w, h in re.findall(r"(\w+): \[([\d.]+), ([\d.]+)\]",
+                                                                re.search(r"const FIG_SIZE = \{(.*?)\};", text).group(1))}
+    assert keys and set(keys) == set(placed)
+    for k, name in keys.items():
+        assert placed[k] == SIZES[name], f"{name}: placed at {placed[k]} in, drawn for {SIZES[name]} in"
