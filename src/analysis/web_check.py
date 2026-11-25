@@ -12,9 +12,12 @@ It fails when any of these diverge:
      each extension dataset's run count and the 1,328-run total equal the deck's.
   2. Every other number. Each number in the page's own text (every section except the Playground,
      whose figures are model settings, and outside scripts, styles and drawings) and in the generated
-     Extensions block appears verbatim in the report, a findings doc, a dataset manifest,
-     examples/README.md, README.md or deck_numbers.json (or is a listed citation, ALLOWED_NUMBERS;
-     RFC numbers are skipped). Only numbers with a decimal point or three or more
+     Extensions block appears verbatim in docs/report.md or deck/deck_numbers.json, or in a doc that
+     docs/report.md itself links as its source (its findings docs and dataset manifests; the list is
+     read from the report, so it follows the report). The one other source is a single stored run:
+     a number that is a value in the generated REPLAY block, which export_web reads from the committed
+     examples/ records after checking each capture's SHA-256. README.md is not a source. RFC numbers
+     are names, not values, and are skipped. Only numbers with a decimal point or three or more
      digits are checked: small counts such as "20 runs" match almost anywhere.
   3. Evidence tags. The Extensions block carries the dashboard's four tags verbatim, and every
      data-tag on the page names one of them.
@@ -68,10 +71,12 @@ BANNED = (
     (r"\bimplement(s|ed|ation|ations)?\b|\btimer value|\binternal timer", "no claims about client internals"),
     (r"RFC 8305 predicts|\bpredicted by RFC", "RFC 8305 is a reference, not a predictor"),
     (r"\b(behavior|color|colors|analyze|analyzed|center|favor|optimize)\b", "British spelling"),
+    # Not measured here. The kernel docs give about 131 s for tcp_syn_retries=6 with
+    # tcp_syn_linear_timeouts=4; no run reached it, so the page says "many seconds".
+    (r"tens of seconds|\b1[23]\d\s*(?:s|sec|seconds)\b|~\s*1[23]\d\b", "connect timeout: say \"many seconds\""),
+    (r"\beliminat\w*|\bprove[sn]?\b|removes that wait", "Happy Eyeballs bounds the wait; the page shows packets, it does not prove"),
 )
 NUM = re.compile(r"(?<![\w.,])[−+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?")
-# Numbers that are citations, not measurements, and so are in none of the docs. Each says why.
-ALLOWED_NUMBERS = {"2012": "the year RFC 6555 was published (Overview, a citation)"}
 
 
 # --- reading the page ----------------------------------------------------------------------
@@ -134,11 +139,35 @@ def strings(x) -> list[str]:
     return []
 
 
+def number_sources(repo: Path = REPO) -> list[Path]:
+    """docs/report.md, deck/deck_numbers.json and the docs the report links as its sources."""
+    report = repo / "docs" / "report.md"
+    linked = sorted({(report.parent / m).resolve() for m in
+                     re.findall(r"\]\(([\w./-]+\.md)(?:#[^)]*)?\)", report.read_text(encoding="utf-8"))})
+    return [report, repo / "deck" / "deck_numbers.json", *[p for p in linked if p.is_file()]]
+
+
 def corpus(repo: Path = REPO) -> str:
-    docs = [repo / "README.md", repo / "docs" / "report.md", repo / "docs" / "dataset.md", repo / "docs" / "client_variants.md",
-            repo / "examples" / "README.md", repo / "deck" / "deck_numbers.json",
-            *sorted((repo / "docs" / "findings").glob("*.md")), *sorted((repo / "docs" / "datasets").glob("*.md"))]
-    return "\n".join(p.read_text(encoding="utf-8") for p in docs)
+    return "\n".join(p.read_text(encoding="utf-8") for p in number_sources(repo))
+
+
+def replay_numbers(rep: list) -> set[str]:
+    """Every number in the stored example runs, as the page could print it (3 decimals as stored)."""
+    out: set[str] = set()
+
+    def walk(x):
+        if isinstance(x, bool) or x is None:
+            return
+        if isinstance(x, (int, float)):
+            out.update({str(x), f"{x:.3f}"})
+        elif isinstance(x, str):
+            out.update(checked_numbers(x))
+        elif isinstance(x, dict):
+            [walk(v) for v in x.values()]
+        elif isinstance(x, list):
+            [walk(v) for v in x]
+    walk(rep)
+    return out
 
 
 def checked_numbers(text: str) -> list[str]:
@@ -191,11 +220,12 @@ def check_page(text: str, repo: Path = REPO) -> list[str]:
 
     # 2. every other number
     known = corpus(repo).replace("−", "-")
+    runs = replay_numbers(rep)
     seen = page_text(text) + "\n" + "\n".join(strings({k: v for k, v in ext.items() if k != "tags"}))
     for tok in sorted(set(checked_numbers(seen))):
-        if tok.replace("−", "-") not in known and tok not in ALLOWED_NUMBERS:
-            problems.append(f"number {tok} on the page appears in none of the report, findings, manifests, "
-                            "examples/README.md or deck_numbers.json")
+        if tok.replace("−", "-") not in known and tok not in runs:
+            problems.append(f"number {tok} on the page appears in neither docs/report.md (with the docs it links) "
+                            "nor deck_numbers.json, and is not a value of a stored example run")
 
     # 3. evidence tags
     if ext["tags"] != TAG_LABEL:
@@ -214,8 +244,15 @@ def check_page(text: str, repo: Path = REPO) -> list[str]:
     for phrase, why in REQUIRED:
         if phrase not in ext_text:
             problems.append(f"the Extensions page must say {phrase!r} ({why})")
+    # every page but the Playground's model, and the Playground's own wording in its script
+    whole = " ".join(page_text(re.sub(r"<cite>.*?</cite>", " ", text, flags=re.DOTALL)).split())
+    pg_js = text.split("/* ===================== playground", 1)[-1]
+    pg_script = " ".join(a or b for a, b in re.findall(r'"([^"]*)"|\'([^\']*)\'', pg_js))
     for pat, why in BANNED:
-        for where, t in (("Extensions page", ext_claims_text), ("claims table", claims), ("replays", " ".join(strings(rep)))):
+        for where, t in (("page", whole), ("Playground text", pg_script),
+                         ("Extensions page", ext_claims_text), ("claims table", claims), ("replays", " ".join(strings(rep)))):
+            if where == "Playground text" and why == "British spelling":
+                continue   # script strings hold CSS and API names (color:, behavior:); spelling is checked on visible text
             for m in re.finditer(pat, t, re.IGNORECASE):
                 problems.append(f"{where}: {m.group(0)!r} ({why}): …{t[max(0, m.start() - 50):m.end() + 50]}…")
 

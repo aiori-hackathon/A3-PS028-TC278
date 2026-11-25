@@ -684,7 +684,7 @@ details.card summary { cursor: pointer; font-weight: 600 }
     <div class="sectitle">
       <div class="eyebrow">The problem</div>
       <h2>How long does a browser wait on a broken IPv6 path?</h2>
-      <p class="lead">As IPv6 deployment grows, dual-stack hosts must connect over both address families. When one path is broken — a black-holed route, unreachable next-hop, or slow DNS — a naive client that tries only one address family forces the user to wait out a full TCP connect timeout — on Linux, around 130 seconds with default SYN retries. Happy Eyeballs (RFC 8305) removes that wait by racing both families and taking whichever completes first.</p>
+      <p class="lead">As IPv6 deployment grows, dual-stack hosts must connect over both address families. When one path is broken — a black-holed route, unreachable next-hop, or slow DNS — a naive client that tries only one address family forces the user to wait out a full TCP connect timeout — on Linux, many seconds, set by the kernel's SYN retry settings. Happy Eyeballs (RFC 8305) bounds that wait by racing both families and taking whichever completes first.</p>
     </div>
     <p class="muted" style="font-size:14px;max-width:68ch;line-height:1.65">We built an isolated dual-stack lab, broke one address family at a time under seven controlled conditions, and measured what real clients actually do — from the packets on the wire, not from the client's own log.</p>
   </div>
@@ -700,7 +700,7 @@ details.card summary { cursor: pointer; font-weight: 600 }
     <div class="sectitle" style="max-width:none">
       <div class="eyebrow">RFC 8305 · Happy Eyeballs Version 2</div>
       <h2>What Happy Eyeballs does</h2>
-      <p class="lead" style="max-width:none">A dual-stack host resolves a hostname to both A (IPv4) and AAAA (IPv6) records. Without Happy Eyeballs, if the preferred family is unreachable, the connection stalls until TCP times out — often tens of seconds. RFC 8305 defines a connection-racing algorithm that eliminates this penalty.</p>
+      <p class="lead" style="max-width:none">A dual-stack host resolves a hostname to both A (IPv4) and AAAA (IPv6) records. Without Happy Eyeballs, if the preferred family is unreachable, the connection stalls until TCP gives up — many seconds, set by the kernel's SYN retry settings. RFC 8305 defines a connection-racing algorithm that bounds this penalty to a short fallback delay.</p>
     </div>
     <div class="diagram">
       <svg viewBox="0 0 900 250" role="img" aria-label="The Happy Eyeballs race diagram">
@@ -735,7 +735,7 @@ details.card summary { cursor: pointer; font-weight: 600 }
       <div class="card"><h3>3. First handshake wins</h3><p class="small">Whichever TCP three-way handshake completes first carries the application data. All other in-flight attempts are cancelled. The user never sees the failed path — the penalty is just the fallback delay, not a full timeout.</p></div>
     </div>
 
-    <p class="small" style="max-width:none">RFC 8305 ("Happy Eyeballs Version 2: Better Connectivity Using Concurrency," D. Schinazi and T. Pauly, December 2017) defines this mechanism. The original Happy Eyeballs algorithm was specified in RFC 6555 (2012). Our lab uses it as a reference design, not a test. We measure when curl and Chromium send each connection attempt, and which family wins, under controlled fault conditions. We make no claim about how closely either client follows the design.</p>
+    <p class="small" style="max-width:none">RFC 8305 ("Happy Eyeballs Version 2: Better Connectivity Using Concurrency," D. Schinazi and T. Pauly, December 2017) defines this mechanism. The original Happy Eyeballs algorithm was specified in RFC 6555. Our lab uses it as a reference design, not a test. We measure when curl and Chromium send each connection attempt, and which family wins, under controlled fault conditions. We make no claim about how closely either client follows the design.</p>
   </div>
 
 </div>
@@ -772,7 +772,7 @@ details.card summary { cursor: pointer; font-weight: 600 }
     <div class="card">
       <div class="kv"><span>Problem statement</span><b>PS-028 · Happy Eyeballs IPv4/IPv6 fallback measurement</b></div>
       <div class="kv"><span>Team code</span><b>A3-PS028-TC278</b></div>
-      <div class="kv"><span>Platform</span><b>Ubuntu 24.04 · Linux network namespaces · nginx · dnslib</b></div>
+      <div class="kv"><span>Platform</span><b>Ubuntu · Linux network namespaces · nginx · dnslib</b></div>
       <div class="kv"><span>Clients under test</span><b>curl · Chromium via Playwright</b></div>
     </div>
   </div>
@@ -1001,7 +1001,7 @@ timeline = <b>analyse</b>(linktype, packets, window)
 page.goto(<b>"http://www.hl.test/chromium.html"</b>, wait_until="load", timeout=15000)</code>
           <p>Chromium honours only one <code>--disable-features</code> switch, so the runner merges its own entries into Playwright's list instead of adding a second one. QUIC, Secure DNS and HTTPS-Upgrades are off. After each run it reads the browser's command line back from the NetLog and fails the run if those settings are missing.</p>
           <p><span class="ac-label">Key difference from curl</span></p>
-          <p>The captures show Chromium opening a <span class="hl">second IPv6 attempt at around 250 ms</span> before it tries IPv4 at all, so each S1 run has two abandoned IPv6 attempts against curl's one. Its median fallback to IPv4 lands at <span class="hl">301.067 ms</span> against curl's <span class="hl">200.956 ms</span>, so Chromium reaches the working path about <span class="hl">100 ms later</span> under a blackhole. We report the timings we measured and don't infer the internal timer that produces them.</p>
+          <p>The captures show Chromium opening a <span class="hl">second IPv6 attempt at around 250 ms</span> before it tries IPv4 at all, so each S1 run has two abandoned IPv6 attempts against curl's one. Its median fallback to IPv4 lands at <span class="hl">301.067 ms</span> against curl's <span class="hl">200.956 ms</span>, so Chromium reaches the working path about <span class="hl">100 ms later</span> under a blackhole. We report the timings we measured and don't infer what inside the client produces them.</p>
           <div class="arch-stat-row">
             <div class="arch-stat"><div class="as-v">140</div><div class="as-k">Chromium runs</div></div>
             <div class="arch-stat"><div class="as-v">140/140</div><div class="as-k">IPv6 tried first</div></div>
@@ -1047,7 +1047,7 @@ page.goto(<b>"http://www.hl.test/chromium.html"</b>, wait_until="load", timeout=
     <hr>
 
     <div class="stack g22">
-      <div class="sectitle"><div class="eyebrow">Our work</div><h2>What we built</h2><p class="lead">A measurement harness that can state a number and then prove it.</p></div>
+      <div class="sectitle"><div class="eyebrow">Our work</div><h2>What we built</h2><p class="lead">A measurement harness that can state a number and then show the packets behind it.</p></div>
       <div class="grid g2">
         <div class="card stack g8"><span class="chip info"><span class="dt"></span>Lab</span><h3>An isolated two-stack network</h3><p class="small">Linux network namespaces give a client and a server their own IPv4 and IPv6 addresses, plus a separate control link for DNS that is never impaired.</p></div>
         <div class="card stack g8"><span class="chip info"><span class="dt"></span>Impairment</span><h3>Faults we can switch on and off</h3><p class="small">Blackholes are 100% netem loss on the server side, kept a silent drop by static neighbour entries, and verified before every run. Latency is applied with netem on the server side, in both directions.</p></div>
@@ -1155,7 +1155,7 @@ page.goto(<b>"http://www.hl.test/chromium.html"</b>, wait_until="load", timeout=
 
     <div class="card stack g12">
       <div class="row" style="gap:10px"><span class="chip ok"><span class="dt"></span>Measured data</span>
-      <span class="small">280 runs across 14 sessions: 2 clients × 7 conditions × 20 repetitions. X1 (both paths degraded), an optional extra, was never configured or measured. Some medians repeat to three decimals across conditions because netem reproduces the same delay on every run.</span></div>
+      <span class="small">280 runs across 14 sessions: 2 clients × 7 conditions × 20 repetitions. X1 (both paths degraded), an optional extra, was never configured or measured. Some medians repeat to three decimals across conditions (curl C0 and S5 are both 20.697 ms); in both, IPv6 won over the same unimpaired IPv6 link (our reading of why).</span></div>
     </div>
 
     <div class="row" style="justify-content:space-between">
@@ -1852,7 +1852,7 @@ var BASE=20,DNS_BASE=4,BACKUP=250,raf=null;
    along it. The Results charts keep IPv4 orange, so C.v4 is deliberately left alone. */
 var PG4="#3fb950";
 function pgC(f){return f==="v4"?PG4:C.v6}
-var STUB=36,TAIL=30,OS_TIMEOUT=130000;
+var STUB=36,TAIL=30;
 var reduce=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 var P={scn:"C0",client:"curl",pref:"v6",he:200,cut6:false,cut4:false,a6:0,a4:0,aaaa:0,replay:null};
 function addr(f){return f==="v6"?"[2001:db8:28:6::2]":"192.0.2.2"}
@@ -1898,12 +1898,12 @@ function simulate(c){
       log.push([dns+a.t0+STUB,"  <b class='lg-bad'>DROP</b>    "+famN(a.f)+" "+a.tag+" — no reply"]);
     });
     var lastSyn=Math.max.apply(null,att.map(function(a){return a.t0}));
-    log.push([dns+lastSyn+STUB+1,"no family answered — client is left waiting on the OS TCP timeout (~"+(OS_TIMEOUT/1000)+" s)"]);
+    log.push([dns+lastSyn+STUB+1,"no family answered — client is left waiting on the kernel's SYN retries (many seconds)"]);
   }
   log.sort(function(x,y){return x[0]-y[0]});
   var lastStop=Math.max.apply(null,att.map(function(a){return a.stop}));
   return{dns:dns,att:att,winner:winner,log:log,setup:winner?winner.end:null,inter:inter,
-    timeout:winner?null:OS_TIMEOUT,
+    timeout:!winner,
     abandoned:att.filter(function(a){return a!==winner}).length,
     total:dns+lastStop+TAIL};
 }
@@ -1981,8 +1981,8 @@ function pgRender(r,animated){
   $("pgVerdictT").innerHTML=ok
     ? '<b style="color:'+famC(r.winner.f)+'">'+famN(r.winner.f)+' won the race</b> in '+r.setup.toFixed(1)+' ms'
       +(r.abandoned?' <em>· '+r.abandoned+' attempt'+(r.abandoned>1?'s':'')+' cut at the handshake</em>':' <em>· no fallback needed</em>')
-    : '<b>No family answered</b> <em>· the client is left waiting on the OS TCP timeout, about '
-      +(r.timeout/1000)+' s. Nothing after the last SYN is drawn below.</em>';
+    : '<b>No family answered</b> <em>· the client is left waiting on the kernel\'s SYN retries, many seconds'
+      +' set by its retry settings. Nothing after the last SYN is drawn below.</em>';
   var cells=[
     {k:"TCP setup",v:r.setup===null?"—":r.setup.toFixed(1),u:r.setup===null?"":"ms",n:"first SYN to ACK"},
     {k:"Penalty",v:pen===null?"—":(pen>0?"+":"")+pen.toFixed(1),u:pen===null?"":"ms",n:"vs healthy baseline"},

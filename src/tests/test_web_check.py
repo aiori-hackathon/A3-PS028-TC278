@@ -126,6 +126,7 @@ def test_a_web_figure_that_differs_from_docs_figures_fails(tmp_path):
 
 def test_numbers_are_tokenised_without_trailing_punctuation():
     assert wc.checked_numbers("221–226, 1,328 runs; RFC 6555 (2012) and 0.5 and 20") == ["221", "226", "1,328", "2012", "0.5"]
+    assert not hasattr(wc, "ALLOWED_NUMBERS")       # no exemptions: every number has a source
 
 
 # --- the generator ---------------------------------------------------------------------------
@@ -202,3 +203,51 @@ def test_sync_figures_copies_used_figures_and_removes_others(tmp_path):
     assert ew.sync_figures(page, write=False, repo=tmp_path) == []
     with pytest.raises(ew.ExportError):
         ew.sync_figures('<img src="figures/missing.svg">', write=False, repo=tmp_path)
+
+
+# --- numbers come from the report (with the docs it links) or the deck -----------------------
+
+def test_number_sources_are_the_report_its_linked_docs_and_the_deck():
+    names = {str(p.relative_to(REPO)) for p in wc.number_sources(REPO)}
+    assert {"docs/report.md", "deck/deck_numbers.json", "docs/findings/latency_and_he_sweeps.md",
+            "docs/findings/syn_retransmission_partial_loss.md"} <= names
+    assert "README.md" not in names and "examples/README.md" not in names
+
+
+def test_a_number_found_only_in_the_readme_fails():
+    bad = swap(PAGE, "<b>Ubuntu · Linux network namespaces", "<b>Ubuntu 24.04 · Linux network namespaces")
+    assert any("number 24.04" in p for p in problems(bad))
+
+
+def test_a_stored_run_value_is_accepted_but_a_changed_one_is_not():
+    assert "222.254" in wc.page_text(PAGE) and problems(PAGE) == []      # Overview's worked record, from examples/
+    bad = swap(PAGE, '"tcp_setup_time_ms":\n      { "value": 222.254', '"tcp_setup_time_ms":\n      { "value": 222.264')
+    assert any("number 222.264" in p for p in problems(bad))
+
+
+# --- connect timeout and overclaims ----------------------------------------------------------
+
+@pytest.mark.parametrize("old, new", [
+    ("on Linux, many seconds, set by", "on Linux, around 130 seconds with default SYN retries, set by"),
+    ("on Linux, many seconds, set by", "on Linux, tens of seconds, set by"),
+    ("TCP gives up — many seconds", "TCP gives up — ~130 s"),
+    ("waiting on the kernel's SYN retries (many seconds)", "waiting on the OS TCP timeout (~130 s)"),   # Playground script
+])
+def test_connect_timeout_figures_fail(old, new):
+    assert any("connect timeout" in p for p in problems(swap(PAGE, old, new)))
+
+
+@pytest.mark.parametrize("old, new", [
+    ("that bounds this penalty to a short fallback delay", "that eliminates this penalty"),
+    ("(RFC 8305) bounds that wait", "(RFC 8305) removes that wait"),
+    ("then show the packets behind it", "then prove it"),
+])
+def test_audit_overclaims_fail(old, new):
+    assert any("bounds the wait" in p for p in problems(swap(PAGE, old, new)))
+
+
+def test_audit_fixes_are_on_the_page():
+    for text in ("bounds that wait", "bounds this penalty to a short fallback delay",
+                 "then show the packets behind it", "(curl C0 and S5 are both 20.697 ms)",
+                 "(our reading of why)", "many seconds, set by the kernel's SYN retry settings"):
+        assert text in PAGE, text
