@@ -1,8 +1,6 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>HappyLab</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: sci-fi instrument panel — scrolling constellation hero + research map on landing,
    then tabbed navigation for detailed sections. Single dark look, cyberpunk lab aesthetic. */
@@ -15,7 +13,8 @@
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;
   --ok: #3fb950; --warn: #d29922; --bad: #f0564a;
   --radius: 10px; --radius-card: 14px; --radius-ctl: 8px; --ctl-h: 44px;
-  --font-ui: "IBM Plex Sans", Arial, Helvetica, sans-serif;
+  /* No web fonts: the page makes no network requests. IBM Plex is used where installed. */
+  --font-ui: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
   color-scheme: dark;
 }
@@ -483,6 +482,58 @@ section[id^="p-"] { padding-top: 48px }
   .axis { margin-left: 64px }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important } }
+/* ---- extensions ---- */
+.xsec { border-top: 1px solid var(--line); padding-top: 34px }
+.xsec > p { max-width: 78ch; color: var(--ink2) }
+.xsec p b, .xtags p b { color: var(--ink); font-weight: 600 }
+.xhead { display: flex; gap: 14px; align-items: flex-start }
+.xnum { font: 600 13px/1 var(--font-mono); color: var(--accent); padding-top: 7px; letter-spacing: .08em }
+.xhead h3 { font-size: clamp(19px, 2.4vw, 24px); font-weight: 700 }
+.xnote { font-size: 13.5px; color: var(--ink3); max-width: 86ch; line-height: 1.65 }
+.tagrow { display: flex; flex-wrap: wrap; gap: 6px }
+.tag { display: inline-block; font-family: var(--font-mono); font-size: 11.5px; padding: 3px 8px; border-radius: 5px;
+  border: 1px solid; white-space: nowrap; line-height: 1.4 }
+.tag[data-tag="packet"] { color: #7fb6f0; border-color: #234365; background: #0e1a27 }
+.tag[data-tag="client"] { color: #6fd47e; border-color: #1e5c2c; background: #0f2214 }
+.tag[data-tag="derived"] { color: #e3bb5a; border-color: #5d4a16; background: #221c0c }
+.tag[data-tag="interp"] { color: #c9b8ff; border-color: #4a3f78; background: #18142c }
+.xtags { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)) }
+.xtags > div { display: flex; flex-direction: column; gap: 8px; align-items: flex-start }
+.xtags p { font-size: 13.5px; color: var(--ink2) }
+.xstats { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)) }
+.xstats.one { grid-template-columns: 1fr }
+.xstats .stat .v.sm { font-size: 21px }
+.xds .v { font-size: 25px }
+.xds.core { border-color: var(--accent-dim) }
+.figpair { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) }
+.plate { margin: 0; background: #fff; border-radius: var(--radius-card); padding: 8px; min-width: 0 }
+.plate img { display: block; width: 100%; height: auto }
+.card.flat { padding: 4px 6px }
+table.xt td { font-size: 13.5px }
+table.xt td.num, table.xt td.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap }
+table.xt tr.boundary td { font-style: italic; background: #1d180b }
+table.claims td:first-child { min-width: 260px }
+/* Greek letters (μ, σ) must not be upper-cased into M and Σ */
+table.xt th { text-transform: none; letter-spacing: .02em; font-size: 12px }
+.refs { margin: 12px 0 8px; padding-left: 18px; font-size: 13.5px; color: var(--ink2) }
+.refs li { margin-bottom: 8px }
+details.card summary { cursor: pointer; font-weight: 600 }
+/* ---- playground: measured replays ---- */
+.pgsrc { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 12.5px; color: var(--ink3) }
+.rail.replay .scn { border-style: dashed }
+.rail.replay .scn[aria-pressed="true"] { border-style: solid }
+@media (max-width: 640px) {
+  .xsec { padding-top: 26px }
+  .plate { padding: 4px; border-radius: var(--radius) }
+  table.xt td, table.xt th { padding: 9px 8px }
+  /* claims: one stacked block per claim instead of a sideways-scrolling table */
+  table.claims, table.claims tbody { display: block; width: 100%; min-width: 0 }
+  table.claims thead { display: none }
+  table.claims tr { display: block; border-bottom: 1px solid #1c1e27; padding: 6px 0 10px }
+  table.claims td, table.claims th { display: block; border: 0; padding: 3px 10px }
+  table.claims td:first-child { min-width: 0; padding-top: 8px }
+  table.claims td:nth-child(2) { font-size: 12.5px; color: var(--ink3) }
+}
 </style>
 
 <div id="tip" role="status" aria-live="off"></div>
@@ -502,6 +553,7 @@ section[id^="p-"] { padding-top: 48px }
       <button data-tab="overview" aria-pressed="false">Overview</button>
       <button data-tab="method" aria-pressed="false">Method</button>
       <button data-tab="results" aria-pressed="false">Results</button>
+      <button data-tab="extensions" aria-pressed="false">Extensions</button>
       <button data-tab="playground" aria-pressed="false">Playground</button>
       <button data-tab="evidence" aria-pressed="false">Evidence</button>
     </nav>
@@ -519,6 +571,7 @@ section[id^="p-"] { padding-top: 48px }
     <button data-tab="overview" aria-pressed="false">Overview</button>
     <button data-tab="method" aria-pressed="false">Method</button>
     <button data-tab="results" aria-pressed="false">Results</button>
+    <button data-tab="extensions" aria-pressed="false">Extensions</button>
     <button data-tab="playground" aria-pressed="false">Playground</button>
     <button data-tab="evidence" aria-pressed="false">Evidence</button>
   </div>
@@ -1102,7 +1155,7 @@ page.goto(<b>"http://www.hl.test/chromium.html"</b>, wait_until="load", timeout=
 
     <div class="card stack g12">
       <div class="row" style="gap:10px"><span class="chip ok"><span class="dt"></span>Measured data</span>
-      <span class="small">280 runs across 14 sessions: 2 clients × 7 conditions × 20 repetitions. X1 (both paths degraded) is not yet measured. Some medians repeat to three decimals across conditions because netem reproduces the same delay on every run.</span></div>
+      <span class="small">280 runs across 14 sessions: 2 clients × 7 conditions × 20 repetitions. X1 (both paths degraded), an optional extra, was never configured or measured. Some medians repeat to three decimals across conditions because netem reproduces the same delay on every run.</span></div>
     </div>
 
     <div class="row" style="justify-content:space-between">
@@ -1132,16 +1185,169 @@ page.goto(<b>"http://www.hl.test/chromium.html"</b>, wait_until="load", timeout=
   </div>
 </section>
 
+<!-- ================= EXTENSIONS ================= -->
+<!-- Numbers in [data-n] and every table here come from the generated EXTENSIONS block (export_web.py).
+     The rest is written by hand and checked by src/analysis/web_check.py against the report,
+     the findings docs and deck/deck_numbers.json. -->
+<section id="p-extensions" hidden>
+  <div class="stack g52">
+    <div class="sectitle">
+      <div class="eyebrow">Extensions · beyond PS-028</div>
+      <h2>Where the outcome flips, and what racing costs</h2>
+      <p class="lead">PS-028 is answered by the frozen 280-run core dataset on the other pages. Four extension datasets, run on 2026-11-21/22, go further: a latency sweep, a curl timeout sweep, IPv6 partial loss and jitter, and a validation control. They change nothing in the core results.</p>
+    </div>
+
+    <div class="card stack g16">
+      <div class="row" style="justify-content:space-between"><h3 style="font-size:17px">Five certified datasets</h3><span class="chip mono" id="xTotal"></span></div>
+      <div class="grid g3" id="xDatasets">
+        <div class="stat xds core"><div class="k">core · docs/dataset.md</div><div class="v">280<u>runs</u></div><div class="n">14 sessions · C0 and S1–S6, curl and Chromium · 2026-10-26 · code ecba28c · satisfies PS-028</div></div>
+      </div>
+      <p class="small">Every analysis reads only the sessions a manifest lists, and each record carries its pcap's SHA-256. <span class="mono">summarise.py</span> refuses a missing, duplicated or undeclared cell, a cross-check conflict or a failed verify, and nothing is skipped or filled in. The page generator applies the same certification before any extension number reaches this page.</p>
+    </div>
+
+    <div class="card stack g12">
+      <h3 style="font-size:17px">Evidence tags</h3>
+      <p class="small">Every claim on this page carries one of the four tags the report and the dashboard use.</p>
+      <div class="xtags">
+        <div><span class="tag" data-tag="packet"></span><p>Comes from the packet capture taken inside the client namespace.</p></div>
+        <div><span class="tag" data-tag="client"></span><p>Comes from what a client reported about itself: curl's <code>-w</code> output, or Chromium's NetLog.</p></div>
+        <div><span class="tag" data-tag="derived"></span><p>Combines the packet-level TCP setup time with the winning family's RTT from the lab's ping check before the run. It is computed, not seen on the wire.</p></div>
+        <div><span class="tag" data-tag="interp"></span><p>Our reading of the evidence. It is never a measurement.</p></div>
+      </div>
+    </div>
+
+    <!-- 01 latency budget -->
+    <article class="xsec stack g16" id="x-budget">
+      <div class="xhead"><span class="xnum">01</span><div class="stack g8"><h3>IPv6 latency budget: where the outcome flips</h3>
+        <div class="tagrow"><span class="tag" data-tag="packet"></span></div></div></div>
+      <p>The <b>latency-sweep</b> dataset delays IPv6 by a fixed amount and leaves IPv4 at the baseline, with 5 runs per cell: coarse cells from +100 to +400 ms in 25 ms steps for both clients, and fine 5 ms steps around each client's crossover. Every cell went 5/5 one way, so the IPv6 round-trip time at which the winner changes is located to 5 ms.</p>
+      <div class="xstats">
+        <div class="stat"><div class="k">curl · outcome flip (IPv6 RTT)</div><div class="v" data-n="curl_flip"></div><div class="n">T in this dataset <span data-n="curl_T_ls"></span> ms, inside the bracket</div></div>
+        <div class="stat"><div class="k">Chromium · outcome flip (IPv6 RTT)</div><div class="v" data-n="chr_flip"></div><div class="n">T in this dataset <span data-n="chr_T_ls"></span> ms, inside the bracket</div></div>
+      </div>
+      <div class="figpair">
+        <figure class="plate"><img src="figures/fig1_ipv6_latency_budget_curl_half.svg" width="550" height="625" loading="lazy" alt="curl: share of runs IPv6 won against IPv6 round-trip time, with the outcome flip bracket and the jitter cells"></figure>
+        <figure class="plate"><img src="figures/fig1_ipv6_latency_budget_chromium_half.svg" width="550" height="625" loading="lazy" alt="Chromium: share of runs IPv6 won against IPv6 round-trip time, with the outcome flip bracket and the jitter cells"></figure>
+      </div>
+      <p class="xnote"><b>T</b> is the time from the run's first SYN to the first SYN-ACK of its IPv4 attempt, a packet-level median. When IPv6 is delayed, IPv6 wins exactly when its handshake completes before T. The flip bracket comes from which family won and uses no packet times; its edges are verify-ping RTTs and are good to about 1 ms. So the outcome flip and the packet-measured T are two independent views, and they agree. Sweep points have 5 runs each and carry no interval; the jitter cells show 95% Wilson intervals.</p>
+    </article>
+
+    <!-- 02 cost of racing -->
+    <article class="xsec stack g16" id="x-oracle">
+      <div class="xhead"><span class="xnum">02</span><div class="stack g8"><h3>Cost of racing, against an oracle baseline</h3>
+        <div class="tagrow"><span class="tag" data-tag="derived"></span></div></div></div>
+      <p>A run's <b>oracle setup</b> is the pre-run verify-ping RTT of the family that won it. Its <b>cost of racing</b> is the packet-level TCP setup time minus that oracle. The oracle is a hindsight reference: it uses the winner, which no client knows before connecting.</p>
+      <div class="row" style="align-items:flex-start;gap:20px">
+        <div class="stack g12" style="flex:1 1 300px;min-width:0">
+          <div class="xstats one">
+            <div class="stat"><div class="k">Where IPv4 won · curl</div><div class="v sm" data-n="curl_cost_v4"></div><div class="n">cell medians, latency sweep</div></div>
+            <div class="stat"><div class="k">Where IPv4 won · Chromium</div><div class="v sm" data-n="chr_cost_v4"></div><div class="n">cell medians, latency sweep</div></div>
+            <div class="stat"><div class="k">Where IPv6 won after a race</div><div class="v sm"><span data-n="curl_cost_v6_raced"></span></div><div class="n">curl; Chromium <span data-n="chr_cost_v6_raced"></span></div></div>
+          </div>
+          <p class="xnote">Every IPv6-won cell median is within ±0.9 ms of zero. That is inside the 1 ms resolution of the ping that sets the oracle above 100 ms, and negative values are reported, not clamped. Where IPv4 won, the oracle drops to the IPv4 RTT, about 21 ms. The cost is a derived value and says nothing about how either client chooses when to start an attempt.</p>
+        </div>
+        <figure class="plate" style="flex:1 1 300px;max-width:460px"><img src="figures/fig1_setup_vs_oracle_half.svg" width="550" height="625" loading="lazy" alt="TCP setup time against the oracle setup time for both clients in the latency sweep"></figure>
+      </div>
+    </article>
+
+    <!-- 03 timeout sweep -->
+    <article class="xsec stack g16" id="x-he">
+      <div class="xhead"><span class="xnum">03</span><div class="stack g8"><h3>Timeout sweep: curl's T against timeout + IPv4 handshake</h3>
+        <div class="tagrow"><span class="tag" data-tag="packet"></span><span class="tag" data-tag="interp"></span></div></div></div>
+      <p>The <b>he-sweep</b> dataset ran curl with <code>--happy-eyeballs-timeout-ms</code> set to eight values from 50 to 500 ms, on C0, S1 and S3 with 10 runs per cell. T is taken from S1, where IPv6 is blackholed, so every run makes an IPv4 attempt. The comparison was set before the run: T ≈ timeout + IPv4 handshake.</p>
+      <div class="xstats">
+        <div class="stat"><div class="k">T − (timeout + handshake)</div><div class="v sm" data-n="he_resid_all"></div><div class="n">all eight variants: T minus the handshake tracks the configured timeout, slightly late each time</div></div>
+        <div class="stat"><div class="k">Control · IPv4 first SYN</div><div class="v sm"><span data-n="he200_v4syn"></span><u>ms</u></div><div class="n">curl@he200, against plain curl's <span data-n="plain_v4syn"></span> ms</div></div>
+      </div>
+      <figure class="plate"><picture><source media="(max-width: 700px)" srcset="figures/fig2_he_linearity_half.svg"><img src="figures/fig2_he_linearity_full.svg" width="1100" height="625" loading="lazy" alt="curl's T against the configured Happy Eyeballs timeout, with the residual under each timeout"></picture></figure>
+      <div class="card scroll flat"><table class="xt"><thead><tr><th>Client</th><th>Timeout</th><th>IPv4 first SYN</th><th>IPv4 handshake</th><th>Timeout + handshake</th><th>T</th><th>T − that</th></tr></thead><tbody id="xHe"></tbody></table></div>
+      <p class="xnote">Times are packet-level medians in ms after the first SYN; the comparison column is derived. <b>A step we don't explain:</b> the residual is <span data-n="he_resid_low"></span> up to he250 and <span data-n="he_resid_high"></span> from he300, and it is not monotonic (he400 sits below both he300 and he500). These data offer no explanation for it. curl@he200 sets the default timeout curl's man page documents, so it is the validation control. Chromium takes no such option, so it has no counterpart here: its delay of about 300 ms is an observed delay only. <b>S3 curl@he150 is a boundary case, not a finding:</b> IPv6 won 10/10 by about 0.4 ms at n = 10, a margin smaller than the ping resolution.</p>
+    </article>
+
+    <!-- 04 jitter model -->
+    <article class="xsec stack g16" id="x-jitter">
+      <div class="xhead"><span class="xnum">04</span><div class="stack g8"><h3>Jitter and partial loss: outcomes become probabilistic</h3>
+        <div class="tagrow"><span class="tag" data-tag="packet"></span><span class="tag" data-tag="interp"></span></div></div></div>
+      <p>The <b>jitter-loss</b> dataset (<span data-n="jl_runs"></span>) adds IPv6 loss of 10, 30 and 50% per direction, IPv6 jitter of 50 and 70 ms each way, and no-jitter delay twins at the same mean RTT. At the same mean RTT, jitter moved the outcome away from all-or-nothing for both clients.</p>
+      <p>A simple model of the jitter cells is <b class="mono">P(IPv6 wins) = Φ((T − μ)/σ)</b>. Its inputs are measured independently of the outcomes it is compared with: T from the no-jitter twin captures, μ and σ from the verify pings before each run. None is taken from either client's documentation or source code. The model was written up together with the jitter results, so it is not a prediction registered before they existed.</p>
+      <div class="card scroll flat"><table class="xt"><thead><tr><th>Client</th><th>Cell</th><th>T (ms)</th><th>μ (ms)</th><th>σ (ms) (J·√2)</th><th>Model</th><th>Observed [95% Wilson CI]</th></tr></thead><tbody id="xJit"></tbody></table></div>
+      <p class="xnote">All four model values fall inside the observed 95% interval. With 31–50 runs per cell the intervals are 0.16–0.30 wide, so this agreement is consistent with the model. It does not test the model closely. Observed outcomes are packet-level; the model is an interpretation.</p>
+    </article>
+
+    <!-- 05 SYN retransmission -->
+    <article class="xsec stack g16" id="x-syn">
+      <div class="xhead"><span class="xnum">05</span><div class="stack g8"><h3>SYN retransmission: visible only when IPv6 is the only path</h3>
+        <div class="tagrow"><span class="tag" data-tag="packet"></span><span class="tag" data-tag="interp"></span></div></div></div>
+      <p>A retransmission is a further SYN on the <b>same 4-tuple</b>, so the same socket, and it is sent by the kernel, not by curl or Chromium. A SYN from a new source port is a new connection attempt and is not counted. With a healthy IPv4 there was <b>no same-socket SYN retransmission in any of the <span id="xHealthy"></span> runs</b> of the loss and jitter cells: the other family won before any timer could show, so the timer is not observable there.</p>
+      <p>The compound control <b>Gv6c30</b> blackholes IPv4 and adds 30% loss each way on IPv6, so IPv6 is the only working path. It is a generated extension, not X1. There the timer is visible, and it does not double: gaps between same-socket SYNs stay at about 1 s up to the fifth SYN.</p>
+      <div class="card scroll flat"><table class="xt"><thead><tr><th>Client</th><th>1st retransmission</th><th>2nd</th><th>3rd</th><th>4th</th></tr></thead><tbody id="xSyn"></tbody></table></div>
+      <p class="xnote">Gap from each SYN to the next SYN on the same 4-tuple, median (range). A doubling timer would give gaps of about 1, 2 and 4 s. <b>Interpretation:</b> this matches the Linux setting <code>net.ipv4.tcp_syn_linear_timeouts</code>, which reads 4 inside hl-client. No socket sent more than five SYNs, so the change back to doubling after the linear phase is not observed.</p>
+    </article>
+
+    <!-- 06 reproducibility -->
+    <article class="xsec stack g16" id="x-repro">
+      <div class="xhead"><span class="xnum">06</span><div class="stack g8"><h3>Plain curl's T across four campaigns</h3>
+        <div class="tagrow"><span class="tag" data-tag="packet"></span></div></div></div>
+      <p>Plain curl's T has been measured in four separate campaigns, on three code versions, two with an IPv6 blackhole and two with an IPv6 delay. They agree within <b><span id="xSpread"></span> ms</b>.</p>
+      <div class="row" style="align-items:flex-start;gap:20px">
+        <div class="card scroll flat" style="flex:1 1 320px;min-width:0"><table class="xt"><thead><tr><th>Campaign</th><th>IPv6 condition</th><th>Runs</th><th>T (ms)</th><th>Code</th></tr></thead><tbody id="xRepro"></tbody></table></div>
+        <figure class="plate" style="flex:1 1 320px;max-width:560px"><picture><source media="(max-width: 700px)" srcset="figures/fig4_t_reproducibility_half.svg"><img src="figures/fig4_t_reproducibility_full.svg" width="1100" height="625" loading="lazy" alt="Plain curl's T in four campaigns, every run shown"></picture></figure>
+      </div>
+      <p class="xnote">All four ran on the same machine and kernel (7.0.0-43-generic) within about 16 hours. So T reproduces across campaigns on this host. It does not show that T holds across hosts or kernels.</p>
+    </article>
+
+    <!-- 07 related work -->
+    <article class="xsec stack g16" id="x-related">
+      <div class="xhead"><span class="xnum">07</span><div class="stack g8"><h3>Related work: Sattler et al.</h3>
+        <div class="tagrow"><span class="tag" data-tag="packet"></span><span class="tag" data-tag="interp"></span></div></div></div>
+      <p>The closest prior work is Sattler et al., <cite>“Lazy Eye Inspection: Capturing the State of Happy Eyeballs Implementations”</cite> (ACM IMC 2025). Using a local testbed with tc-netem and packet captures, they report that <span data-deck="sattler_curl">curl's Connection Attempt Delay is 200 ms</span> and that <span data-deck="sattler_chr">Chromium-based browsers use 300 ms</span>. Those statements, and any about what a client contains, are the authors' conclusions and stay attributed to them.</p>
+      <p>Our measured crossovers <b>reproduce</b> those published values. They published them first; ours is an independent reproduction in a separate lab, with our own client builds (curl 8.5.0, Chromium 156.0.8078.4).</p>
+      <div class="card scroll flat"><table class="xt"><thead><tr><th>Client</th><th>Published CAD [R1]</th><th>Inter-family attempt delay, core S1 / S2</th><th>T, jitter-loss</th><th>T, latency-sweep</th><th>Outcome flip, latency-sweep (IPv6 RTT)</th></tr></thead><tbody>
+        <tr><td>curl</td><td class="num">200 ms</td><td class="num">200.956 / 200.956 ms</td><td class="num"><span data-n="curl_T_jl"></span> ms (n=40)</td><td class="num"><span data-n="curl_T_ls"></span> ms (n=70)</td><td class="num" data-n="curl_flip"></td></tr>
+        <tr><td>Chromium</td><td class="num">300 ms</td><td class="num">301.067 / 301.120 ms</td><td class="num"><span data-n="chr_T_jl"></span> ms (n=17)</td><td class="num"><span data-n="chr_T_ls"></span> ms (n=50)</td><td class="num" data-n="chr_flip"></td></tr>
+      </tbody></table></div>
+      <p class="xnote">All times are packet-level medians. T is the attempt delay plus the IPv4 handshake, which takes about 21 ms in this lab, so 221.96 ms corresponds to curl's 200 ms and 322.47 ms to Chromium's 300 ms. Neither observed delay is a test of the 250 ms Connection Attempt Delay that RFC 8305 recommends: that is a reference point, not a pass or fail threshold.</p>
+      <div class="grid g2">
+        <div class="card stack g8"><span class="chip info"><span class="dt"></span>refinement</span><h3>One IPv6 address, two connection attempts</h3><p class="small">In 40 of 40 Chromium S1 and S2 runs, the capture shows two IPv6 SYNs to the same address from different source ports, the second a median 250.625 ms (S1) and 250.69 ms (S2) after the first, then one IPv4 SYN at about 301 ms. No socket sent a second SYN. This refines the published observation that both clients try one IPv6 and one IPv4 address, and does not contradict it. It is packet-level only and says nothing about what Chromium intends.</p></div>
+        <div class="card stack g8"><span class="chip warn"><span class="dt"></span>open question</span><h3>Chromium in S6</h3><p class="small">Chromium 156.0.8078.4 sent no IPv4 SYN at any point in S6 (0/20 runs); its first SYN was IPv6, after the delayed AAAA answer. Sattler et al. describe a HEv3 feature flag, added in April 2024, that removes Chromium's wait for the A record. Whether that behaviour is now the default in the version we ran is not resolved by our data, and we assert nothing either way: S6 delays the AAAA answer, not the A answer, and we ran one version.</p></div>
+      </div>
+      <details class="card"><summary>References</summary>
+        <ul class="refs">
+          <li><b>[R1]</b> P. Sattler, M. Kirstein, L. Wüstrich, J. Zirngibl and G. Carle, <cite>“Lazy Eye Inspection: Capturing the State of Happy Eyeballs Implementations”</cite>, ACM IMC 2025, doi:<a href="https://doi.org/10.1145/3730567.3732925">10.1145/3730567.3732925</a>. Preprint <a href="https://arxiv.org/abs/2412.00263">arXiv:2412.00263</a>.</li>
+          <li><b>[R2]</b> D. Schinazi and T. Pauly, <cite>“Happy Eyeballs Version 2: Better Connectivity Using Concurrency”</cite>, <a href="https://www.rfc-editor.org/rfc/rfc8305">RFC 8305</a>, IETF, December 2017.</li>
+          <li><b>[R3]</b> T. Pauly, D. Schinazi, N. Jaju and K. Ishibashi, <cite>“Happy Eyeballs Version 3: Better Connectivity Using Concurrency”</cite>, <a href="https://datatracker.ietf.org/doc/draft-ietf-happy-happyeyeballs-v3/04/">draft-ietf-happy-happyeyeballs-v3-04</a>, 2026-07-01. Pinned at -04 and background only: checked on 2026-11-24, it is still an Internet-Draft, not an RFC.</li>
+          <li><b>[R4]</b> curl's documented Happy Eyeballs default (200 ms): <a href="https://curl.se/docs/manpage.html#--happy-eyeballs-timeout-ms"><code>--happy-eyeballs-timeout-ms</code></a>.</li>
+        </ul>
+        <p class="small">Links open the published sources and need a network connection; nothing on this page loads them by itself.</p>
+      </details>
+    </article>
+
+    <!-- 08 claims -->
+    <article class="xsec stack g16" id="x-claims">
+      <div class="xhead"><span class="xnum">08</span><div class="stack g8"><h3>What each dataset supports</h3></div></div>
+      <p>Every claim made from the data, with the dataset it rests on and its evidence tag. The core rows satisfy PS-028; the extension rows go beyond it.</p>
+      <div class="card scroll flat"><table class="xt claims"><thead><tr><th>Claim</th><th>Dataset</th><th>Evidence</th></tr></thead><tbody id="xClaims"></tbody></table></div>
+    </article>
+  </div>
+</section>
+
 <!-- ================= PLAYGROUND ================= -->
 <section id="p-playground" hidden>
   <div class="stack g34">
     <div class="sectitle">
       <div class="eyebrow">Playground</div>
       <h2>Pull a cable and watch what happens</h2>
-      <p class="lead">A live model of the race. Cut either cable, add latency, delay the AAAA record, then run the attempt and read the packets. The figures here come from the model on this page, not from the lab.</p>
+      <p class="lead">A live model of the race. Cut either cable, add latency, delay the AAAA record, then run the attempt and read the packets. The figures here come from the model on this page, not from the lab, except the measured runs, which replay stored captures.</p>
     </div>
 
-    <div class="rail" id="pgRail" role="group" aria-label="Scenarios"></div>
+    <div class="stack g8">
+      <div class="eyebrow">Model scenarios</div>
+      <div class="rail" id="pgRail" role="group" aria-label="Scenarios"></div>
+    </div>
+    <div class="stack g8">
+      <div class="eyebrow">Measured runs · replayed from the captures in examples/</div>
+      <div class="rail replay" id="pgReplay" role="group" aria-label="Measured runs"></div>
+    </div>
 
     <div class="row" style="align-items:flex-start;gap:20px">
       <div class="stack g22" style="flex:999 1 520px;min-width:0">
@@ -1215,6 +1421,7 @@ page.goto(<b>"http://www.hl.test/chromium.html"</b>, wait_until="load", timeout=
         <div class="card stack g16">
           <h3 style="font-size:16px">Result</h3>
           <div class="verdict" id="pgVerdict" role="status"><span class="vdot"></span><span id="pgVerdictT">--</span></div>
+          <div class="pgsrc" id="pgSrc"></div>
           <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px" id="pgKpis"></div>
           <div class="row" style="gap:10px">
             <button class="btn pri" id="pgRun" style="flex:1 1 140px">Run attempt</button>
@@ -1249,6 +1456,7 @@ page.goto(<b>"http://www.hl.test/chromium.html"</b>, wait_until="load", timeout=
             <li>Resolution takes 4 ms plus any record delay, and the client waits for both answers.</li>
             <li>Setup time runs from the first SYN to the completing ACK and excludes DNS.</li>
             <li>The fallback timer and Chromium's backup attempt are model settings, not measurements.</li>
+            <li>A measured run is different: it replays one stored capture from <code>examples/</code>, checked against its SHA-256. Every time shown is read from that capture; nothing is modelled. Changing any control returns to the model.</li>
           </ul></details></div>
       </div>
     </div>
@@ -1296,7 +1504,7 @@ page.goto(<b>"http://www.hl.test/chromium.html"</b>, wait_until="load", timeout=
         <div class="card stack g8"><span class="chip warn"><span class="dt"></span>needs sign-off</span><h3>Parser rules not in the brief</h3><p class="small">The definitions of an abandoned attempt, a no-reply attempt and the end of DNS time were written by us because the metric description does not fix them.</p></div>
         <div class="card stack g8"><span class="chip ok"><span class="dt"></span>resolved</span><h3>A misleading capture name</h3><p class="small">An early capture named as a control run held two concatenated loopback runs. It has been renamed loopback_two_harness_runs.pcap.</p></div>
         <div class="card stack g8"><span class="chip ok"><span class="dt"></span>done</span><h3>Chromium timings</h3><p class="small">The Chromium runner shares the orchestrator with curl. All Chromium figures for C0 and S1 to S6 are measured: 140 runs.</p></div>
-        <div class="card stack g8"><span class="chip info"><span class="dt"></span>optional</span><h3>Sensitivity sweep</h3><p class="small">Varying the client's fallback timeout would show how sharply the penalty tracks it. Planned only if the core matrix finishes early.</p></div>
+        <div class="card stack g8"><span class="chip ok"><span class="dt"></span>done</span><h3>Sensitivity sweep</h3><p class="small">Ran as the he-sweep extension dataset after the core matrix: curl's timeout set to eight values from 50 to 500 ms. See the <a href="#" onclick="switchTab('extensions');return false">Extensions</a> page.</p></div>
       </div>
     </div>
   </div>
@@ -1399,6 +1607,11 @@ var CAPS=[
   ["loopback_two_harness_runs.pcap", "—", "curl", "3 KB", "0a67…421c", "pinned fixture · loopback harness, not lab data"]
 ];
 /* === HAPPYLAB DATA END === */
+/* === HAPPYLAB EXTENSIONS START — generated by export_web.py from the certified extension datasets and examples/, do not edit by hand === */
+/* 1048 runs from the certified extension datasets variant-control (40 runs), jitter-loss (558 runs), latency-sweep (180 runs), he-sweep (270 runs); replays of the 3 runs in examples/ */
+var EXT={"tags": {"packet": "Packet-level (pcap)", "client": "Client log", "interp": "Interpretation", "derived": "Derived (pcap − lab RTT)"}, "datasets": [{"name": "variant-control", "title": "curl@he200 validation control", "doc": "docs/datasets/variant-control.md", "sessions": 2, "runs": 40, "clients": ["curl", "curl@he200"], "scenarios": 1, "code": ["72be111"], "kernel": ["7.0.0-43-generic"], "dates": ["2026-11-21"]}, {"name": "jitter-loss", "title": "IPv6 partial loss and jitter extension", "doc": "docs/datasets/jitter-loss.md", "sessions": 16, "runs": 558, "clients": ["curl", "chromium"], "scenarios": 8, "code": ["c283448"], "kernel": ["7.0.0-43-generic"], "dates": ["2026-11-21", "2026-11-22"]}, {"name": "latency-sweep", "title": "IPv6 latency sweep", "doc": "docs/datasets/latency-sweep.md", "sessions": 36, "runs": 180, "clients": ["curl", "chromium"], "scenarios": 23, "code": ["9a6de27"], "kernel": ["7.0.0-43-generic"], "dates": ["2026-11-22"]}, {"name": "he-sweep", "title": "curl Happy Eyeballs timeout sweep", "doc": "docs/datasets/he-sweep.md", "sessions": 27, "runs": 270, "clients": ["curl", "curl@he50", "curl@he100", "curl@he150", "curl@he200", "curl@he250", "curl@he300", "curl@he400", "curl@he500"], "scenarios": 3, "code": ["9a6de27"], "kernel": ["7.0.0-43-generic"], "dates": ["2026-11-22"]}], "runs": {"core": 280, "extensions": 1048, "total": 1328}, "N": {"curl_flip": "221–226 ms", "curl_T_ls": "221.84", "curl_T_jl": "221.96", "curl_cost_v4": "200.76–201.48 ms", "curl_cost_v6_raced": "−0.19 to +0.73 ms", "j_curl50_pred": "0.50", "j_curl50_obs": "17/39 = 0.44 [0.29, 0.59]", "j_curl70_pred": "0.21", "j_curl70_obs": "8/31 = 0.26 [0.14, 0.43]", "rto_curl_1": "n=23, median 1037.0 ms", "rto_curl_2": "n=13, 1023.9 ms", "rto_curl_3": "n=6, 1023.9 ms", "rto_curl_4": "n=2, 1024.1 ms", "chr_flip": "321–326 ms", "chr_T_ls": "321.99", "chr_T_jl": "322.47", "chr_cost_v4": "300.43–302.17 ms", "chr_cost_v6_raced": "−0.44 to +0.28 ms", "j_chr50_pred": "0.93", "j_chr50_obs": "46/50 = 0.92 [0.81, 0.97]", "j_chr70_pred": "0.58", "j_chr70_obs": "28/50 = 0.56 [0.42, 0.69]", "rto_chr_1": "n=29, median 1038.8 ms", "rto_chr_2": "n=12, 1023.7 ms", "rto_chr_3": "n=3, 1024.3 ms", "he_resid_all": "+0.69 to +1.99 ms", "he_resid_low": "+0.69 to +0.90 ms", "he_resid_high": "+1.16 to +1.99 ms", "he200_v4syn": "200.833", "plain_v4syn": "200.832", "jl_runs": "558 runs", "ls_runs": "180 runs", "he_runs": "270 runs"}, "he": [{"client": "curl", "timeout": "not set", "syn": "200.832", "hs": "21.024", "pred": "–", "T": "222.14", "resid": "–", "v4won": "10/10"}, {"client": "curl@he50", "timeout": "50", "syn": "50.689", "hs": "20.809", "pred": "70.81", "T": "71.50", "resid": "+0.69", "v4won": "10/10"}, {"client": "curl@he100", "timeout": "100", "syn": "100.799", "hs": "20.941", "pred": "120.94", "T": "121.73", "resid": "+0.79", "v4won": "10/10"}, {"client": "curl@he150", "timeout": "150", "syn": "150.750", "hs": "20.962", "pred": "170.96", "T": "171.72", "resid": "+0.76", "v4won": "10/10"}, {"client": "curl@he200", "timeout": "200", "syn": "200.833", "hs": "20.987", "pred": "220.99", "T": "221.88", "resid": "+0.90", "v4won": "10/10"}, {"client": "curl@he250", "timeout": "250", "syn": "250.939", "hs": "20.989", "pred": "270.99", "T": "271.81", "resid": "+0.82", "v4won": "10/10"}, {"client": "curl@he300", "timeout": "300", "syn": "301.650", "hs": "20.941", "pred": "320.94", "T": "322.84", "resid": "+1.90", "v4won": "10/10"}, {"client": "curl@he400", "timeout": "400", "syn": "401.087", "hs": "20.959", "pred": "420.96", "T": "422.12", "resid": "+1.16", "v4won": "10/10"}, {"client": "curl@he500", "timeout": "500", "syn": "501.629", "hs": "20.941", "pred": "520.94", "T": "522.93", "resid": "+1.99", "v4won": "10/10"}], "jitter": [{"client": "chromium", "cell": "Gv6j50", "T": "322.47", "mu": "221.2", "sigma": "70.0", "design": "70.7", "pred": "0.93", "obs": "46/50 = 0.92 [0.81, 0.97]", "inside": true}, {"client": "chromium", "cell": "Gv6j70", "T": "322.47", "mu": "302.3", "sigma": "97.2", "design": "99.0", "pred": "0.58", "obs": "28/50 = 0.56 [0.42, 0.69]", "inside": true}, {"client": "curl", "cell": "Gv6j50", "T": "221.96", "mu": "221.3", "sigma": "69.4", "design": "70.7", "pred": "0.50", "obs": "17/39 = 0.44 [0.29, 0.59]", "inside": true}, {"client": "curl", "cell": "Gv6j70", "T": "221.96", "mu": "301.5", "sigma": "98.5", "design": "99.0", "pred": "0.21", "obs": "8/31 = 0.26 [0.14, 0.43]", "inside": true}], "retx": [{"client": "curl", "gaps": ["n=23, median 1037.0 ms (1004.2–1059.7)", "n=13, 1023.9 ms (1023.5–1024.5)", "n=6, 1023.9 ms (1023.7–1024.5)", "n=2, 1024.1 ms (1024.0–1024.2)"], "attempts": 23, "runs": 41}, {"client": "chromium", "gaps": ["n=29, median 1038.8 ms (1005.4–1063.2)", "n=12, 1023.7 ms (1022.5–1024.7)", "n=3, 1024.3 ms (1024.0–1024.5)", "none"], "attempts": 29, "runs": 50}], "retx_healthy": {"runs": 467, "attempts_with_syn_retransmission": 0}, "repro": [{"campaign": "variant-control", "condition": "S1 IPv6 blackhole", "n": 20, "T": "221.53", "code": ["72be111"], "kernel": ["7.0.0-43-generic"]}, {"campaign": "jitter-loss", "condition": "IPv6 delay +200, +280 ms", "n": 40, "T": "221.96", "code": ["c283448"], "kernel": ["7.0.0-43-generic"]}, {"campaign": "latency-sweep", "condition": "IPv6 delay +190 to +400 ms", "n": 70, "T": "221.84", "code": ["9a6de27"], "kernel": ["7.0.0-43-generic"]}, {"campaign": "he-sweep", "condition": "S1 IPv6 blackhole", "n": 10, "T": "222.14", "code": ["9a6de27"], "kernel": ["7.0.0-43-generic"]}], "repro_spread": "0.61", "claims": [{"section": "core", "claim": "C0 baseline: IPv6 won 20/20 for each client; TCP setup 20.697 ms (curl), 20.135 ms (Chromium)", "dataset": "core (280 runs)", "tag": "packet"}, {"section": "core", "claim": "Every run succeeded with HTTP 200 (280/280)", "dataset": "core (280 runs)", "tag": "client"}, {"section": "core", "claim": "S1/S2 IPv6 broken: IPv4 won 80/80; curl's IPv4 SYN 200.956 ms after its first IPv6 SYN, Chromium's 301.067 ms (S1)", "dataset": "core (280 runs)", "tag": "packet"}, {"section": "core", "claim": "Chromium NetLog marks its second IPv6 attempt (about 250 ms, new source port) as backup_job in 20/20 runs in S1 and 20/20 in S2", "dataset": "core (280 runs)", "tag": "client"}, {"section": "core", "claim": "S3 IPv6 +150 ms: IPv6 won 40/40, setup about 171 ms, no IPv4 SYN", "dataset": "core (280 runs)", "tag": "packet"}, {"section": "core", "claim": "S4/S5 IPv4 impaired: IPv6 won 80/80; no IPv4 SYN in any of the 80 runs", "dataset": "core (280 runs)", "tag": "packet"}, {"section": "core", "claim": "S6 AAAA delayed 300 ms: first SYN after the AAAA answer in 20/20 per client; DNS time 302.070 / 301.851 ms, TCP setup 20.812 / 21.317 ms", "dataset": "core (280 runs)", "tag": "packet"}, {"section": "ext", "claim": "Outcome flip located to 5 ms of IPv6 RTT: curl 221–226, Chromium 321–326 ms; latency-sweep T 221.84 / 321.99 ms inside both", "dataset": "latency-sweep (180 runs)", "tag": "packet"}, {"section": "ext", "claim": "Jitter model Φ((T − μ)/σ) inside the Wilson interval in all four jitter cells: consistent with the model, not a close test", "dataset": "jitter-loss (558 runs)", "tag": "interp"}, {"section": "ext", "claim": "Gv6c30: SYN retransmissions about 1 s apart up to the 5th SYN, not doubling", "dataset": "jitter-loss (558 runs)", "tag": "packet"}, {"section": "ext", "claim": "curl T follows timeout + IPv4 handshake from 50 to 500 ms, late by +0.69 to +0.90 ms up to he250 and +1.16 to +1.99 ms from he300 (not monotonic); no cause claimed", "dataset": "he-sweep (270 runs)", "tag": "packet"}, {"section": "ext", "claim": "Control: curl@he200 matches plain curl (IPv4 SYN 200.833 vs 200.832 ms)", "dataset": "he-sweep (270 runs)", "tag": "packet"}, {"section": "ext", "claim": "Plain curl T: variant-control 221.53, jitter-loss 221.96, latency-sweep 221.84, he-sweep 222.14 ms; within 0.61 ms; one host and one kernel", "dataset": "4 extension datasets", "tag": "packet"}, {"section": "ext", "claim": "BOUNDARY CASE, NOT A FINDING: S3 curl@he150, IPv6 won 10/10 by about 0.4 ms (n = 10)", "dataset": "he-sweep (270 runs)", "tag": "packet"}]};
+var REPLAY=[{"id": "20261026T192159Z_C0_curl_r07", "sc": "C0", "label": "Healthy baseline (control)", "cl": "curl", "version": "curl 8.5.0", "loss": {"v4": 0, "v6": 0}, "added": {"v4": 0, "v6": 0}, "aaaa": 0, "rtt": {"v4": "21.1 ms RTT", "v6": "21.1 ms RTT"}, "atts": [{"f": "v6", "port": 38392, "syn": 1.459, "synack": 22.076, "ack": 22.154, "syns": 1, "res": "won", "http": 200}], "ev": [[0.0, "dns", "query A www.hl.test"], [0.04, "dns", "query AAAA www.hl.test"], [0.987, "dns", "answer A 192.0.2.2"], [1.092, "dns", "answer AAAA 2001:db8:28:6::2"], [1.459, "syn", "SYN v6 attempt 1, port 38392"], [22.076, "ok", "SYN-ACK v6 attempt 1"], [22.154, "ok", "ACK v6 attempt 1: handshake complete"]], "first_syn": 1.459, "setup": 20.695, "ifd": null, "dns": 1.092, "win": "v6", "ab": 0, "http": 200, "sha": "1f18fce7f0f9e333128b3d7bc6d1addc6dd80d7d9485abc189f59b6d81e68eb8"}, {"id": "20261026T193106Z_S1_curl_r08", "sc": "S1", "label": "IPv6 blackhole", "cl": "curl", "version": "curl 8.5.0", "loss": {"v4": 0, "v6": 100}, "added": {"v4": 0, "v6": 0}, "aaaa": 0, "rtt": {"v4": "21.15 ms RTT", "v6": "blackholed"}, "atts": [{"f": "v6", "port": 44938, "syn": 1.383, "synack": null, "ack": null, "syns": 1, "res": "abandoned", "http": null}, {"f": "v4", "port": 54608, "syn": 202.359, "synack": 223.567, "ack": 223.637, "syns": 1, "res": "won", "http": 200}], "ev": [[0.0, "dns", "query A www.hl.test"], [0.04, "dns", "query AAAA www.hl.test"], [0.998, "dns", "answer A 192.0.2.2"], [1.069, "dns", "answer AAAA 2001:db8:28:6::2"], [1.383, "syn", "SYN v6 attempt 1, port 44938"], [202.359, "syn", "SYN v4 attempt 2, port 54608"], [223.567, "ok", "SYN-ACK v4 attempt 2"], [223.637, "ok", "ACK v4 attempt 2: handshake complete"]], "first_syn": 1.383, "setup": 222.254, "ifd": 200.976, "dns": 1.069, "win": "v4", "ab": 1, "http": 200, "sha": "9baf0f1220ac8521e62a4a0139507d018e8e2a9b93a007c2aed1eb51c0aa13b1"}, {"id": "20261026T193420Z_S1_chromium_r01", "sc": "S1", "label": "IPv6 blackhole", "cl": "chromium", "version": "Chromium 156.0.8078.4", "loss": {"v4": 0, "v6": 100}, "added": {"v4": 0, "v6": 0}, "aaaa": 0, "rtt": {"v4": "21.2 ms RTT", "v6": "blackholed"}, "atts": [{"f": "v6", "port": 58826, "syn": 1.06, "synack": null, "ack": null, "syns": 1, "res": "abandoned", "http": null}, {"f": "v6", "port": 58830, "syn": 251.35, "synack": null, "ack": null, "syns": 1, "res": "abandoned", "http": null}, {"f": "v4", "port": 34294, "syn": 302.326, "synack": 325.768, "ack": 325.826, "syns": 1, "res": "won", "http": 200}], "ev": [[0.0, "dns", "query HTTPS www.hl.test"], [0.096, "dns", "query AAAA www.hl.test"], [0.162, "dns", "query A www.hl.test"], [0.533, "dns", "answer HTTPS (no records)"], [0.72, "dns", "answer AAAA 2001:db8:28:6::2"], [0.756, "dns", "answer A 192.0.2.2"], [1.06, "syn", "SYN v6 attempt 1, port 58826"], [251.35, "syn", "SYN v6 attempt 2, port 58830"], [302.326, "syn", "SYN v4 attempt 3, port 34294"], [325.768, "ok", "SYN-ACK v4 attempt 3"], [325.826, "ok", "ACK v4 attempt 3: handshake complete"]], "first_syn": 1.06, "setup": 324.766, "ifd": 301.266, "dns": 0.756, "win": "v4", "ab": 2, "http": 200, "sha": "a42eaa79d9a0bee9ae9f4001c885b5368b1960f3e3fb8a5f2f63259a98bd2152"}];
+/* === HAPPYLAB EXTENSIONS END === */
 
 /* ===================== helpers ===================== */
 function chip(key){var s=SRC[key];return '<span class="chip '+s[1]+'"><span class="dt"></span>'+s[0]+'</span>'}
@@ -1446,7 +1659,7 @@ function renderTerminal(){
 renderTerminal();
 
 /* ===================== tab navigation ===================== */
-var TABS=["overview","method","results","playground","evidence"];
+var TABS=["overview","method","results","extensions","playground","evidence"];
 var activeTab="home";
 function switchTab(tab){
   if(tab==="home"){
@@ -1604,6 +1817,35 @@ $("runList").addEventListener("click",function(e){var b=e.target.closest("[data-
 showRun(RUNS[1]);
 $("capTable").innerHTML=CAPS.map(function(c){return "<tr><td class='mono'>"+c[0]+"</td><td class='mono'>"+c[1]+"</td><td>"+c[2]+"</td><td class='mono'>"+c[3]+"</td><td class='mono muted'>"+c[4]+"</td><td class='muted'>"+c[5]+"</td></tr>"}).join("");
 
+/* ===================== extensions (EXT from the generated EXTENSIONS block) ===================== */
+(function(){
+  var tag=function(k){return '<span class="tag" data-tag="'+k+'">'+esc(EXT.tags[k])+'</span>'};
+  document.querySelectorAll("[data-n]").forEach(function(el){
+    var v=EXT.N[el.dataset.n];el.textContent=(v==null?"—":v)});
+  document.querySelectorAll(".tag[data-tag]").forEach(function(el){el.textContent=EXT.tags[el.dataset.tag]});
+  $("xTotal").textContent=EXT.runs.total.toLocaleString("en-GB")+" runs";
+  $("xDatasets").insertAdjacentHTML("beforeend",EXT.datasets.map(function(d){
+    return '<div class="stat xds"><div class="k">'+esc(d.name)+' · '+esc(d.doc)+'</div><div class="v">'+d.runs+'<u>runs</u></div>'
+      +'<div class="n">'+d.sessions+' sessions · '+esc(d.title)+' · '+esc(d.dates.join(", "))+' · code '+esc(d.code.join(", "))+'</div></div>'}).join(""));
+  $("xHe").innerHTML=EXT.he.map(function(r){
+    return "<tr><td class='mono'>"+esc(r.client)+"</td><td class='num'>"+esc(r.timeout)+"</td><td class='num'>"+r.syn+"</td><td class='num'>"+r.hs
+      +"</td><td class='num'>"+r.pred+"</td><td class='num'>"+r.T+"</td><td class='num'>"+r.resid+"</td></tr>"}).join("");
+  $("xJit").innerHTML=EXT.jitter.map(function(r){
+    return "<tr><td>"+esc(r.client)+"</td><td class='mono'>"+r.cell+"</td><td class='num'>"+r.T+"</td><td class='num'>"+r.mu
+      +"</td><td class='num'>"+r.sigma+" ("+r.design+")</td><td class='num'>"+r.pred+"</td><td class='num'>"+esc(r.obs)+"</td></tr>"}).join("");
+  $("xHealthy").textContent=EXT.retx_healthy.runs;
+  $("xSyn").innerHTML=EXT.retx.map(function(r){
+    return "<tr><td>"+esc(r.client)+"</td>"+r.gaps.map(function(g){return "<td class='num'>"+esc(g)+"</td>"}).join("")+"</tr>"}).join("");
+  $("xSpread").textContent=EXT.repro_spread;
+  $("xRepro").innerHTML=EXT.repro.map(function(r){
+    return "<tr><td class='mono'>"+esc(r.campaign)+"</td><td>"+esc(r.condition)+"</td><td class='num'>"+r.n+"</td><td class='num'>"+r.T
+      +"</td><td class='mono'>"+esc(r.code.join(", "))+"</td></tr>"}).join("");
+  var head={core:"Core dataset: satisfies PS-028",ext:"Extension datasets: beyond PS-028"},last="";
+  $("xClaims").innerHTML=EXT.claims.map(function(c){
+    var h=c.section!==last?"<tr><th colspan='3'>"+head[c.section]+"</th></tr>":"";last=c.section;
+    return h+"<tr"+(c.claim.indexOf("BOUNDARY")===0?" class='boundary'":"")+"><td>"+esc(c.claim)+"</td><td>"+esc(c.dataset)+"</td><td>"+tag(c.tag)+"</td></tr>"}).join("");
+})();
+
 /* ===================== playground ===================== */
 var BASE=20,DNS_BASE=4,BACKUP=250,raf=null;
 /* The Playground diagram draws IPv4 in green: the cable, its label, and the dots that travel
@@ -1612,7 +1854,7 @@ var PG4="#3fb950";
 function pgC(f){return f==="v4"?PG4:C.v6}
 var STUB=36,TAIL=30,OS_TIMEOUT=130000;
 var reduce=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-var P={scn:"C0",client:"curl",pref:"v6",he:200,cut6:false,cut4:false,a6:0,a4:0,aaaa:0};
+var P={scn:"C0",client:"curl",pref:"v6",he:200,cut6:false,cut4:false,a6:0,a4:0,aaaa:0,replay:null};
 function addr(f){return f==="v6"?"[2001:db8:28:6::2]":"192.0.2.2"}
 
 function simulate(c){
@@ -1665,6 +1907,37 @@ function simulate(c){
     abandoned:att.filter(function(a){return a!==winner}).length,
     total:dns+lastStop+TAIL};
 }
+/* A measured run from examples/ (REPLAY, generated): the same shape simulate() returns, built from the
+   capture's packet times. Times are ms after the run's first www.hl.test query, so attempt t0 is
+   relative to the first SYN exactly as in the model. Nothing here is modelled. */
+function replayResult(x){
+  var f0=x.first_syn,win=null;
+  var att=x.atts.map(function(a,i){
+    var o={f:a.f,t0:a.syn-f0,rtt:a.ack!=null?a.ack-a.syn:null,end:a.ack!=null?a.ack-f0:null,
+      tag:"attempt "+(i+1)+" · port "+a.port,
+      state:a.res==="won"?"won":(a.synack!=null?"abandoned":"no_reply")};
+    if(o.state==="won")win=o;return o});
+  att.forEach(function(a){a.stop=a.state==="won"?a.end:Math.max(a.t0,win.end)});
+  var log=x.ev.map(function(e){
+    var w=e[2].split(" "),k=e[1]==="syn"?"lg-syn":e[1]==="ok"?"lg-ok":"";
+    return [e[0],(k?"<b class='"+k+"'>":"<b>")+esc(w[0])+"</b> "+esc(w.slice(1).join(" "))]});
+  var tEnd=Math.max.apply(null,x.ev.map(function(e){return e[0]}));
+  log.push([tEnd+0.001,"<b class='lg-ok'>HTTP</b> "+x.http+" (client log) · cross-checks agree · sha256 "+x.sha.slice(0,8)+"…"]);
+  return{dns:f0,att:att,winner:win,log:log,setup:x.setup,inter:x.ifd,timeout:null,
+    abandoned:x.ab,total:tEnd+TAIL,replay:x};
+}
+function pgCurrent(){return P.replay!==null?replayResult(REPLAY[P.replay]):simulate(pcfg())}
+function pgReplayFn(){
+  var r=$("pgReplay");r.innerHTML="";
+  REPLAY.forEach(function(x,i){
+    var b=document.createElement("button");b.className="scn";b.type="button";b.setAttribute("aria-pressed",String(P.replay===i));
+    b.innerHTML='<span class="id">'+x.sc+' · '+(x.cl==="chromium"?"Chromium":x.cl)+'</span><span class="nm">'+esc(x.label)+' · '+esc(x.id.split("_").pop())+'</span>';
+    b.onclick=function(){pgStop();P.replay=i;P.scn="replay";P.client=x.cl;P.he=x.cl==="curl"?200:300;
+      P.cut6=x.loss.v6>=100;P.cut4=x.loss.v4>=100;P.a6=x.added.v6;P.a4=x.added.v4;P.aaaa=x.aaaa;
+      $("pgHe").value=P.he;$("pgA6").value=P.a6;$("pgA4").value=P.a4;$("pgAaaa").value=P.aaaa;$("pgCli").textContent=x.cl;
+      pgSync();pgRender(pgCurrent(),false);$("pgClock").textContent="t = 0.000 ms"};
+    r.appendChild(b)});
+}
 function pcfg(){return{cut6:P.cut6,cut4:P.cut4,a6:P.a6,a4:P.a4,aaaa:P.aaaa,pref:P.pref,he:P.he,client:P.client}}
 function pctrl(){return simulate({cut6:0,cut4:0,a6:0,a4:0,aaaa:0,pref:P.pref,he:P.he,client:P.client})}
 
@@ -1673,16 +1946,16 @@ function pgRailFn(){
   SCEN.forEach(function(s){
     var b=document.createElement("button");b.className="scn";b.type="button";b.setAttribute("aria-pressed",String(P.scn===s.id));
     b.innerHTML='<span class="id">'+s.id+(s.opt?" ·opt":"")+'</span><span class="nm">'+s.nm+'</span>';
-    b.onclick=function(){pgStop();P.scn=s.id;P.cut6=!!s.cut6;P.cut4=!!s.cut4;P.a6=s.a6;P.a4=s.a4;P.aaaa=s.aaaa;
+    b.onclick=function(){pgStop();P.replay=null;P.scn=s.id;P.cut6=!!s.cut6;P.cut4=!!s.cut4;P.a6=s.a6;P.a4=s.a4;P.aaaa=s.aaaa;
       $("pgA6").value=s.a6;$("pgA4").value=s.a4;$("pgAaaa").value=s.aaaa;
       pgSync();pgRender(simulate(pcfg()),false);$("pgClock").textContent="t = 0.000 ms"};
     r.appendChild(b)});
   var c=document.createElement("button");c.className="scn";c.type="button";c.setAttribute("aria-pressed",String(P.scn==="custom"));
   c.innerHTML='<span class="id">Custom</span><span class="nm">your own settings</span>';
-  c.onclick=function(){P.scn="custom";pgRailFn()};r.appendChild(c);
+  c.onclick=function(){P.scn="custom";P.replay=null;pgSync();pgRender(pgCurrent(),false)};r.appendChild(c);
 }
 function pgSync(){
-  pgRailFn();
+  pgRailFn();pgReplayFn();
   $("pgHeV").textContent=P.he+" ms";$("pgA6V").textContent=P.a6+" ms";
   $("pgA4V").textContent=P.a4+" ms";$("pgAaaaV").textContent=P.aaaa+" ms";
   [["pgPlug6","pgPlug6s",P.cut6],["pgPlug4","pgPlug4s",P.cut4],
@@ -1691,8 +1964,9 @@ function pgSync(){
     b.dataset.cut=String(x[2]);b.setAttribute("aria-pressed",String(x[2]));
     $(x[1]).textContent=x[2]?"cut":"connected";
   });
-  $("pgLab6").textContent="IPv6 · "+(P.cut6?"blackholed":(BASE+P.a6)+" ms RTT");
-  $("pgLab4").textContent="IPv4 · "+(P.cut4?"blackholed":(BASE+P.a4)+" ms RTT");
+  var rx=P.replay!==null?REPLAY[P.replay]:null;
+  $("pgLab6").textContent="IPv6 · "+(rx?rx.rtt.v6:P.cut6?"blackholed":(BASE+P.a6)+" ms RTT");
+  $("pgLab4").textContent="IPv4 · "+(rx?rx.rtt.v4:P.cut4?"blackholed":(BASE+P.a4)+" ms RTT");
   $("pgLab6").setAttribute("fill",P.cut6?"#f0564a":C.v6);$("pgLab4").setAttribute("fill",P.cut4?"#f0564a":PG4);
   $("pgP6").setAttribute("stroke",P.cut6?"#43222a":"#1d3a52");$("pgP4").setAttribute("stroke",P.cut4?"#43222a":"#1a3d22");
   $("pgP6").setAttribute("stroke-dasharray",P.cut6?"14 10":"none");$("pgP4").setAttribute("stroke-dasharray",P.cut4?"14 10":"none");
@@ -1700,6 +1974,8 @@ function pgSync(){
   Array.prototype.forEach.call($("pgClientSeg").children,function(b){b.setAttribute("aria-pressed",String(b.dataset.c===P.client))});
 }
 function pgRender(r,animated){
+  if(r.replay)return pgRenderReplay(r,animated);
+  $("pgSrc").innerHTML='<span>Model on this page · not lab data</span>';
   var base=pctrl(),pen=(r.setup!==null&&base.setup!==null)?r.setup-base.setup:null,ok=!!r.winner;
   var v=$("pgVerdict");v.setAttribute("data-s",ok?"ok":"bad");
   $("pgVerdictT").innerHTML=ok
@@ -1714,6 +1990,25 @@ function pgRender(r,animated){
     {k:"DNS time",v:r.dns.toFixed(1),u:"ms",n:P.aaaa?"AAAA held "+P.aaaa+" ms":"both answers returned"},
     {k:"Attempts",v:String(r.att.length),u:"",n:r.abandoned+" abandoned"},
     {k:"Winner",v:r.winner?famN(r.winner.f):"none",u:"",n:P.client,c:r.winner?famC(r.winner.f):"var(--bad)"}
+  ];
+  $("pgKpis").innerHTML=cells.map(function(c){
+    return '<div class="stat"><div class="k">'+c.k+'</div><div class="v"'+(c.c?' style="color:'+c.c+'"':'')+'>'
+      +c.v+(c.u?'<u>'+c.u+'</u>':'')+'</div><div class="n">'+c.n+'</div></div>'}).join("");
+  pgTimeline(r);if(!animated)pgFill(r,r.total);
+}
+function pgRenderReplay(r,animated){
+  var x=r.replay,tg=function(k){return '<span class="tag" data-tag="'+k+'">'+esc(EXT.tags[k])+'</span>'};
+  $("pgVerdict").setAttribute("data-s","ok");
+  $("pgVerdictT").innerHTML='<b style="color:'+famC(r.winner.f)+'">'+famN(r.winner.f)+' won the race</b> in '+x.setup.toFixed(3)+' ms'
+    +' <em>· '+x.ab+' attempt'+(x.ab===1?'':'s')+' abandoned</em>';
+  $("pgSrc").innerHTML=tg("packet")+'<span>stored run <span class="mono">'+esc(x.id)+'</span>, '+esc(x.version)+'. Cable RTTs are the ping before the run. HTTP status: </span>'+tg("client");
+  var cells=[
+    {k:"TCP setup",v:x.setup.toFixed(3),u:"ms",n:"first SYN to ACK"},
+    {k:"Penalty",v:"—",u:"",n:"per scenario median only"},
+    {k:"Inter-family",v:x.ifd===null?"—":x.ifd.toFixed(3),u:x.ifd===null?"":"ms",n:x.ifd===null?"not observed":"second family's first SYN"},
+    {k:"DNS time",v:x.dns.toFixed(3),u:"ms",n:"www.hl.test queries only"},
+    {k:"Attempts",v:String(x.atts.length),u:"",n:x.ab+" abandoned"},
+    {k:"Winner",v:famN(x.win),u:"",n:x.cl,c:famC(x.win)}
   ];
   $("pgKpis").innerHTML=cells.map(function(c){
     return '<div class="stat"><div class="k">'+c.k+'</div><div class="v"'+(c.c?' style="color:'+c.c+'"':'')+'>'
@@ -1757,7 +2052,7 @@ function pgTimeline(r){
       if(placed.some(function(q){return Math.abs(q-R)<6}))return;
       placed.push(R);
       if(a.state==="won")inner+=mk(R,"var(--ok)","2px","ACK "+(r.dns+a.stop).toFixed(1),"top");
-      else if(a.state==="no_reply")inner+=mk(R,"var(--bad)","2px",r.winner?"dropped":"no reply","top");
+      else if(a.state==="no_reply")inner+=mk(R,"var(--bad)","2px",r.replay?"no SYN-ACK":r.winner?"dropped":"no reply","top");
       else inner+=mk(R,"var(--warn)","2px","cut","top");
     });
     return '<div class="tlane"><span class="mono" style="font-size:12.5px;color:'+famC(f)+'">'+famN(f)
@@ -1806,13 +2101,16 @@ function pgFill(r,upto){
 }
 function pgStop(){if(raf){cancelAnimationFrame(raf);raf=null}try{$("pgDots").innerHTML="";$("pgFx").innerHTML=""}catch(e){}}
 function pgRunFn(){
-  pgStop();var r=simulate(pcfg());pgRender(r,true);$("pgLog").innerHTML="";
+  pgStop();var r=pgCurrent();pgRender(r,true);$("pgLog").innerHTML="";
   var mult=Number($("pgSpeed").value);
   if(mult===0||reduce){pgFill(r,r.total);$("pgClock").textContent="t = "+r.total.toFixed(3)+" ms";return}
   var dp=$("pgDns"),dl=dp.getTotalLength();
-  var fl=[{p:dp,len:dl,t0:0,dur:DNS_BASE/2,dir:1,c:"#90a1b9"},
-          {p:dp,len:dl,t0:DNS_BASE/2,dur:DNS_BASE/2,dir:-1,c:"#90a1b9"},
-          {p:dp,len:dl,t0:DNS_BASE/2+P.aaaa,dur:DNS_BASE/2,dir:-1,c:"#90a1b9"}];
+  var fl=r.replay
+    ? r.replay.ev.filter(function(e){return e[1]==="dns"}).map(function(e){
+        var q=e[2].indexOf("query")===0;return{p:dp,len:dl,t0:q?e[0]:Math.max(0,e[0]-0.5),dur:0.5,dir:q?1:-1,c:"#90a1b9"}})
+    : [{p:dp,len:dl,t0:0,dur:DNS_BASE/2,dir:1,c:"#90a1b9"},
+       {p:dp,len:dl,t0:DNS_BASE/2,dur:DNS_BASE/2,dir:-1,c:"#90a1b9"},
+       {p:dp,len:dl,t0:DNS_BASE/2+P.aaaa,dur:DNS_BASE/2,dir:-1,c:"#90a1b9"}];
   r.att.forEach(function(a){
     var p=a.f==="v6"?$("pgP6"):$("pgP4"),len=p.getTotalLength(),t=r.dns+a.t0;
     if(a.state==="won"){
@@ -1820,7 +2118,7 @@ function pgRunFn(){
       fl.push({p:p,len:len,t0:t,dur:h,dir:1,c:pgC(a.f)});
       fl.push({p:p,len:len,t0:t+h,dur:h,dir:-1,c:pgC(a.f),glow:true});
     }else if(a.state==="no_reply"){
-      fl.push({p:p,len:len,t0:t,dur:26,dir:1,c:pgC(a.f),reach:.62,note:"✕ dropped",nc:"#f0564a"});
+      fl.push({p:p,len:len,t0:t,dur:26,dir:1,c:pgC(a.f),reach:.62,note:r.replay?"✕ no SYN-ACK":"✕ dropped",nc:"#f0564a"});
     }else{
       /* abandoned: the socket is cut the moment the winner completes, so the dot stops where it got to */
       var hh=a.rtt/2,d=a.stop-a.t0;
@@ -1862,12 +2160,12 @@ function pgRunFn(){
   })(performance.now());
 }
 function pgToggleCut(fam){
-  pgStop();if(fam==="v6")P.cut6=!P.cut6;else P.cut4=!P.cut4;
+  pgStop();P.replay=null;if(fam==="v6")P.cut6=!P.cut6;else P.cut4=!P.cut4;
   P.scn="custom";pgSync();pgRender(simulate(pcfg()),false);$("pgClock").textContent="t = 0.000 ms";
 }
 ["pgPlug6","pgCut6"].forEach(function(id){var b=$(id);if(b)b.onclick=function(){pgToggleCut("v6")}});
 ["pgPlug4","pgCut4"].forEach(function(id){var b=$(id);if(b)b.onclick=function(){pgToggleCut("v4")}});
-function pgIdle(){pgStop();pgSync();pgRender(simulate(pcfg()),false);$("pgClock").textContent="t = 0.000 ms"}
+function pgIdle(){pgStop();P.replay=null;pgSync();pgRender(simulate(pcfg()),false);$("pgClock").textContent="t = 0.000 ms"}
 Array.prototype.forEach.call($("pgClientSeg").children,function(b){
   b.onclick=function(){P.client=b.dataset.c;P.he=b.dataset.c==="curl"?200:300;$("pgHe").value=P.he;
     $("pgCli").textContent=b.dataset.c;pgIdle()}});
@@ -1876,7 +2174,7 @@ $("pgPref").onchange=function(){P.pref=this.value;P.scn="custom";pgIdle()};
   $(p[0]).oninput=function(){P[p[1]]=Number(this.value);if(p[0]!=="pgHe")P.scn="custom";pgIdle()}});
 $("pgRun").onclick=pgRunFn;
 $("pgReset").onclick=function(){
-  pgStop();P={scn:"C0",client:"curl",pref:"v6",he:200,cut6:false,cut4:false,a6:0,a4:0,aaaa:0};
+  pgStop();P={scn:"C0",client:"curl",pref:"v6",he:200,cut6:false,cut4:false,a6:0,a4:0,aaaa:0,replay:null};
   $("pgHe").value=200;$("pgA6").value=0;$("pgA4").value=0;$("pgAaaa").value=0;$("pgSpeed").value="4";
   $("pgCli").textContent="curl";pgSync();pgRender(simulate(pcfg()),false);$("pgClock").textContent="t = 0.000 ms"};
 pgSync();pgRender(simulate(pcfg()),false);
