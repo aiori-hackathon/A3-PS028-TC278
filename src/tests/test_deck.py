@@ -104,3 +104,31 @@ def test_every_slide_has_speaker_notes_with_a_time_budget():
 def test_pdf_is_committed_next_to_the_pptx():
     if PPTX.exists():
         assert PDF.exists(), "export the deck to PDF too (see deck/README.md)"
+
+
+def _demo_slide_source() -> str:
+    text = BUILD.read_text(encoding="utf-8")
+    return text[text.index("// 6. Demo"):text.index("// 7. ")]
+
+
+def test_demo_slide_notes_drive_the_demo_with_make_demo():
+    block = _demo_slide_source()
+    notes = block[block.index("notes(s,"):]
+    assert "make demo" in notes and "make demo SCENARIO=" in notes and "make demo-check" in notes
+    for old in ("verify.sh up", "orchestrate.py", "summarise_session.py", "tcpdump -n -tt -r"):
+        assert old not in notes, f"slide 6 notes still spell out {old}; make demo replaces it"
+    assert "sudo src/lab/setup.sh" in notes and "sudo src/lab/teardown.sh" in notes   # before and after the talk
+    assert "examples/" in notes   # the stated fallback
+
+
+def test_demo_slide_beats_fill_its_three_minutes_forty():
+    block = _demo_slide_source()
+    assert 'notes(s, "3m40s (20s slide + 3m20s terminal)", "3:40-7:20"' in block
+    beats = [int(x) for x in re.findall(r'^\s*\["(\d+)s", "', block, re.MULTILINE)]
+    assert sum(beats) == 220, beats
+
+
+@pytest.mark.skipif(not PPTX.exists(), reason="deck not built")
+def test_committed_pptx_carries_the_make_demo_notes():
+    text = _pptx_text()
+    assert "make demo SCENARIO=S4 CLIENT=chromium" in text and "summarise_session.py" not in text

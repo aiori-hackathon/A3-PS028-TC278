@@ -25,6 +25,11 @@ each scenario and repetition run one measurement:
     apply scenario -> verify (real RTT) -> start capture -> curl -> stop capture
     -> restore baseline -> verify -> parse capture -> write record -> chown to the user
 The lab is restored to baseline after every run, and again on any error or Ctrl-C.
+
+--demo (used by `make demo`, scripts/demo.sh): exactly one scenario and one repetition, step-by-step
+progress on stdout, and everything written under data/demo/ instead of data/generated/ and captures/.
+The session ID is "demo-<UTC time>", which no dataset manifest can list (a manifest row takes a bare
+YYYYMMDDTHHMMSSZ session ID), and the record's environment.purpose says it is a demo run.
 Any failed verify stops the session. A log-versus-pcap disagreement is written to the
 record's cross_checks block and printed; it is never resolved silently.
 """
@@ -45,6 +50,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -81,6 +87,13 @@ WALL_TIME_SCOPE = ("from the start of the run (before the DNS and nginx checks) 
 RSS_SCOPE = ("ru_maxrss from wait4 on the client command (ip netns exec ... runuser ... client): peak "
              "resident memory of the largest single process among it and its reaped descendants, in KiB; "
              "not a sum over processes")
+
+
+# Demo runs: a separate tree that no dataset, summary or batch check reads, and a session ID that no
+# manifest row can name (summarise._row_re accepts only a bare YYYYMMDDTHHMMSSZ session ID).
+DEMO_ROOT = REPO / "data" / "demo"
+DEMO_SESSION_PREFIX = "demo-"
+DEMO_PURPOSE = "live demo (make demo): not part of any dataset"
 
 
 class OrchestratorError(Exception):
@@ -391,6 +404,7 @@ class Ctx:
     env: dict
     env_removed: list[str]
     created: list[Path] = field(default_factory=list)  # files/dirs to chown at the end
+    say: Callable[[str], None] = field(default=lambda msg: None)  # step-by-step progress (--demo only)
 
     def chown(self, path: Path) -> None:
         try:
@@ -685,6 +699,18 @@ def restore_baseline(ctx: Ctx, base_delay: int, log: RunLog | None) -> None:
         sh(ctx, cmd_netem(fam, base_delay, 0), log)
 
 
+def rtt_said(pre_rtt: dict, targets: dict) -> str:
+    """One line for the audience: what the pre-run ping check measured on each link (packet-level: ICMP)."""
+    parts = []
+    for fam in ("v4", "v6"):
+        r = pre_rtt.get(fam) or {}
+        if targets.get(fam) == "blackhole":
+            parts.append(f"IPv{fam[1]} blackhole ({r.get('loss_pct', '?')}% loss, {r.get('errors', '?')} ICMP errors)")
+        else:
+            parts.append(f"IPv{fam[1]} {r.get('median_ms', '?')} ms")
+    return "measured RTT: " + ", ".join(parts)
+
+
 def run_one(ctx: Ctx, client: str, sid: str, sc: dict, rep: int, base: dict, client_version: str,
             client_info: dict, environment: dict, dirs: dict[str, Path], t0: float | None = None,
             annotate=None) -> dict:
@@ -712,10 +738,13 @@ def run_one(ctx: Ctx, client: str, sid: str, sc: dict, rep: int, base: dict, cli
     try:
         # 1-2. apply scenario, verify against its targets
         applied = True
+        ctx.say(f"applying {sid} ({sc['label']}) with netem on the server side of the links")
         sh(ctx, netem_for("v4", sc["v4"]), log)
         sh(ctx, netem_for("v6", sc["v6"]), log)
+        ctx.say(f"verifying {sid} with real pings (targets: IPv4 {v4_t}, IPv6 {v6_t})")
         pre = sh(ctx, cmd_verify(v4_t, v6_t), log, check=False)
         pre_ok, pre_rtt = pre.returncode == 0, parse_verify_rtt(pre.stdout)
+        ctx.say(f"{'PASS' if pre_ok else 'FAIL'} {rtt_said(pre_rtt, {'v4': v4_t, 'v6': v6_t})}")
         if not pre_ok:
             raise OrchestratorError(f"pre-run verify failed for {run_id}; see {log_path}")
 
@@ -723,14 +752,17 @@ def run_one(ctx: Ctx, client: str, sid: str, sc: dict, rep: int, base: dict, cli
         ifmap = parse_ifindex_map(sh(ctx, ["ip", "-n", ctx.lab["NS_CLIENT"], "-o", "link", "show"], log).stdout)
         capture = start_capture(ctx, pcap, log)
         capture_start_ns = time.time_ns()
+        ctx.say(f"tcpdump capturing in hl-client: {pcap.relative_to(REPO)}")
 
         # 4. client
         argv = spec.argv(netlog)
         full = in_ns_as_user(ctx.lab["NS_CLIENT"], ctx.user, argv)
         log.write(f"+ {shlex.join(full)}")
+        ctx.say(f"running {client} in hl-client against www.hl.test (time limit {spec.timeout_s} s)")
         client_start_ns = time.time_ns()
         proc, peak_rss_kib = run_client(full, ctx.env, spec.timeout_s)
         client_end_ns = time.time_ns()
+        ctx.say(f"{client} exited {proc.returncode} after {(client_end_ns - client_start_ns) / 1e9:.2f} s")
         log.write(f"    exit {proc.returncode} stdout {proc.stdout!r} stderr {proc.stderr!r}")
         log.write(f"    client_start_epoch_ns {client_start_ns} client_end_epoch_ns {client_end_ns}")
 
@@ -739,12 +771,17 @@ def run_one(ctx: Ctx, client: str, sid: str, sc: dict, rep: int, base: dict, cli
         tcpdump_err = stop_capture(capture, log)
         capture = None
         capture_end_ns = time.time_ns()
+        cs = parse_tcpdump_stats(tcpdump_err)
+        ctx.say(f"capture stopped: {cs.get('captured', '?')} packets captured, {cs.get('dropped', '?')} dropped by kernel")
 
         # 6-7. restore baseline, verify baseline
+        ctx.say(f"restoring the baseline ({base['rtt_ms']} ms RTT on both links) and verifying it")
         restore_baseline(ctx, base["delay_ms_each_way"], log)
         applied = False
         post = sh(ctx, cmd_verify(base["rtt_ms"], base["rtt_ms"]), log, check=False)
         post_ok = post.returncode == 0
+        post_rtt = parse_verify_rtt(post.stdout)
+        ctx.say(f"{'PASS' if post_ok else 'FAIL'} baseline {rtt_said(post_rtt, {})}")
     except BaseException:
         if capture is not None:
             stop_capture(capture, log)
@@ -761,6 +798,7 @@ def run_one(ctx: Ctx, client: str, sid: str, sc: dict, rep: int, base: dict, cli
         raise
 
     # 8. parse the capture for this run's window only, write the record
+    ctx.say("parsing the capture and writing the run record")
     timeline = parse(pcap, (client_start_ns, capture_end_ns))
     sha = hashlib.sha256(pcap.read_bytes()).hexdigest()
     env = dict(environment, capture_interfaces=ifmap)
@@ -819,8 +857,9 @@ def summary_line(r: dict, wall_s: float | None = None) -> str:
 
 
 def dry_run(scenarios: dict, reps: int, user: str, lab: dict, client: str = "curl",
-            adaptive: tuple | None = None) -> None:
+            adaptive: tuple | None = None, demo: bool = False) -> None:
     spec = get_client(client)
+    dirs = session_dirs(demo)
     base = scenarios["_baseline"]
     print(f"DRY RUN (nothing is executed). Client {client}. "
           f"Session would run as root and drop to '{user}' for clients and services.")
@@ -832,12 +871,15 @@ def dry_run(scenarios: dict, reps: int, user: str, lab: dict, client: str = "cur
         reps = hi
     print(f"session start: {shlex.join(in_ns_as_user(lab['NS_CLIENT'], user, spec.version_argv()))}")
     print(f"session start: {shlex.join(cmd_dns(lab, user, {}))}")
-    print(f"session start: {shlex.join(cmd_nginx(lab, user, REPO / 'data/generated/nginx'))}")
+    print(f"session start: {shlex.join(cmd_nginx(lab, user, dirs['nginx']))}")
+    if demo:
+        print(f"demo session: ID {new_session_id(datetime.now(timezone.utc), True)}, "
+              f"everything under {DEMO_ROOT.relative_to(REPO)}/")
     for sid, sc in scenarios.items():
         if sid.startswith("_"):
             continue
         rid = make_run_id(datetime.now(timezone.utc), sid, 1, client)
-        pcap = REPO / "captures" / f"{rid}.pcap"
+        pcap = dirs["captures"] / f"{rid}.pcap"
         print(f"\n# {sid} ({sc['label']}), repetition 1 of {'up to ' if adaptive else ''}{reps}, run_id like {rid}")
         steps = [
             ("dns", cmd_dns(lab, user, sc["dns"]["delay_ms"])),
@@ -847,7 +889,7 @@ def dry_run(scenarios: dict, reps: int, user: str, lab: dict, client: str = "cur
             ("ifmap", ["ip", "-n", lab["NS_CLIENT"], "-o", "link", "show"]),
             ("capture", cmd_tcpdump(lab["NS_CLIENT"], pcap, user)),
             ("client", in_ns_as_user(lab["NS_CLIENT"], user,
-                                     spec.argv(spec.netlog_path(REPO / "data/generated/logs", rid)))),
+                                     spec.argv(spec.netlog_path(dirs["logs"], rid)))),
             ("stop", ["kill", "-INT", "<tcpdump pid>"]),
             ("restore", cmd_netem("v4", base["delay_ms_each_way"], 0)),
             ("restore", cmd_netem("v6", base["delay_ms_each_way"], 0)),
@@ -856,7 +898,7 @@ def dry_run(scenarios: dict, reps: int, user: str, lab: dict, client: str = "cur
         for label, argv in steps:
             print(f"  {label:8} {shlex.join(argv)}")
         print(f"  {'parse':8} window [client start, capture end] of {pcap.relative_to(REPO)}")
-        print(f"  {'record':8} data/generated/runs/{rid}.json (validated), chown {user}")
+        print(f"  {'record':8} {(dirs['runs'] / f'{rid}.json').relative_to(REPO)} (validated), chown {user}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -875,6 +917,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--first-rep", type=int, default=1,
                    help="number of the first repetition (to complete a batch that stopped early)")
     p.add_argument("--dry-run", action="store_true", help="print the commands, execute nothing (no sudo needed)")
+    p.add_argument("--demo", action="store_true",
+                   help="live demo: one scenario, one repetition, progress on stdout, written under data/demo/ "
+                        "with a demo- session ID that no dataset can list")
     args = p.parse_args(argv)
     try:
         parse_client(args.client)
@@ -903,32 +948,59 @@ def main(argv: list[str] | None = None) -> int:
         p.error("--reps must be >= 1")
     if args.first_rep < 1:
         p.error("--first-rep must be >= 1")
+    if args.demo and (len(args.scenario) != 1 or args.reps != 1 or adaptive or args.first_rep != 1):
+        p.error("--demo runs exactly one scenario once (no --reps above 1, --reps-adaptive or --first-rep)")
 
     try:
         user, uid, gid = check_environment(args.dry_run)
         lab = load_lab_env()
         scenarios = load_scenarios(args.scenario, client=args.client)
         if args.dry_run:
-            dry_run(scenarios, args.reps, user, lab, args.client, adaptive)
+            dry_run(scenarios, args.reps, user, lab, args.client, adaptive, demo=args.demo)
             return 0
         return run_session(args.scenario, args.reps, scenarios, lab, user, uid, gid, args.client,
-                           first_rep=args.first_rep, adaptive=adaptive)
+                           first_rep=args.first_rep, adaptive=adaptive, demo=args.demo)
     except OrchestratorError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
 
+def session_dirs(demo: bool = False) -> dict[str, Path]:
+    """Where a session writes. A demo session shares no directory with the measurement tree."""
+    if demo:
+        return {"runs": DEMO_ROOT / "runs", "logs": DEMO_ROOT / "logs", "lab": DEMO_ROOT / "lab",
+                "nginx": DEMO_ROOT / "nginx", "captures": DEMO_ROOT / "captures"}
+    gen = REPO / "data" / "generated"
+    return {"runs": gen / "runs", "logs": gen / "logs", "lab": gen / "lab",
+            "nginx": gen / "nginx", "captures": REPO / "captures"}
+
+
+def new_session_id(now: datetime, demo: bool = False) -> str:
+    return (DEMO_SESSION_PREFIX if demo else "") + now.strftime("%Y%m%dT%H%M%SZ")
+
+
+def _demo_say(msg: str) -> None:
+    """Progress line for the audience. A closed stdout (the terminal reader killed by Ctrl-C) must never stop
+    the session's clean-up, which also calls this, so a write error is ignored."""
+    try:
+        print(f"  [orchestrator] {msg}", flush=True)
+    except OSError:
+        pass
+
+
 def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl", first_rep: int = 1,
-                adaptive: tuple | None = None) -> int:
+                adaptive: tuple | None = None, demo: bool = False) -> int:
     if not Path(f"/run/netns/{lab['NS_CLIENT']}").exists():
         raise OrchestratorError("lab is not up: run sudo src/lab/setup.sh first")
     env, removed = child_env_with_removed()
-    session_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    ctx = Ctx(user=user, uid=uid, gid=gid, lab=lab, session_id=session_id, env=env, env_removed=removed)
-    gen = REPO / "data" / "generated"
-    dirs = {"runs": gen / "runs", "logs": gen / "logs", "lab": gen / "lab",
-            "nginx": gen / "nginx", "captures": REPO / "captures"}
-    for d in [*dirs.values(), gen / "nginx" / "logs", gen / "nginx" / "tmp"]:
+    session_id = new_session_id(datetime.now(timezone.utc), demo)
+    ctx = Ctx(user=user, uid=uid, gid=gid, lab=lab, session_id=session_id, env=env, env_removed=removed,
+              say=_demo_say if demo else (lambda msg: None))
+    dirs = session_dirs(demo)
+    if demo:
+        DEMO_ROOT.mkdir(parents=True, exist_ok=True)
+        ctx.chown(DEMO_ROOT)
+    for d in [*dirs.values(), dirs["nginx"] / "logs", dirs["nginx"] / "tmp"]:
         d.mkdir(parents=True, exist_ok=True)
         ctx.chown(d)
 
@@ -943,6 +1015,7 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl",
     status = 0
     try:
         spec = get_client(client)
+        ctx.say(f"session {session_id}: reading the {client} version inside hl-client")
         out = sh(ctx, in_ns_as_user(lab["NS_CLIENT"], user, spec.version_argv()), session_log,
                  timeout=spec.timeout_s).stdout
         try:
@@ -959,6 +1032,9 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl",
             "server": f"{nginx_version}, src/config/nginx.conf (HTTP/1.1, keep-alive off)",
             "child_env": describe(removed),
         }
+        if demo:
+            environment["purpose"] = DEMO_PURPOSE
+        ctx.say(f"{client_version}; starting nginx and the lab DNS server in hl-server")
         services.ensure_nginx(session_log)
         for sid in ids:
             sc = scenarios[sid]
@@ -991,6 +1067,8 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl",
                 line = summary_line(record, walls[-1])
                 session_log.write(line)
                 print(line, flush=True)
+                if demo:   # scripts/demo.sh reads this line to find the record
+                    print(f"DEMO_RUN_ID={record['run_id']}", flush=True)
                 if record["cross_checks"]["status"] == "conflict":
                     status = 3
                     for c in record["cross_checks"]["conflicts"]:
@@ -1021,6 +1099,7 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl",
         if adaptive_out:
             write_adaptive_file(adaptive_path, adaptive_out)
             ctx.created.append(adaptive_path)
+        ctx.say("stopping nginx and the DNS server; restoring the baseline once more")
         services.stop()
         try:
             restore_baseline(ctx, base["delay_ms_each_way"], session_log)
@@ -1030,7 +1109,7 @@ def run_session(ids, reps, scenarios, lab, user, uid, gid, client: str = "curl",
         session_log.close()
         for path in ctx.created:
             ctx.chown(path)
-        for d in (gen / "nginx" / "logs", gen / "nginx" / "tmp"):
+        for d in (dirs["nginx"] / "logs", dirs["nginx"] / "tmp"):
             for f in [d, *d.rglob("*")]:
                 ctx.chown(f)
     print(f"\n{len(records)} record(s) written; session log {session_log.path.relative_to(REPO)}")

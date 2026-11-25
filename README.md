@@ -4,12 +4,14 @@ HappyLab is an isolated Linux network lab that measures how two real clients, **
 **Chromium**, recover when one address family is broken or slow. We break the IPv6 path, the IPv4
 path or the DNS answer under seven controlled conditions and run each client 20 times per condition,
 280 runs in all. Each run is captured with tcpdump, and the result is computed from the packets on
-the wire, not from the client's own report. Built by team NetDefenders for AIORI-3 problem statement
-PS-028.
+the wire, not from the client's own report. Four further certified campaigns on the same lab extend
+that core (a latency sweep, a sweep of curl's timeout, jitter and partial loss, and a variant control):
+1,328 runs in five certified datasets. Built by team NetDefenders for AIORI-3 problem statement PS-028.
 
 **[Website](https://happylab-aiori-ps-028.vercel.app)** ·
 **[Demo video](https://youtu.be/DnplR7TfhMs)** ·
 **[Technical report](docs/report.md)** ·
+**[Presentation (PDF)](deck/HappyLab_PS028_TC278.pdf)** ·
 **[Project proposal (PDF)](A3-PS028-HappyLab-Project-Proposal.pdf)** ·
 [PS-028 problem statement (PDF)](PS-028.pdf) ·
 [Team intro](https://youtu.be/TA8UYlIY-GY) ·
@@ -70,6 +72,44 @@ handshake (DNS time excluded).
 
 The technical report has the full tables (interquartile ranges, scenario penalties, abandoned
 attempts) and the reasoning behind each statement: [`docs/report.md`](docs/report.md).
+
+## Beyond the core: extension campaigns
+
+Four more certified datasets, each listed in a manifest under [`docs/datasets/`](docs/datasets/). The numbers
+below are quoted from the findings docs. The figures are in [`docs/figures/`](docs/figures/).
+
+- **The cost of racing** (*Derived (pcap − lab RTT)*; latency-sweep, 180 runs). The oracle is a hindsight
+  reference: the setup time of connecting straight to the family that won, at that family's measured ping
+  RTT. The cost of racing is TCP setup minus that oracle.
+  - Where IPv4 won, it was 200.76–201.48 ms for curl and 300.43–302.17 ms for Chromium (cell medians).
+  - Where IPv6 won, every cell median was within ±0.9 ms of zero. That is inside the 1 ms resolution of the
+    ping behind the oracle, so it is below what we can resolve, not zero.
+  - Source: [`docs/findings/latency_and_he_sweeps.md`](docs/findings/latency_and_he_sweeps.md).
+- **How slow IPv6 can get before IPv4 wins** (*Packet-level*; latency-sweep). IPv6 was slowed in 5 ms
+  steps, with 5 runs per cell, and every cell was unanimous.
+  - The outcome flips between 221–226 ms of IPv6 RTT for curl and 321–326 ms for Chromium.
+  - T, the time from the first SYN to the IPv4 SYN-ACK, is 221.84 and 321.99 ms in this campaign. Each T
+    falls inside its client's bracket.
+- **curl's timeout** (*Packet-level*; he-sweep, 270 runs). With IPv6 blackholed and
+  `--happy-eyeballs-timeout-ms` set to eight values from 50 to 500 ms, T tracks timeout + IPv4 handshake.
+  - It does not equal that line: T runs +0.69 to +1.99 ms late in every variant.
+  - The lateness falls in two groups, with a step between 250 and 300 ms that we do not explain.
+- **Jitter: the winner becomes a probability** (jitter-loss, 558 runs). The model P(IPv6 wins) =
+  Φ((T − μ)/σ) is an *Interpretation*.
+  - All four IPv6 jitter cells fall inside their 95% Wilson intervals. For example, curl at ±50 ms each way
+    won 17/39 = 0.44 [0.29, 0.59], against a model value of 0.50.
+  - The model's inputs were measured separately from the outcomes: T from the no-jitter twins (221.96 /
+    322.47 ms), and μ and σ from the verify pings.
+  - It was written up together with the results, so it is not a pre-registered prediction.
+  - Source: [`docs/findings/syn_retransmission_partial_loss.md`](docs/findings/syn_retransmission_partial_loss.md).
+- **What the packets corrected** (*Packet-level*; jitter-loss, Gv6c30). We predicted a doubling SYN timer
+  and committed that prediction before the campaign ran.
+  - The captures showed about 1 s between every SYN, up to the fifth, for both clients.
+  - Our reading (*Interpretation*): this matches `net.ipv4.tcp_syn_linear_timeouts`, which reads 4 inside
+    hl-client.
+- **Prior work.** Sattler et al. (IMC 2025) published curl's Connection Attempt Delay as 200 ms and 300 ms
+  for Chromium-based browsers. Our 200.956 and 301.067 ms (core, S1) reproduce those values; we did not
+  discover them.
 
 ## Lab architecture
 
@@ -171,9 +211,10 @@ Fixed metric definitions:
 
 Every record also stores the winning family, success or failure, and failed or abandoned attempts.
 
-## Run record schema (v0.2)
+## Run record schema (core dataset: v0.2; current: v0.5)
 
-One JSON file per run. Every derived field is a `{value, status}` pair, never a bare number. The status is
+One JSON file per run. Versions 0.3 to 0.5 add optional blocks for the extension campaigns, and older
+records stay valid; see the schema doc. Every derived field is a `{value, status}` pair, never a bare number. The status is
 `computed`, `not_observed` or `not_applicable` (plus `not_yet_computed` before parsing). A
 `cross_checks` block compares six things between the client's report and the capture:
 - winning family
@@ -220,11 +261,28 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m playwright install chromium   # Chromium 156.0.8078.4 for Playwright 1.64.1
 
-scripts/test.sh                           # the full test suite; no root needed
+scripts/test.sh                           # the full test suite; no root needed (or: make test)
 
 sudo src/lab/setup.sh                     # build the lab, then verify it (prints PASS/FAIL per check)
 sudo src/lab/verify.sh up                 # re-check at any time: real RTT on target
 ```
+
+`make help` lists shortcuts for these scripts: `make check` and `make setup` (`scripts/install.sh`),
+`make test`, `make lab-up`, `make lab-down`, `make run`, `make report`, `make dashboard` and `make csv`.
+Each target only calls the script named here.
+
+### Live demo (one run, under a minute)
+
+```bash
+make demo-check                           # venue pre-flight: kernel modules, sudo, client versions, disk; changes nothing
+sudo src/lab/setup.sh                     # build the lab before the talk
+make demo                                 # verify, run curl once in S1, re-read the capture, open the race timeline
+make demo SCENARIO=S4 CLIENT=chromium     # any other cell
+make demo-isolation-check                 # two demo runs leave every dataset summary byte-identical
+```
+
+A demo run is written to `data/demo/` (gitignored) under a `demo-` session ID, which no manifest can list,
+so it never joins a dataset. If anything fails, `make demo` prints FAIL and restores the verified baseline.
 
 ### Run one scenario
 
@@ -322,18 +380,20 @@ sudo src/lab/teardown.sh                  # removes both namespaces and the lab 
 ├── Proposed-structure-hackathon.pdf   the organisers' presentation template (not our project)
 ├── PS-028.pdf                         the organisers' PS-028 problem statement, as issued (not our project)
 ├── CLAUDE.md                 project rules: metric definitions, wording, lab safety
+├── Makefile                  shortcuts for the scripts below (make help)
 ├── deck/                     presentation deck (.pptx and .pdf), its build script and number sources
 ├── docs/
 │   ├── report.md             technical report (methodology, results, limitations)
 │   ├── dataset.md            the 14 sessions / 280 runs that make up the core dataset (frozen)
-│   ├── datasets/             manifest format for further datasets (--dataset <name>)
-│   ├── run_record_schema.md  run record schema v0.1-0.3
-│   ├── findings/             Chromium's second IPv6 SYN: pcap + NetLog analysis
+│   ├── datasets/             manifests of the four extension datasets, and the manifest format (--dataset <name>)
+│   ├── figures/              report and deck figures (figures.py), with the data they plot
+│   ├── run_record_schema.md  run record schema v0.1-0.5
+│   ├── findings/             Chromium's second IPv6 SYN; latency and timeout sweeps; SYN retransmission, loss and jitter
 │   └── examples/             hand-written schema example (used by the validator tests)
-├── examples/                 two real runs (C0, S1 curl): record + pcap + SHA256SUMS
+├── examples/                 three real runs (C0 curl, S1 curl, S1 Chromium): record + pcap + SHA256SUMS
 ├── requirements.txt          pinned Python dependencies
 ├── pyproject.toml
-├── scripts/test.sh           test runner (clean environment)
+├── scripts/                  test.sh (clean test runner), install.sh, demo.sh and demo_check.sh (make demo)
 ├── src/
 │   ├── lab/                  setup.sh, teardown.sh, verify.sh, netem.sh, lib.sh, lab.env
 │   ├── config/               scenarios.yaml, scenario_grid.yaml, scenarios_generated.yaml, nginx.conf
@@ -354,17 +414,21 @@ sudo src/lab/teardown.sh                  # removes both namespaces and the lab 
 - **Lab-specific address preference.** The IPv6-first behaviour in S4/S5 comes from this lab's
   resolver set-up: glibc defaults inside the namespace for curl, and Chromium's own resolver for
   Chromium. An IPv4-first policy was not tested.
-- **Simplified conditions.** These are mobile-inspired latency conditions, not carrier measurements:
-  fixed symmetric delay, no jitter, loss of either 0% or 100%, one family impaired at a time, and
-  plain HTTP (no TLS, QUIC disabled).
+- **Simplified conditions.** These are mobile-inspired latency conditions, not carrier measurements.
+  - The core dataset uses fixed symmetric delay, no jitter, and loss of either 0% or 100%.
+  - Only the jitter-loss campaign adds jitter and partial loss.
+  - One family is impaired at a time, apart from the compound control Gv6c30.
+  - All traffic is plain HTTP (no TLS, QUIC disabled).
 - **Lab-specific netem values.** They were pilot-validated for this lab. The measured RTT is what we
   report.
 - **Observed, not documented.** Chromium's ~250 ms and ~301 ms points are observed delays in this
   set-up. We make no claim about Chromium's internal timers, and no claim of conformance to
   RFC 8305 or the Happy Eyeballs v3 draft (pinned at draft-ietf-happy-happyeyeballs-v3-04; see
   [Credits and prior work](#credits-and-prior-work)).
-- **Sample size.** 20 runs per cell. We report medians and interquartile ranges, with no
-  significance tests.
+- **Sample size.** 20 runs per core cell, and 5 to 50 per cell in the extension campaigns. We report medians and interquartile
+  ranges, and 95% Wilson intervals for win fractions, with no significance tests.
+- **One host, one kernel.** All 1,328 runs come from one machine. Repeating T across four campaigns
+  shows repeatability, not generality.
 - **X1 not run.** The compound-stress scenario was an optional extra in our proposal, not one of the six scenarios PS-028 asks for. It was never configured or measured.
 
 The full list is in section 3 of the [technical report](docs/report.md).

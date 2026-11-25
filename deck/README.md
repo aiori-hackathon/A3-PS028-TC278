@@ -32,17 +32,21 @@ LibreOffice renders with the metric-identical Liberation Sans, so the PDF keeps 
   - T appears rounded to one decimal;
   - a slide lacks speaker notes with a time budget;
   - the PDF is missing.
-- **Totals:** the 1,328-run total is recomputed from the dataset docs. The 670 tests figure is
-  the `scripts/test.sh` count on 2026-11-24, and the slide gives that date.
+- **Totals:** the 1,328-run total is recomputed from the dataset docs. The 704 tests figure is
+  the `scripts/test.sh` count on 2026-11-25, and the slide gives that date.
 
 ## Live demo (slide 6)
 
-1. **Before the talk:** build the lab with `sudo src/lab/setup.sh`.
-2. **On stage:**
-   - `sudo src/lab/verify.sh up`
-   - `sudo .venv/bin/python src/runner/orchestrate.py --scenario S1 --reps 1`
-   - `summarise_session.py` on the session it prints, and `tcpdump -r` on its capture
-3. **If the lab misbehaves live,** use the committed runs in `examples/` instead.
-4. **Afterwards:** run `sudo src/lab/teardown.sh`.
+1. **At the venue:** run `make demo-check`. It is a read-only pre-flight covering kernel modules, namespaces,
+   sudo, curl 8.5.0, the Chromium build and disk space.
+2. **Before the talk:** build the lab with `sudo src/lab/setup.sh`.
+3. **On stage:** run `make demo`. It verifies the lab, runs curl once in S1, re-reads the capture against the
+   record, opens the connection race timeline and prints the numbers in large type, all in under a minute of
+   machine time. The lab stays up, so `make demo SCENARIO=S4 CLIENT=chromium` can follow if a judge asks.
+4. **If anything fails live,** `make demo` prints FAIL and puts the lab back to a verified baseline. Use the
+   committed runs in `examples/` instead.
+5. **Afterwards:** run `sudo src/lab/teardown.sh`.
 
-A live run is a demonstration only and joins no dataset.
+A live run is a demonstration only and joins no dataset. It is written to `data/demo/` (gitignored) under a
+`demo-` session ID that no manifest can list. `make demo-isolation-check` checks that two demo runs leave
+every summary byte-identical.
